@@ -2,6 +2,10 @@
 
 ## Realtime-safe, lock-less, variable-chunk ring-buffer implementation
 
+### Build Status
+
+[![Build Status](https://travis-ci.org/OpenMusicKontrollers/varchunk.svg)](https://travis-ci.org/OpenMusicKontrollers/varchunk)
+
 ### License
 
 Copyright (c) 2015 Hanspeter Portner (dev@open-music-kontrollers.ch)
