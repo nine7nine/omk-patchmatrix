@@ -1,6 +1,0 @@
-syn keyword CTagsStructure _varchunk_elmnt_t _varchunk_t
-syn keyword CTagsMember head rsvd mask gap tail buf size
-syn keyword CTagsFunction varchunk_read_advance varchunk_new varchunk_free _varchunk_read_advance_raw varchunk_read_request varchunk_write_advance varchunk_write_request _varchunk_write_advance_raw
-syn keyword CTagsType varchunk_elmnt_t varchunk_t
-syn keyword CTagsDefinedName VARCHUNK_PAD _VARCHUNK_H
-
