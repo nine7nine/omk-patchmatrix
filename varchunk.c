@@ -19,6 +19,10 @@
 #include <stdint.h>
 #include <assert.h>
 
+#if !defined(_WIN32)
+#	include <sys/mman.h> // mlock
+#endif
+
 #include <varchunk.h>
 
 #define VARCHUNK_PAD(SIZE) ( ( (size_t)(SIZE) + 7U ) & ( ~7U ) )
@@ -58,6 +62,7 @@ varchunk_new(size_t minimum)
 	varchunk->buf = _aligned_malloc(varchunk->size, sizeof(varchunk_elmnt_t));
 #else
 	posix_memalign(&varchunk->buf, sizeof(varchunk_elmnt_t), varchunk->size);
+	mlock(varchunk->buf, varchunk->size);
 #endif
 	if(!varchunk->buf)
 	{
@@ -75,7 +80,12 @@ varchunk_free(varchunk_t *varchunk)
 	if(varchunk)
 	{
 		if(varchunk->buf)
+		{
+#if !defined(_WIN32)
+			munlock(varchunk->buf, varchunk->size);
+#endif
 			free(varchunk->buf);
+		}
 		free(varchunk);
 	}
 }
