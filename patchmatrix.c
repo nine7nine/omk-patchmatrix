@@ -76,6 +76,12 @@ struct _app_t {
 	int h;
 	Evas_Object *win;
 	Evas_Object *patcher [4];
+	Evas_Object *pane;
+	Evas_Object *list;
+	Evas_Object *grid;
+	Elm_Genlist_Item_Class *clientitc;
+	Elm_Genlist_Item_Class *portitc;
+	Elm_Gengrid_Item_Class *griditc;
 
 	// JACK
 	jack_client_t *client;
@@ -88,6 +94,7 @@ struct _app_t {
 	sqlite3_stmt *query_client_add;
 	sqlite3_stmt *query_client_del;
 	sqlite3_stmt *query_client_find_by_name;
+	sqlite3_stmt *query_client_find_by_id;
 	sqlite3_stmt *query_client_get_selected;
 	sqlite3_stmt *query_client_set_selected;
 
@@ -102,6 +109,7 @@ struct _app_t {
 	sqlite3_stmt *query_connection_get;
 
 	sqlite3_stmt *query_port_list;
+	sqlite3_stmt *query_client_port_list;
 };
 
 static void _ui_refresh(app_t *app);
@@ -177,6 +185,9 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Clients WHERE name=$1",
 		-1, &app->query_client_find_by_name, NULL);
+	ret = sqlite3_prepare_v2(app->db,
+		"SELECT name, pretty_name FROM Clients WHERE id=$1",
+		-1, &app->query_client_find_by_id, NULL);
 		
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT selected FROM Clients WHERE id=$1",
@@ -219,6 +230,9 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id, client_id FROM Ports WHERE type_id=$1 AND direction_id=$2 ORDER BY client_id",
 		-1, &app->query_port_list, NULL);
+	ret = sqlite3_prepare_v2(app->db,
+		"SELECT id FROM Ports WHERE client_id=$1 ORDER BY direction_id, type_id",
+		-1, &app->query_client_port_list, NULL);
 
 	return 0;
 }
@@ -234,6 +248,7 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_client_add);
 	ret = sqlite3_finalize(app->query_client_del);
 	ret = sqlite3_finalize(app->query_client_find_by_name);
+	ret = sqlite3_finalize(app->query_client_find_by_id);
 	ret = sqlite3_finalize(app->query_client_get_selected);
 	ret = sqlite3_finalize(app->query_client_set_selected);
 
@@ -248,42 +263,10 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_connection_get);
 	
 	ret = sqlite3_finalize(app->query_port_list);
+	ret = sqlite3_finalize(app->query_client_port_list);
 
 	if( (ret = sqlite3_close(app->db)) )
 		fprintf(stderr, "_db_deinit: could not close in-memory database\n");
-}
-
-static void
-_db_client_add(app_t *app, const char *name)
-{
-	int ret;
-		
-	jack_uuid_t uuid;
-				
-	const char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
-	if(uuid_str)
-		jack_uuid_parse(uuid_str, &uuid);
-	else
-		jack_uuid_clear(&uuid);
-	
-	char *value = NULL;
-	char *type = NULL;
-	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
-
-	sqlite3_stmt *stmt = app->query_client_add;
-
-	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
-	ret = sqlite3_bind_text(stmt, 2, value, -1, NULL);
-	ret = sqlite3_bind_int64(stmt, 3, uuid);
-	
-	ret = sqlite3_step(stmt);
-
-	ret = sqlite3_reset(stmt);
-
-	if(value)
-		free(value);
-	if(type)
-		free(type);
 }
 
 static int
@@ -309,6 +292,73 @@ _db_client_find_by_name(app_t *app, const char *name)
 }
 
 static void
+_db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_client_find_by_id;
+		
+	ret = sqlite3_bind_int(stmt, 1, id);
+
+	ret = sqlite3_step(stmt);
+
+	if(ret != SQLITE_DONE)
+	{
+		if(name)
+			*name = strdup((const char *)sqlite3_column_text(stmt, 0));
+		if(pretty_name)
+			*pretty_name = strdup((const char *)sqlite3_column_text(stmt, 1));
+	}
+	else
+	{
+		if(name)
+			*name = NULL;
+		if(pretty_name)
+			*pretty_name = NULL;
+	}
+
+	ret = sqlite3_reset(stmt);
+}
+
+static void
+_db_client_add(app_t *app, const char *name)
+{
+	int ret;
+		
+	jack_uuid_t uuid;
+				
+	const char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
+	if(uuid_str)
+		jack_uuid_parse(uuid_str, &uuid);
+	else
+		jack_uuid_clear(&uuid);
+	
+	char *value = NULL;
+	char *type = NULL;
+	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+
+	sqlite3_stmt *stmt = app->query_client_add;
+
+	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, value ? value : name, -1, NULL);
+	ret = sqlite3_bind_int64(stmt, 3, uuid);
+	
+	ret = sqlite3_step(stmt);
+
+	ret = sqlite3_reset(stmt);
+
+	if(value)
+		free(value);
+	if(type)
+		free(type);
+
+	int *data = calloc(1, sizeof(int));
+	*data = _db_client_find_by_name(app, name);
+	elm_genlist_item_append(app->list, app->clientitc, data, NULL,
+		ELM_GENLIST_ITEM_TREE, NULL, NULL);
+}
+
+static void
 _db_client_del(app_t *app, const char *name)
 {
 	int ret;
@@ -322,6 +372,22 @@ _db_client_del(app_t *app, const char *name)
 	ret = sqlite3_step(stmt);
 
 	ret = sqlite3_reset(stmt);
+
+	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
+		itm != NULL;
+		itm = elm_genlist_item_next_get(itm))
+	{
+		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
+		if(itc != app->clientitc)
+			continue; // ignore port items
+
+		int *ref = elm_object_item_data_get(itm);
+		if(*ref == id)
+		{
+			elm_object_item_del(itm);
+			break;
+		}
+	}
 }
 
 static int
@@ -414,7 +480,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
 	ret = sqlite3_bind_int(stmt, 2, client_id);
 	ret = sqlite3_bind_text(stmt, 3, short_name, -1, NULL);
-	ret = sqlite3_bind_text(stmt, 4, value, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 4, value ? value : short_name, -1, NULL);
 	ret = sqlite3_bind_int(stmt, 5, type_id);
 	ret = sqlite3_bind_int(stmt, 6, direction_id);
 	ret = sqlite3_bind_int(stmt, 7, uuid);
@@ -495,6 +561,22 @@ _db_port_del(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_step(stmt);
 
 	ret = sqlite3_reset(stmt);
+	
+	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
+		itm != NULL;
+		itm = elm_genlist_item_next_get(itm))
+	{
+		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
+		if(itc != app->portitc)
+			continue; // ignore client items
+
+		int *ref = elm_object_item_data_get(itm);
+		if(*ref == id)
+		{
+			elm_object_item_del(itm);
+			break;
+		}
+	}
 }
 
 static void
@@ -984,12 +1066,235 @@ _ui_realize_request(void *data, Evas_Object *obj, void *event_info)
 	free(sink_name);
 }
 
+static char *
+_ui_client_list_label_get(void *data, Evas_Object *obj, const char *part)
+{
+	int *id = data;
+	app_t *app = evas_object_data_get(obj, "app");
+
+	char *name;
+	char *pretty_name;
+	_db_client_find_by_id(app, *id, &name, &pretty_name);
+
+	if(!strcmp(part, "elm.text"))
+	{
+		return pretty_name;
+	}
+	else if(!strcmp(part, "elm.text.sub"))
+	{
+		return name;
+	}
+
+	return NULL;
+}
+
+static void
+_ui_client_list_del(void *data, Evas_Object *obj)
+{
+	int *id = data;
+
+	free(id);
+}
+
+static char *
+_ui_port_list_label_get(void *data, Evas_Object *obj, const char *part)
+{
+	int *id = data;
+	app_t *app = evas_object_data_get(obj, "app");
+
+	char *name;
+	char *short_name;
+	_db_port_find_by_id(app, *id, &name, &short_name);
+
+	if(!strcmp(part, "elm.text"))
+	{
+		return short_name;
+	}
+	else if(!strcmp(part, "elm.text.sub"))
+	{
+		return name;
+	}
+
+	return NULL;
+}
+
+static void
+_ui_port_list_del(void *data, Evas_Object *obj)
+{
+	int *id = data;
+
+	free(id);
+}
+
+static void
+_ui_list_activated(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	//TODO
+}
+
+static void
+_ui_list_expand_request(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	elm_genlist_item_expanded_set(itm, EINA_TRUE);
+}
+
+static void
+_ui_list_contract_request(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	elm_genlist_item_expanded_set(itm, EINA_FALSE);
+}
+
+static void
+_ui_list_expanded(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	int *client_id = elm_object_item_data_get(itm);
+
+	sqlite3_stmt *stmt = app->query_client_port_list;
+		
+	sqlite3_bind_int(stmt, 1, *client_id); // client_id
+
+	while(sqlite3_step(stmt) != SQLITE_DONE)
+	{
+		int id = sqlite3_column_int(stmt, 0);
+
+		int *ref = calloc(1, sizeof(int));
+		*ref = id;
+		elm_genlist_item_append(app->list, app->portitc,
+			ref, itm, ELM_GENLIST_ITEM_NONE, NULL, NULL);
+	}
+
+	sqlite3_reset(stmt);
+}
+
+static void
+_ui_list_contracted(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	elm_genlist_item_subitems_clear(itm);
+}
+
+static char *
+_ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
+{
+	int *id = data;
+
+	if(!strcmp(part, "elm.text"))
+	{
+		switch(*id)
+		{
+			case 0:
+				return strdup("Audio Ports");
+			case 1:
+				return strdup("MIDI Ports");
+			case 2:
+				return strdup("CV Ports");
+			case 3:
+				return strdup("OSC Ports");
+		}
+	}
+
+	return NULL;
+}
+
+static void
+_ui_patcher_free(void *data, Evas *e, Evas_Object *obj, void *event_info)
+{
+	int *id = data;
+	app_t *app = evas_object_data_get(obj, "app");
+
+	app->patcher[*id] = NULL;
+}
+
+static Evas_Object *
+_ui_grid_content_get(void *data, Evas_Object *obj, const char *part)
+{
+	int *id = data;
+	app_t *app = evas_object_data_get(obj, "app");
+
+	if(!strcmp(part, "elm.swallow.icon"))
+	{
+		Evas_Object *patcher = patcher_object_add(evas_object_evas_get(obj));
+		if(patcher)
+		{
+			evas_object_data_set(patcher, "app", app);
+			evas_object_smart_callback_add(patcher, "connect,request",
+				_ui_connect_request, app);
+			evas_object_smart_callback_add(patcher, "disconnect,request",
+				_ui_disconnect_request, app);
+			evas_object_smart_callback_add(patcher, "realize,request",
+				_ui_realize_request, app);
+			evas_object_size_hint_weight_set(patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_event_callback_add(patcher, EVAS_CALLBACK_DEL, _ui_patcher_free, id);
+			evas_object_show(patcher);
+
+			app->patcher[*id] = patcher;
+
+			return patcher;
+		}
+	}
+
+	return NULL;
+}
+
+static void
+_ui_grid_del(void *data, Evas_Object *obj)
+{
+	int *id = data;
+
+	free(id);
+}
+
 static int
 _ui_init(app_t *app)
 {
 	// UI
-	app->w = 800;
-	app->h = 600;
+	app->w = 860;
+	app->h = 645;
+	
+	app->clientitc = elm_genlist_item_class_new();
+	if(app->clientitc)
+	{
+		app->clientitc->item_style = "double_label";
+		app->clientitc->func.text_get = _ui_client_list_label_get;
+		app->clientitc->func.content_get = NULL;
+		app->clientitc->func.state_get = NULL;
+		app->clientitc->func.del = _ui_client_list_del;
+	}
+	
+	app->portitc = elm_genlist_item_class_new();
+	if(app->portitc)
+	{
+		app->portitc->item_style = "double_label";
+		app->portitc->func.text_get = _ui_port_list_label_get;
+		app->portitc->func.content_get = NULL;
+		app->portitc->func.state_get = NULL;
+		app->portitc->func.del = _ui_port_list_del;
+	}
+	
+	app->griditc = elm_gengrid_item_class_new();
+	if(app->griditc)
+	{
+		app->griditc->item_style = "default";
+		app->griditc->func.text_get = _ui_grid_label_get;
+		app->griditc->func.content_get = _ui_grid_content_get;
+		app->griditc->func.state_get = NULL;
+		app->griditc->func.del = _ui_grid_del;
+	}
 
 	app->win = elm_win_util_standard_add("PatchMatrix", "PatchMarix");
 	if(!app->win)
@@ -999,25 +1304,57 @@ _ui_init(app_t *app)
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
 
-	for(int i=0; i<4; i++)
+	app->pane = elm_panes_add(app->win);
+	if(app->pane)
 	{
-		app->patcher[i] = patcher_object_add(evas_object_evas_get(app->win));
-		evas_object_smart_callback_add(app->patcher[i], "connect,request",
-			_ui_connect_request, app);
-		evas_object_smart_callback_add(app->patcher[i], "disconnect,request",
-			_ui_disconnect_request, app);
-		evas_object_smart_callback_add(app->patcher[i], "realize,request",
-			_ui_realize_request, app);
-		evas_object_size_hint_weight_set(app->patcher[i], EVAS_HINT_EXPAND,
-			EVAS_HINT_EXPAND);
-		evas_object_size_hint_align_set(app->patcher[i], EVAS_HINT_FILL,
-			EVAS_HINT_FILL);
-		evas_object_resize(app->patcher[i], 400, 300);
-		evas_object_move(app->patcher[i], i % 2 ? 0 : 400, i < 2 ? 0 : 300);
-		evas_object_show(app->patcher[i]);
+		elm_panes_horizontal_set(app->pane, EINA_FALSE);
+		evas_object_size_hint_weight_set(app->pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+		evas_object_size_hint_align_set(app->pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
+		elm_win_resize_object_add(app->win, app->pane);
+		evas_object_show(app->pane);
 
-		//patcher_object_dimension_set(app->patcher[i], 8, 8);
-	}
+		app->list = elm_genlist_add(app->pane);
+		if(app->list)
+		{
+			evas_object_smart_callback_add(app->list, "activated",
+				_ui_list_activated, app);
+			evas_object_smart_callback_add(app->list, "expand,request",
+				_ui_list_expand_request, app);
+			evas_object_smart_callback_add(app->list, "contract,request",
+				_ui_list_contract_request, app);
+			evas_object_smart_callback_add(app->list, "expanded",
+				_ui_list_expanded, app);
+			evas_object_smart_callback_add(app->list, "contracted",
+				_ui_list_contracted, app);
+			evas_object_data_set(app->list, "app", app);
+			evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(app->list);
+
+			elm_object_part_content_set(app->pane, "left", app->list);
+		} // app->list
+
+		app->grid = elm_gengrid_add(app->pane);
+		if(app->grid)
+		{
+			elm_gengrid_item_size_set(app->grid, 400, 400);
+			elm_gengrid_select_mode_set(app->grid, ELM_OBJECT_SELECT_MODE_NONE);
+			elm_gengrid_reorder_mode_set(app->grid, EINA_TRUE);
+			evas_object_data_set(app->grid, "app", app);
+			evas_object_size_hint_weight_set(app->grid, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(app->grid, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(app->grid);
+
+			elm_object_part_content_set(app->pane, "right", app->grid);
+
+			for(int i=0; i<4; i++)
+			{
+				int *id = calloc(1, sizeof(id));
+				*id = i;
+				elm_gengrid_item_append(app->grid, app->griditc, id, NULL, NULL);
+			}
+		} // app->grid
+	} // app->pane
 
 	return 0;
 }
@@ -1031,11 +1368,20 @@ _ui_deinit(app_t *app)
 	for(int i=0; i<4; i++)
 		evas_object_del(app->patcher[i]);
 	evas_object_del(app->win);
+
+	if(app->clientitc)
+		elm_genlist_item_class_free(app->clientitc);
+	if(app->portitc)
+		elm_genlist_item_class_free(app->portitc);
+	if(app->griditc)
+		elm_gengrid_item_class_free(app->griditc);
 }
 
 static void
 _ui_populate(app_t *app)
 {
+	elm_genlist_clear(app->list);
+
 	const char **sources = jack_get_ports(app->client, NULL, NULL, JackPortIsOutput);
 	const char **sinks = jack_get_ports(app->client, NULL, NULL, JackPortIsInput);
 
@@ -1099,6 +1445,9 @@ _ui_refresh(app_t *app)
 
 	for(int i=0; i<4; i++)
 	{
+		if(!app->patcher[i])
+			continue;
+
 		ret = sqlite3_bind_int(stmt, 1, i); // type
 		ret = sqlite3_bind_int(stmt, 2, 0); // source
 		int num_sources = 0;
@@ -1163,6 +1512,9 @@ _ui_realize(app_t *app)
 {
 	for(int i=0; i<4; i++)
 	{
+		if(!app->patcher[i])
+			continue;
+
 		patcher_object_realize(app->patcher[i]);
 	}
 }
