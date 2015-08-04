@@ -36,6 +36,13 @@ enum {
 	EVENT_ON_INFO_SHUTDOWN
 };
 
+enum {
+	TYPE_AUDIO	= 0,
+	TYPE_MIDI		= 1,
+	TYPE_OSC		= 2,
+	TYPE_CV			= 3,
+};
+
 struct _event_t {
 	app_t *app;
 	int type;
@@ -97,17 +104,22 @@ struct _app_t {
 	sqlite3_stmt *query_client_add;
 	sqlite3_stmt *query_client_del;
 	sqlite3_stmt *query_client_find_by_name;
+	sqlite3_stmt *query_client_find_by_uuid;
 	sqlite3_stmt *query_client_find_by_id;
 	sqlite3_stmt *query_client_get_selected;
 	sqlite3_stmt *query_client_set_selected;
+	sqlite3_stmt *query_client_set_pretty;
 
 	sqlite3_stmt *query_port_add;
 	sqlite3_stmt *query_port_del;
 	sqlite3_stmt *query_port_find_by_name;
+	sqlite3_stmt *query_port_find_by_uuid;
 	sqlite3_stmt *query_port_find_by_id;
 	sqlite3_stmt *query_port_get_selected;
 	sqlite3_stmt *query_port_set_selected;
 	sqlite3_stmt *query_port_info;
+	sqlite3_stmt *query_port_set_pretty;
+	sqlite3_stmt *query_port_set_type;
 
 	sqlite3_stmt *query_connection_add;
 	sqlite3_stmt *query_connection_del;
@@ -117,6 +129,7 @@ struct _app_t {
 	sqlite3_stmt *query_client_port_list;
 };
 
+static void _ui_refresh_single(app_t *app, int i);
 static void _ui_refresh(app_t *app);
 static void _ui_realize(app_t *app);
 
@@ -130,7 +143,7 @@ _db_init(app_t *app)
 		fprintf(stderr, "_db_init: could not open in-memory database\n");
 		return -1;
 	}
-	
+
 	if( (ret = sqlite3_exec(app->db,
 		"CREATE TABLE Clients ("
 			"id INTEGER PRIMARY KEY,"
@@ -166,8 +179,8 @@ _db_init(app_t *app)
 			""
 		"INSERT INTO Types (id, name, selected) VALUES (0, 'AUDIO', 1);"
 		"INSERT INTO Types (id, name, selected) VALUES (1, 'MIDI', 1);"
-		"INSERT INTO Types (id, name, selected) VALUES (2, 'CV', 1);"
-		"INSERT INTO Types (id, name, selected) VALUES (3, 'OSC', 1);"
+		"INSERT INTO Types (id, name, selected) VALUES (2, 'OSC', 1);"
+		"INSERT INTO Types (id, name, selected) VALUES (3, 'CV', 1);"
 			""
 		"INSERT INTO Directions (id, name) VALUES (0, 'SOURCE');"
 		"INSERT INTO Directions (id, name) VALUES (1, 'SINK');",
@@ -191,15 +204,21 @@ _db_init(app_t *app)
 		"SELECT id FROM Clients WHERE name=$1",
 		-1, &app->query_client_find_by_name, NULL);
 	ret = sqlite3_prepare_v2(app->db,
+		"SELECT id FROM Clients WHERE uuid=$1",
+		-1, &app->query_client_find_by_uuid, NULL);
+	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, pretty_name FROM Clients WHERE id=$1",
 		-1, &app->query_client_find_by_id, NULL);
-		
+
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT selected FROM Clients WHERE id=$1",
 		-1, &app->query_client_get_selected, NULL);
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Clients SET selected=$1 WHERE id=$2",
 		-1, &app->query_client_set_selected, NULL);
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Clients SET pretty_name=$1 WHERE id=$2",
+		-1, &app->query_client_set_pretty, NULL);
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
@@ -214,9 +233,12 @@ _db_init(app_t *app)
 		"SELECT id FROM Ports WHERE name=$1",
 		-1, &app->query_port_find_by_name, NULL);
 	ret = sqlite3_prepare_v2(app->db,
+		"SELECT id FROM Ports WHERE uuid=$1",
+		-1, &app->query_port_find_by_uuid, NULL);
+	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, short_name, pretty_name FROM Ports WHERE id=$1",
 		-1, &app->query_port_find_by_id, NULL);
-		
+
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Ports SET selected=$1 WHERE id=$2",
 		-1, &app->query_port_set_selected, NULL);
@@ -226,7 +248,13 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT type_id, direction_id, client_id FROM Ports WHERE id=$1",
 		-1, &app->query_port_info, NULL);
-	
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Ports SET pretty_name=$1 WHERE id=$2",
+		-1, &app->query_port_set_pretty, NULL);
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Ports SET type_id=$1 WHERE id=$2",
+		-1, &app->query_port_set_type, NULL);
+
 	ret = sqlite3_prepare_v2(app->db,
 		"INSERT INTO Connections (source_id, sink_id) VALUES ($1, $2)",
 		-1, &app->query_connection_add, NULL);
@@ -262,26 +290,31 @@ _db_deinit(app_t *app)
 
 	if(!app->db)
 		return;
-	
+
 	ret = sqlite3_finalize(app->query_client_add);
 	ret = sqlite3_finalize(app->query_client_del);
 	ret = sqlite3_finalize(app->query_client_find_by_name);
+	ret = sqlite3_finalize(app->query_client_find_by_uuid);
 	ret = sqlite3_finalize(app->query_client_find_by_id);
 	ret = sqlite3_finalize(app->query_client_get_selected);
 	ret = sqlite3_finalize(app->query_client_set_selected);
+	ret = sqlite3_finalize(app->query_client_set_pretty);
 
 	ret = sqlite3_finalize(app->query_port_add);
 	ret = sqlite3_finalize(app->query_port_del);
 	ret = sqlite3_finalize(app->query_port_find_by_name);
+	ret = sqlite3_finalize(app->query_port_find_by_uuid);
 	ret = sqlite3_finalize(app->query_port_find_by_id);
 	ret = sqlite3_finalize(app->query_port_get_selected);
 	ret = sqlite3_finalize(app->query_port_set_selected);
 	ret = sqlite3_finalize(app->query_port_info);
-	
+	ret = sqlite3_finalize(app->query_port_set_pretty);
+	ret = sqlite3_finalize(app->query_port_set_type);
+
 	ret = sqlite3_finalize(app->query_connection_add);
 	ret = sqlite3_finalize(app->query_connection_del);
 	ret = sqlite3_finalize(app->query_connection_get);
-	
+
 	ret = sqlite3_finalize(app->query_port_list);
 	ret = sqlite3_finalize(app->query_client_port_list);
 
@@ -296,8 +329,30 @@ _db_client_find_by_name(app_t *app, const char *name)
 	int id;
 
 	sqlite3_stmt *stmt = app->query_client_find_by_name;
-		
+
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+
+	ret = sqlite3_step(stmt);
+
+	if(ret != SQLITE_DONE)
+		id = sqlite3_column_int(stmt, 0);
+	else
+		id = -1;
+
+	ret = sqlite3_reset(stmt);
+
+	return id;
+}
+
+static int
+_db_client_find_by_uuid(app_t *app, jack_uuid_t uuid)
+{
+	int ret;
+	int id;
+
+	sqlite3_stmt *stmt = app->query_client_find_by_uuid;
+
+	ret = sqlite3_bind_int64(stmt, 1, uuid);
 
 	ret = sqlite3_step(stmt);
 
@@ -317,7 +372,7 @@ _db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_client_find_by_id;
-		
+
 	ret = sqlite3_bind_int(stmt, 1, id);
 
 	ret = sqlite3_step(stmt);
@@ -344,15 +399,15 @@ static void
 _db_client_add(app_t *app, const char *name)
 {
 	int ret;
-		
+
 	jack_uuid_t uuid;
-				
+
 	const char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
 	if(uuid_str)
 		jack_uuid_parse(uuid_str, &uuid);
 	else
 		jack_uuid_clear(&uuid);
-	
+
 	char *value = NULL;
 	char *type = NULL;
 	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
@@ -362,7 +417,7 @@ _db_client_add(app_t *app, const char *name)
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
 	ret = sqlite3_bind_text(stmt, 2, value ? value : name, -1, NULL);
 	ret = sqlite3_bind_int64(stmt, 3, uuid);
-	
+
 	ret = sqlite3_step(stmt);
 
 	ret = sqlite3_reset(stmt);
@@ -446,7 +501,22 @@ _db_client_set_selected(app_t *app, int id, int selected)
 
 	ret = sqlite3_reset(stmt);
 }
-					
+
+static void
+_db_client_set_pretty(app_t *app, int id, const char *pretty_name)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_client_set_pretty;
+
+	ret = sqlite3_bind_text(stmt, 1, pretty_name, -1, NULL);
+	ret = sqlite3_bind_int(stmt, 2, id);
+
+	ret = sqlite3_step(stmt);
+
+	ret = sqlite3_reset(stmt);
+}
+
 static void
 _db_port_add(app_t *app, const char *client_name, const char *name,
 	const char *short_name)
@@ -456,11 +526,11 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	jack_port_t *port = jack_port_by_name(app->client, name);
 	int client_id = _db_client_find_by_name(app, client_name);
 	int midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
-	int type_id = midi ? 1 : 0;
+	int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
 	int flags = jack_port_flags(port);
 	int direction_id = flags & JackPortIsInput ? 1 : 0;
 	jack_uuid_t uuid = jack_port_uuid(port);
-	
+
 	char *value = NULL;
 	char *type = NULL;
 
@@ -469,7 +539,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		jack_get_property(uuid, "http://jackaudio.org/metadata/signal-type", &value, &type);
 		if(value && !strcmp(value, "CV"))
 		{
-			type_id = 2;
+			type_id = TYPE_CV;
 			free(value);
 		}
 		if(type)
@@ -480,7 +550,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		jack_get_property(uuid, "http://jackaudio.org/metadata/event-types", &value, &type);
 		if(value && strstr(value, "OSC"))
 		{
-			type_id = 3;
+			type_id = TYPE_OSC;
 			free(value);
 		}
 		if(type)
@@ -537,8 +607,30 @@ _db_port_find_by_name(app_t *app, const char *name)
 	int id;
 
 	sqlite3_stmt *stmt = app->query_port_find_by_name;
-		
+
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+
+	ret = sqlite3_step(stmt);
+
+	if(ret != SQLITE_DONE)
+		id = sqlite3_column_int(stmt, 0);
+	else
+		id = -1;
+
+	ret = sqlite3_reset(stmt);
+
+	return id;
+}
+
+static int
+_db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
+{
+	int ret;
+	int id;
+
+	sqlite3_stmt *stmt = app->query_port_find_by_uuid;
+
+	ret = sqlite3_bind_int64(stmt, 1, uuid);
 
 	ret = sqlite3_step(stmt);
 
@@ -558,7 +650,7 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_port_find_by_id;
-		
+
 	ret = sqlite3_bind_int(stmt, 1, id);
 
 	ret = sqlite3_step(stmt);
@@ -628,7 +720,7 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_port_info;
-		
+
 	ret = sqlite3_bind_int(stmt, 1, id);
 
 	ret = sqlite3_step(stmt);
@@ -656,6 +748,36 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 }
 
 static void
+_db_port_set_pretty(app_t *app, int id, const char *pretty_name)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_set_pretty;
+
+	ret = sqlite3_bind_text(stmt, 1, pretty_name, -1, NULL);
+	ret = sqlite3_bind_int(stmt, 2, id);
+
+	ret = sqlite3_step(stmt);
+
+	ret = sqlite3_reset(stmt);
+}
+
+static void
+_db_port_set_type(app_t *app, int id, int type_id)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_set_type;
+
+	ret = sqlite3_bind_int(stmt, 1, type_id);
+	ret = sqlite3_bind_int(stmt, 2, id);
+
+	ret = sqlite3_step(stmt);
+
+	ret = sqlite3_reset(stmt);
+}
+
+static void
 _db_port_del(app_t *app, const char *client_name, const char *name,
 	const char *short_name)
 {
@@ -670,7 +792,7 @@ _db_port_del(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_step(stmt);
 
 	ret = sqlite3_reset(stmt);
-	
+
 	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
 		itm != NULL;
 		itm = elm_genlist_item_next_get(itm))
@@ -739,7 +861,7 @@ _db_connection_get(app_t *app, const char *name_source, const char *name_sink)
 	ret = sqlite3_bind_int(stmt, 2, id_sink);
 
 	ret = sqlite3_step(stmt);
-	
+
 	if(ret != SQLITE_DONE)
 		connected = 1;
 	else
@@ -755,17 +877,21 @@ _jack_timer_cb(void *data)
 {
 	app_t *app = data;
 
+	int refresh = 0;
+	int realize = 0;
+	int done = 0;
+
 	event_t *ev;
 	EINA_LIST_FREE(app->events, ev)
 	{
-		printf("_jack_timer_cb: %i\n", ev->type);
+		//printf("_jack_timer_cb: %i\n", ev->type);
 
 		switch(ev->type)
 		{
 			case EVENT_CLIENT_REGISTER:
 			{
-				printf("client_register: %s %i\n", ev->client_register.name,
-					ev->client_register.state);
+				//printf("client_register: %s %i\n", ev->client_register.name,
+				//	ev->client_register.state);
 
 				if(ev->client_register.state)
 					_db_client_add(app, ev->client_register.name);
@@ -773,6 +899,8 @@ _jack_timer_cb(void *data)
 					_db_client_del(app, ev->client_register.name);
 
 				free(ev->client_register.name); // strdup
+
+				refresh = 1;
 
 				break;
 			}
@@ -785,7 +913,7 @@ _jack_timer_cb(void *data)
 				char *client_name = strndup(name, sep - name);
 				const char *short_name = sep + 1;
 
-				printf("port_register: %s %i\n", name, ev->port_register.state);
+				//printf("port_register: %s %i\n", name, ev->port_register.state);
 
 				if(ev->port_register.state)
 					_db_port_add(app, client_name, name, short_name);
@@ -794,27 +922,97 @@ _jack_timer_cb(void *data)
 
 				free(client_name); // strdup
 
+				refresh = 1;
+
 				break;
 			}
 			case EVENT_PORT_CONNECT:
 			{
-				// never reached
+				const jack_port_t *port_source = jack_port_by_id(app->client, ev->port_connect.id_source);
+				const jack_port_t *port_sink = jack_port_by_id(app->client, ev->port_connect.id_sink);
+				const char *name_source = jack_port_name(port_source);
+				const char *name_sink = jack_port_name(port_sink);
+
+				//printf("port_connect: %s %s %i\n", name_source, name_sink,
+				//	ev->port_connect.state);
+
+				if(ev->port_connect.state)
+					_db_connection_add(app, name_source, name_sink);
+				else
+					_db_connection_del(app, name_source, name_sink);
+
+				realize = 1;
 
 				break;
 			}
 			case EVENT_PROPERTY_CHANGE:
 			{
-				printf("property_change: %lu %s %i\n", ev->property_change.uuid,
-					ev->property_change.key, ev->property_change.state);
+				//printf("property_change: %lu %s %i\n", ev->property_change.uuid,
+				//	ev->property_change.key, ev->property_change.state);
 
-				//TODO
+				switch(ev->property_change.state)
+				{
+					case PropertyCreated:
+					{
+						// fall-through
+					}
+					case PropertyChanged:
+					{
+						char *value = NULL;
+						char *type = NULL;
+						jack_get_property(ev->property_change.uuid,
+							ev->property_change.key, &value, &type);
+
+						if(value)
+						{
+							if(!strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
+							{
+								int id;
+								if((id = _db_client_find_by_uuid(app, ev->property_change.uuid) != -1))
+									_db_client_set_pretty(app, id, value);
+								else if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
+									_db_port_set_pretty(app, id, value);
+							}
+							else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types"))
+							{
+								int id;
+								int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
+								if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
+									_db_port_set_type(app, id, type_id);
+							}
+							else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type"))
+							{
+								int id;
+								int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
+								if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
+									_db_port_set_type(app, id, type_id);
+							}
+
+							free(value);
+						}
+
+						if(type)
+							free(type);
+
+						break;
+					}
+					case PropertyDeleted:
+					{
+						//FIXME key seems to be broken atm
+						break;
+					}
+				}
+
 				free(ev->property_change.key); // strdup
+
+				refresh = 1;
 
 				break;
 			}
 			case EVENT_ON_INFO_SHUTDOWN:
 			{
-				// never reached
+				app->client = NULL; // JACK has shut down, hasn't it?
+				done = 1;
 
 				break;
 			}
@@ -823,9 +1021,17 @@ _jack_timer_cb(void *data)
 		free(ev);
 	}
 
-	_ui_refresh(app);
+	if(refresh)
+		_ui_refresh(app);
+	else if(realize)
+		_ui_realize(app);
 
-	return EINA_TRUE;
+	if(done)
+		elm_exit();
+
+	app->timer = NULL;
+
+	return ECORE_CALLBACK_CANCEL;
 }
 
 static void
@@ -834,72 +1040,19 @@ _jack_async(void *data)
 	event_t *ev = data;
 	app_t *app = ev->app;
 
-	int done = 0;
+	app->events = eina_list_append(app->events, ev);
 
-	switch(ev->type)
-	{
-		case EVENT_CLIENT_REGISTER:
-		{
-			// aggregate to event queue
-			app->events = eina_list_append(app->events, ev);
-
-			break;
-		}
-		case EVENT_PORT_REGISTER:
-		{
-			// aggregate to event queue
-			app->events = eina_list_append(app->events, ev);
-
-			break;
-		}
-		case EVENT_PORT_CONNECT:
-		{
-			const jack_port_t *port_source = jack_port_by_id(app->client, ev->port_connect.id_source);
-			const jack_port_t *port_sink = jack_port_by_id(app->client, ev->port_connect.id_sink);
-			const char *name_source = jack_port_name(port_source);
-			const char *name_sink = jack_port_name(port_sink);
-
-			printf("port_connect: %s %s %i\n", name_source, name_sink,
-				ev->port_connect.state);
-
-			if(ev->port_connect.state)
-				_db_connection_add(app, name_source, name_sink);
-			else
-				_db_connection_del(app, name_source, name_sink);
-				
-			_ui_realize(app);
-
-			free(ev);
-
-			break;
-		}
-		case EVENT_PROPERTY_CHANGE:
-		{
-			// aggregate to event queue
-			app->events = eina_list_append(app->events, ev);
-
-			break;
-		}
-		case EVENT_ON_INFO_SHUTDOWN:
-		{
-			app->client = NULL; // JACK has shut down, hasn't it?
-			done = 1;	
-
-			free(ev);
-
-			break;
-		}
-	};
-
-	if(done)
-		elm_exit();
+	if(app->timer)
+		ecore_timer_reset(app->timer);
+	else
+		app->timer = ecore_timer_loop_add(0.1, _jack_timer_cb, app);
 }
 
 static void
 _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 {
 	app_t *app = arg;
-	
+
 	event_t *ev = malloc(sizeof(event_t));
 	ev->app = app;
 	ev->type = EVENT_ON_INFO_SHUTDOWN;
@@ -941,7 +1094,7 @@ static void
 _jack_client_registration_cb(const char *name, int state, void *arg)
 {
 	app_t *app = arg;
-	
+
 	event_t *ev = malloc(sizeof(event_t));
 	ev->app = app;
 	ev->type = EVENT_CLIENT_REGISTER;
@@ -955,7 +1108,7 @@ static void
 _jack_port_registration_cb(jack_port_id_t id, int state, void *arg)
 {
 	app_t *app = arg;
-	
+
 	event_t *ev = malloc(sizeof(event_t));
 	ev->app = app;
 	ev->type = EVENT_PORT_REGISTER;
@@ -1037,7 +1190,7 @@ _jack_init(app_t *app)
 	app->client = jack_client_open("patchmatrix", JackNullOption, &status);
 	if(!app->client)
 		return -1;
-	
+
 	jack_on_info_shutdown(app->client, _jack_on_info_shutdown_cb, app);
 
 	jack_set_freewheel_callback(app->client, _jack_freewheel_cb, app);
@@ -1053,8 +1206,6 @@ _jack_init(app_t *app)
 	jack_set_property_change_callback(app->client, _jack_property_change_cb, app);
 
 	jack_activate(app->client);
-	
-	app->timer = ecore_timer_loop_add(0.5, _jack_timer_cb, app);
 
 	return 0;
 }
@@ -1065,7 +1216,8 @@ _jack_deinit(app_t *app)
 	if(!app->client)
 		return;
 
-	ecore_timer_del(app->timer);
+	if(app->timer)
+		ecore_timer_del(app->timer);
 	jack_deactivate(app->client);
 	jack_client_close(app->client);
 }
@@ -1075,7 +1227,7 @@ _ui_delete_request(void *data, Evas_Object *obj, void *event)
 {
 	app_t *app = data;
 
-	elm_exit();	
+	elm_exit();
 }
 
 static void
@@ -1102,7 +1254,7 @@ _ui_connect_request(void *data, Evas_Object *obj, void *event_info)
 	if(!source_name || !sink_name)
 		return;
 
-	printf("connect_request: %s %s\n", source_name, sink_name);
+	//printf("connect_request: %s %s\n", source_name, sink_name);
 
 	jack_connect(app->client, source_name, sink_name);
 
@@ -1134,7 +1286,7 @@ _ui_disconnect_request(void *data, Evas_Object *obj, void *event_info)
 	if(!source_name || !sink_name)
 		return;
 
-	printf("disconnect_request: %s %s\n", source_name, sink_name);
+	//printf("disconnect_request: %s %s\n", source_name, sink_name);
 
 	jack_disconnect(app->client, source_name, sink_name);
 
@@ -1214,7 +1366,7 @@ _ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
 {
 	int *id = data;
 	app_t *app = evas_object_data_get(obj, "app");
-	
+
 	int selected = _db_client_get_selected(app, *id);
 
 	if(!strcmp(part, "elm.swallow.icon"))
@@ -1226,7 +1378,7 @@ _ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
 			evas_object_data_set(check, "app", app);
 			evas_object_smart_callback_add(check, "changed", _client_selected_changed, id);
 			evas_object_show(check);
-			
+
 			return check;
 		}
 	}
@@ -1348,7 +1500,7 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 			evas_object_data_set(check, "app", app);
 			evas_object_smart_callback_add(check, "changed", _port_selected_changed, id);
 			evas_object_show(check);
-			
+
 			return check;
 		}
 	}
@@ -1361,17 +1513,17 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 				"/patchmatrix/list/type");
 			switch(type)
 			{
-				case 0:
+				case TYPE_AUDIO:
 					edje_object_part_text_set(elmnt, "label", "AUDIO");
 					break;
-				case 1:
+				case TYPE_MIDI:
 					edje_object_part_text_set(elmnt, "label", "MIDI");
 					break;
-				case 2:
-					edje_object_part_text_set(elmnt, "label", "CV");
-					break;
-				case 3:
+				case TYPE_OSC:
 					edje_object_part_text_set(elmnt, "label", "OSC");
+					break;
+				case TYPE_CV:
+					edje_object_part_text_set(elmnt, "label", "CV");
 					break;
 			}
 			evas_object_size_hint_weight_set(elmnt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
@@ -1447,7 +1599,7 @@ _ui_list_expanded(void *data, Evas_Object *obj, void *event_info)
 	else if(itc == app->sourceitc)
 	{
 		sqlite3_stmt *stmt = app->query_client_port_list;
-			
+
 		sqlite3_bind_int(stmt, 1, *client_id); // client_id
 		sqlite3_bind_int(stmt, 2, 0); // sources
 
@@ -1466,7 +1618,7 @@ _ui_list_expanded(void *data, Evas_Object *obj, void *event_info)
 	else if(itc == app->sinkitc)
 	{
 		sqlite3_stmt *stmt = app->query_client_port_list;
-			
+
 		sqlite3_bind_int(stmt, 1, *client_id); // client_id
 		sqlite3_bind_int(stmt, 2, 1); // sinks
 
@@ -1502,14 +1654,14 @@ _ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
 	{
 		switch(*id)
 		{
-			case 0:
+			case TYPE_AUDIO:
 				return strdup("Audio Ports");
-			case 1:
+			case TYPE_MIDI:
 				return strdup("MIDI Ports");
-			case 2:
-				return strdup("CV Ports");
-			case 3:
+			case TYPE_OSC:
 				return strdup("OSC Ports");
+			case TYPE_CV:
+				return strdup("CV Ports");
 		}
 	}
 
@@ -1550,6 +1702,8 @@ _ui_grid_content_get(void *data, Evas_Object *obj, const char *part)
 
 			app->patcher[*id] = patcher;
 
+			_ui_refresh_single(app, *id);
+
 			return patcher;
 		}
 	}
@@ -1569,9 +1723,9 @@ static int
 _ui_init(app_t *app)
 {
 	// UI
-	app->w = 860;
-	app->h = 645;
-	
+	app->w = 1024;
+	app->h = 420;
+
 	app->clientitc = elm_genlist_item_class_new();
 	if(app->clientitc)
 	{
@@ -1581,7 +1735,7 @@ _ui_init(app_t *app)
 		app->clientitc->func.state_get = NULL;
 		app->clientitc->func.del = _ui_client_list_del;
 	}
-	
+
 	app->sourceitc = elm_genlist_item_class_new();
 	if(app->sourceitc)
 	{
@@ -1591,7 +1745,7 @@ _ui_init(app_t *app)
 		app->sourceitc->func.state_get = NULL;
 		app->sourceitc->func.del = NULL;
 	}
-	
+
 	app->sinkitc = elm_genlist_item_class_new();
 	if(app->sinkitc)
 	{
@@ -1601,7 +1755,7 @@ _ui_init(app_t *app)
 		app->sinkitc->func.state_get = NULL;
 		app->sinkitc->func.del = NULL;
 	}
-	
+
 	app->sepitc = elm_genlist_item_class_new();
 	if(app->sepitc)
 	{
@@ -1611,7 +1765,7 @@ _ui_init(app_t *app)
 		app->sepitc->func.state_get = NULL;
 		app->sepitc->func.del = NULL;
 	}
-	
+
 	app->portitc = elm_genlist_item_class_new();
 	if(app->portitc)
 	{
@@ -1621,7 +1775,7 @@ _ui_init(app_t *app)
 		app->portitc->func.state_get = NULL;
 		app->portitc->func.del = _ui_port_list_del;
 	}
-	
+
 	app->griditc = elm_gengrid_item_class_new();
 	if(app->griditc)
 	{
@@ -1644,6 +1798,7 @@ _ui_init(app_t *app)
 	if(app->pane)
 	{
 		elm_panes_horizontal_set(app->pane, EINA_FALSE);
+		elm_panes_content_left_size_set(app->pane, 0.15);
 		evas_object_size_hint_weight_set(app->pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 		evas_object_size_hint_align_set(app->pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		elm_win_resize_object_add(app->win, app->pane);
@@ -1673,6 +1828,7 @@ _ui_init(app_t *app)
 		app->grid = elm_gengrid_add(app->pane);
 		if(app->grid)
 		{
+			elm_gengrid_horizontal_set(app->grid, EINA_TRUE);
 			elm_gengrid_item_size_set(app->grid, 400, 400);
 			elm_gengrid_select_mode_set(app->grid, ELM_OBJECT_SELECT_MODE_NONE);
 			elm_gengrid_reorder_mode_set(app->grid, EINA_TRUE);
@@ -1777,75 +1933,80 @@ _ui_populate(app_t *app)
 	}
 }
 
-// update grids and connections
+// update single grid and connections
 static void
-_ui_refresh(app_t *app)
+_ui_refresh_single(app_t *app, int i)
 {
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_port_list;
 
-	for(int i=0; i<4; i++)
+	if(!app->patcher[i])
+		return;
+
+	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	int num_sources = 0;
+	while(sqlite3_step(stmt) != SQLITE_DONE)
+		num_sources += 1;
+	ret = sqlite3_reset(stmt);
+
+	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	int num_sinks = 0;
+	while(sqlite3_step(stmt) != SQLITE_DONE)
+		num_sinks += 1;
+	ret = sqlite3_reset(stmt);
+
+	patcher_object_dimension_set(app->patcher[i], num_sources, num_sinks);
+
+	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	for(int source=0; source<num_sources; source++)
 	{
-		if(!app->patcher[i])
-			continue;
+		ret = sqlite3_step(stmt);
+		int id = sqlite3_column_int(stmt, 0);
+		int client_id = sqlite3_column_int(stmt, 1);
+		char *name, *pretty_name;
+		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
-		ret = sqlite3_bind_int(stmt, 1, i); // type
-		ret = sqlite3_bind_int(stmt, 2, 0); // source
-		int num_sources = 0;
-		while(sqlite3_step(stmt) != SQLITE_DONE)
-			num_sources += 1;
-		ret = sqlite3_reset(stmt);
-		
-		ret = sqlite3_bind_int(stmt, 1, i); // type
-		ret = sqlite3_bind_int(stmt, 2, 1); // sink
-		int num_sinks = 0;
-		while(sqlite3_step(stmt) != SQLITE_DONE)
-			num_sinks += 1;
-		ret = sqlite3_reset(stmt);
+		patcher_object_source_id_set(app->patcher[i], source, id);
+		patcher_object_source_color_set(app->patcher[i], source, client_id % 20 + 1);
+		patcher_object_source_label_set(app->patcher[i], source, pretty_name);
 
-		patcher_object_dimension_set(app->patcher[i], num_sources, num_sinks);
-
-		ret = sqlite3_bind_int(stmt, 1, i); // type
-		ret = sqlite3_bind_int(stmt, 2, 0); // source
-		for(int source=0; source<num_sources; source++)
-		{
-			ret = sqlite3_step(stmt);
-			int id = sqlite3_column_int(stmt, 0);
-			int client_id = sqlite3_column_int(stmt, 1);
-			char *name, *pretty_name;
-			_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
-
-			patcher_object_source_id_set(app->patcher[i], source, id);
-			patcher_object_source_color_set(app->patcher[i], source, client_id % 20 + 1);
-			patcher_object_source_label_set(app->patcher[i], source, pretty_name);
-
-			free(name);
-			free(pretty_name);
-		}
-		ret = sqlite3_reset(stmt);
-
-		ret = sqlite3_bind_int(stmt, 1, i); // type
-		ret = sqlite3_bind_int(stmt, 2, 1); // sink
-		for(int sink=0; sink<num_sinks; sink++)
-		{
-			ret = sqlite3_step(stmt);
-			int id = sqlite3_column_int(stmt, 0);
-			int client_id = sqlite3_column_int(stmt, 1);
-			char *name, *pretty_name;
-			_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
-
-			patcher_object_sink_id_set(app->patcher[i], sink, id);
-			patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20 + 1);
-			patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
-
-			free(name);
-			free(pretty_name);
-		}
-		ret = sqlite3_reset(stmt);
-
-		patcher_object_realize(app->patcher[i]);
+		free(name);
+		free(pretty_name);
 	}
+	ret = sqlite3_reset(stmt);
+
+	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	for(int sink=0; sink<num_sinks; sink++)
+	{
+		ret = sqlite3_step(stmt);
+		int id = sqlite3_column_int(stmt, 0);
+		int client_id = sqlite3_column_int(stmt, 1);
+		char *name, *pretty_name;
+		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
+
+		patcher_object_sink_id_set(app->patcher[i], sink, id);
+		patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20 + 1);
+		patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
+
+		free(name);
+		free(pretty_name);
+	}
+	ret = sqlite3_reset(stmt);
+
+	patcher_object_realize(app->patcher[i]);
+}
+
+// update all grids and connections
+static void
+_ui_refresh(app_t *app)
+{
+	for(int i=0; i<4; i++)
+		_ui_refresh_single(app, i);
 }
 
 // update connections
@@ -1860,7 +2021,7 @@ _ui_realize(app_t *app)
 		patcher_object_realize(app->patcher[i]);
 	}
 }
-	
+
 static int
 elm_main(int argc, char **argv)
 {
