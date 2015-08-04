@@ -493,11 +493,11 @@ group {
 			description {
 				state: "default" 0.0;
 				rel1.relative: 0.5 -0.5;
-				rel2.relative: 6.5 0.5;
+				rel2.relative: 12.5 0.5;
 				map {
 					on: 1;
 					rotation.center: "center";
-					rotation.z: 90; // 45
+					rotation.z: 90;
 				}
 				text {
 					text: "Sinks";

@@ -63,6 +63,8 @@ add_custom_command(
 		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.edc
 		${PROJECT_BINARY_DIR}/patchmatrix.edj
 	DEPENDS
-		${CMAKE_CURRENT_SOURCE_DIR}/patcher.edc)
+		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.edc
+		${CMAKE_CURRENT_SOURCE_DIR}/patcher.edc
+		${CMAKE_CURRENT_SOURCE_DIR}/list.edc)
 add_custom_target(THEME ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.edj)
 install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.edj DESTINATION ${PATCHMATRIX_DATA_DIR})

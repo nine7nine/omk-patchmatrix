@@ -40,4 +40,5 @@
 
 collections {
 #include <patcher.edc>
+#include <list.edc>
 }
