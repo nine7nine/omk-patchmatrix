@@ -2,6 +2,8 @@
 
 ## A Simple JACK Patch Bay
 
+![Screenshot](https://raw.githubusercontent.com/OpenMusicKontrollers/patchmatrix/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
+
 ### Dependencies
 
 * [JACK](http://jackaudio.org/) (JACK audio connection kit)
