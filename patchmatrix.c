@@ -33,7 +33,8 @@ enum {
 	EVENT_PORT_REGISTER,
 	EVENT_PORT_CONNECT,
 	EVENT_PROPERTY_CHANGE,
-	EVENT_ON_INFO_SHUTDOWN
+	EVENT_ON_INFO_SHUTDOWN,
+	EVENT_GRAPH_ORDER
 };
 
 enum {
@@ -109,6 +110,7 @@ struct _app_t {
 	sqlite3_stmt *query_client_get_selected;
 	sqlite3_stmt *query_client_set_selected;
 	sqlite3_stmt *query_client_set_pretty;
+	sqlite3_stmt *query_client_set_position;
 
 	sqlite3_stmt *query_port_add;
 	sqlite3_stmt *query_port_del;
@@ -150,7 +152,8 @@ _db_init(app_t *app)
 			"name TEXT,"
 			"pretty_name TEXT,"
 			"selected BOOL,"
-			"uuid UNSIGNED BIG INT);"
+			"uuid UNSIGNED BIG INT,"
+			"position INTEGER);"
 			""
 		"CREATE TABLE Ports ("
 			"id INTEGER PRIMARY KEY,"
@@ -161,7 +164,9 @@ _db_init(app_t *app)
 			"type_id INT,"
 			"direction_id INT,"
 			"selected BOOL,"
-			"uuid UNSIGNED BIG INT);"
+			"uuid UNSIGNED BIG INT,"
+			"terminal BOOL,"
+			"physical BOOL);"
 			""
 		"CREATE TABLE Connections ("
 			"id INTEGER PRIMARY KEY,"
@@ -193,7 +198,7 @@ _db_init(app_t *app)
 
 	// Client
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Clients (name, pretty_name, uuid, selected) VALUES ($1, $2, $3, 1)",
+		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, 0, 1)",
 		-1, &app->query_client_add, NULL);
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -219,10 +224,13 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Clients SET pretty_name=$1 WHERE id=$2",
 		-1, &app->query_client_set_pretty, NULL);
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Clients SET position=$1 WHERE id=$2",
+		-1, &app->query_client_set_position, NULL);
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, 1)",
+		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)",
 		-1, &app->query_port_add, NULL);
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -274,7 +282,8 @@ _db_init(app_t *app)
 			"AND Ports.client_id=Clients.id "
 			"AND Clients.selected=1 "
 			"AND Types.id=$1 "
-			"AND Directions.id=$2",
+			"AND Directions.id=$2 "
+			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position",
 		-1, &app->query_port_list, NULL);
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id",
@@ -299,6 +308,7 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_client_get_selected);
 	ret = sqlite3_finalize(app->query_client_set_selected);
 	ret = sqlite3_finalize(app->query_client_set_pretty);
+	ret = sqlite3_finalize(app->query_client_set_position);
 
 	ret = sqlite3_finalize(app->query_port_add);
 	ret = sqlite3_finalize(app->query_port_del);
@@ -518,6 +528,21 @@ _db_client_set_pretty(app_t *app, int id, const char *pretty_name)
 }
 
 static void
+_db_client_set_position(app_t *app, int id, int position)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_client_set_position;
+
+	ret = sqlite3_bind_int(stmt, 1, position);
+	ret = sqlite3_bind_int(stmt, 2, id);
+
+	ret = sqlite3_step(stmt);
+
+	ret = sqlite3_reset(stmt);
+}
+
+static void
 _db_port_add(app_t *app, const char *client_name, const char *name,
 	const char *short_name)
 {
@@ -529,6 +554,8 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
 	int flags = jack_port_flags(port);
 	int direction_id = flags & JackPortIsInput ? 1 : 0;
+	int terminal_id = flags & JackPortIsTerminal ? 1 : 0;
+	int physical_id = flags & JackPortIsPhysical ? 1 : 0;
 	jack_uuid_t uuid = jack_port_uuid(port);
 
 	char *value = NULL;
@@ -570,6 +597,8 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_bind_int(stmt, 5, type_id);
 	ret = sqlite3_bind_int(stmt, 6, direction_id);
 	ret = sqlite3_bind_int(stmt, 7, uuid);
+	ret = sqlite3_bind_int(stmt, 8, terminal_id);
+	ret = sqlite3_bind_int(stmt, 9, physical_id);
 
 	ret = sqlite3_step(stmt);
 
@@ -1016,6 +1045,12 @@ _jack_timer_cb(void *data)
 
 				break;
 			}
+			case EVENT_GRAPH_ORDER:
+			{
+				//FIXME
+
+				break;
+			}
 		};
 
 		free(ev);
@@ -1081,7 +1116,7 @@ _jack_buffer_size_cb(jack_nframes_t nframes, void *arg)
 }
 
 static int
-_jack_saapple_rate_cb(jack_nframes_t nframes, void *arg)
+_jack_sample_rate_cb(jack_nframes_t nframes, void *arg)
 {
 	app_t *app = arg;
 
@@ -1162,7 +1197,13 @@ _jack_xrun_cb(void *arg)
 static int
 _jack_graph_order_cb(void *arg)
 {
-	//FIXME
+	app_t *app = arg;
+
+	event_t *ev = malloc(sizeof(event_t));
+	ev->app = app;
+	ev->type = EVENT_GRAPH_ORDER;
+
+	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
 
 	return 0;
 }
@@ -1195,7 +1236,7 @@ _jack_init(app_t *app)
 
 	jack_set_freewheel_callback(app->client, _jack_freewheel_cb, app);
 	jack_set_buffer_size_callback(app->client, _jack_buffer_size_cb, app);
-	jack_set_sample_rate_callback(app->client, _jack_saapple_rate_cb, app);
+	jack_set_sample_rate_callback(app->client, _jack_sample_rate_cb, app);
 
 	jack_set_client_registration_callback(app->client, _jack_client_registration_cb, app);
 	jack_set_port_registration_callback(app->client, _jack_port_registration_cb, app);
@@ -1645,6 +1686,39 @@ _ui_list_contracted(void *data, Evas_Object *obj, void *event_info)
 	elm_genlist_item_subitems_clear(itm);
 }
 
+static void
+_ui_list_moved(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	const Elm_Genlist_Item_Class *class = elm_genlist_item_item_class_get(itm);
+	if(class == app->clientitc)
+	{
+		//printf("_ui_list_moved: client\n");
+
+		// update client positions
+		int pos = 0;
+		for(Elm_Object_Item *itm2 = elm_genlist_first_item_get(app->list);
+			itm2 != NULL;
+			itm2 = elm_genlist_item_next_get(itm2))
+		{
+			const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm2);
+			if(itc != app->clientitc) // is not a client
+				continue; // skip 
+
+			int *id = elm_object_item_data_get(itm2);
+			_db_client_set_position(app, *id, pos++);
+		}
+
+		_ui_refresh(app);
+	}
+	else if(class == app->portitc)
+	{
+		//printf("_ui_list_moved: port\n");
+	}
+}
+
 static char *
 _ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
 {
@@ -1807,6 +1881,7 @@ _ui_init(app_t *app)
 		app->list = elm_genlist_add(app->pane);
 		if(app->list)
 		{
+			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
 			evas_object_smart_callback_add(app->list, "activated",
 				_ui_list_activated, app);
 			evas_object_smart_callback_add(app->list, "expand,request",
@@ -1817,6 +1892,8 @@ _ui_init(app_t *app)
 				_ui_list_expanded, app);
 			evas_object_smart_callback_add(app->list, "contracted",
 				_ui_list_contracted, app);
+			evas_object_smart_callback_add(app->list, "moved",
+				_ui_list_moved, app);
 			evas_object_data_set(app->list, "app", app);
 			evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
