@@ -1720,6 +1720,16 @@ _ui_list_moved(void *data, Evas_Object *obj, void *event_info)
 	}
 }
 
+static Eina_Bool
+_config_changed(void *data, int ev_type, void *ev)
+{
+	app_t *app = data;
+
+	elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(400), ELM_SCALE_SIZE(400));
+
+	return ECORE_CALLBACK_PASS_ON;
+}
+
 static char *
 _ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
 {
@@ -1866,6 +1876,7 @@ _ui_init(app_t *app)
 		return -1;
 
 	evas_object_smart_callback_add(app->win, "delete,request", _ui_delete_request, app);
+	ecore_event_handler_add(ELM_EVENT_CONFIG_ALL_CHANGED, _config_changed, app);
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
 
@@ -1873,7 +1884,7 @@ _ui_init(app_t *app)
 	if(app->pane)
 	{
 		elm_panes_horizontal_set(app->pane, EINA_FALSE);
-		elm_panes_content_left_size_set(app->pane, 0.15);
+		elm_panes_content_left_size_set(app->pane, 0.25);
 		evas_object_size_hint_weight_set(app->pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 		evas_object_size_hint_align_set(app->pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		elm_win_resize_object_add(app->win, app->pane);
@@ -1907,7 +1918,7 @@ _ui_init(app_t *app)
 		if(app->grid)
 		{
 			elm_gengrid_horizontal_set(app->grid, EINA_TRUE);
-			elm_gengrid_item_size_set(app->grid, 400, 400);
+			elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(400), ELM_SCALE_SIZE(400));
 			elm_gengrid_select_mode_set(app->grid, ELM_OBJECT_SELECT_MODE_NONE);
 			elm_gengrid_reorder_mode_set(app->grid, EINA_TRUE);
 			evas_object_data_set(app->grid, "app", app);
