@@ -198,7 +198,7 @@ _db_init(app_t *app)
 
 	// Client
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, 0, 1)",
+		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, $4, 1)",
 		-1, &app->query_client_add, NULL);
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -427,6 +427,7 @@ _db_client_add(app_t *app, const char *name)
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
 	ret = sqlite3_bind_text(stmt, 2, value ? value : name, -1, NULL);
 	ret = sqlite3_bind_int64(stmt, 3, uuid);
+	ret = sqlite3_bind_int(stmt, 4, elm_genlist_items_count(app->list) - 1);
 
 	ret = sqlite3_step(stmt);
 
@@ -437,9 +438,9 @@ _db_client_add(app_t *app, const char *name)
 	if(type)
 		free(type);
 
-	int *data = calloc(1, sizeof(int));
-	*data = _db_client_find_by_name(app, name);
-	elm_genlist_item_append(app->list, app->clientitc, data, NULL,
+	int *id = calloc(1, sizeof(int));
+	*id = _db_client_find_by_name(app, name);
+	elm_genlist_item_append(app->list, app->clientitc, id, NULL,
 		ELM_GENLIST_ITEM_TREE, NULL, NULL);
 }
 
