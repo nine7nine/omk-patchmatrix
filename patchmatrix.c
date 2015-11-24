@@ -200,78 +200,100 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, $4, 1)",
 		-1, &app->query_client_add, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"DELETE FROM Clients WHERE id=$1",
 		-1, &app->query_client_del, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Clients WHERE name=$1",
 		-1, &app->query_client_find_by_name, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Clients WHERE uuid=$1",
 		-1, &app->query_client_find_by_uuid, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, pretty_name FROM Clients WHERE id=$1",
 		-1, &app->query_client_find_by_id, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT selected FROM Clients WHERE id=$1",
 		-1, &app->query_client_get_selected, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Clients SET selected=$1 WHERE id=$2",
 		-1, &app->query_client_set_selected, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Clients SET pretty_name=$1 WHERE id=$2",
 		-1, &app->query_client_set_pretty, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Clients SET position=$1 WHERE id=$2",
 		-1, &app->query_client_set_position, NULL);
+	(void)ret;
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
 		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)",
 		-1, &app->query_port_add, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"DELETE FROM Ports WHERE id=$1",
 		-1, &app->query_port_del, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Ports WHERE name=$1",
 		-1, &app->query_port_find_by_name, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Ports WHERE uuid=$1",
 		-1, &app->query_port_find_by_uuid, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, short_name, pretty_name FROM Ports WHERE id=$1",
 		-1, &app->query_port_find_by_id, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Ports SET selected=$1 WHERE id=$2",
 		-1, &app->query_port_set_selected, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT selected FROM Ports WHERE id=$1",
 		-1, &app->query_port_get_selected, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT type_id, direction_id, client_id FROM Ports WHERE id=$1",
 		-1, &app->query_port_info, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Ports SET pretty_name=$1 WHERE id=$2",
 		-1, &app->query_port_set_pretty, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Ports SET type_id=$1 WHERE id=$2",
 		-1, &app->query_port_set_type, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"INSERT INTO Connections (source_id, sink_id) VALUES ($1, $2)",
 		-1, &app->query_connection_add, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"DELETE FROM Connections WHERE source_id=$1 AND sink_id=$2",
 		-1, &app->query_connection_del, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Connections WHERE source_id=$1 AND sink_id=$2",
 		-1, &app->query_connection_get, NULL);
+	(void)ret;
 
 	// port list
 	ret = sqlite3_prepare_v2(app->db,
@@ -285,9 +307,11 @@ _db_init(app_t *app)
 			"AND Directions.id=$2 "
 			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position",
 		-1, &app->query_port_list, NULL);
+	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id",
 		-1, &app->query_client_port_list, NULL);
+	(void)ret;
 
 	return 0;
 }
@@ -301,32 +325,56 @@ _db_deinit(app_t *app)
 		return;
 
 	ret = sqlite3_finalize(app->query_client_add);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_del);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_find_by_name);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_find_by_uuid);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_find_by_id);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_get_selected);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_set_selected);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_set_pretty);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_set_position);
+	(void)ret;
 
 	ret = sqlite3_finalize(app->query_port_add);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_del);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_find_by_name);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_find_by_uuid);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_find_by_id);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_get_selected);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_set_selected);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_info);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_set_pretty);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_port_set_type);
+	(void)ret;
 
 	ret = sqlite3_finalize(app->query_connection_add);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_connection_del);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_connection_get);
+	(void)ret;
 
 	ret = sqlite3_finalize(app->query_port_list);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_port_list);
+	(void)ret;
 
 	if( (ret = sqlite3_close(app->db)) )
 		fprintf(stderr, "_db_deinit: could not close in-memory database\n");
@@ -341,6 +389,7 @@ _db_client_find_by_name(app_t *app, const char *name)
 	sqlite3_stmt *stmt = app->query_client_find_by_name;
 
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -350,6 +399,7 @@ _db_client_find_by_name(app_t *app, const char *name)
 		id = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return id;
 }
@@ -363,6 +413,7 @@ _db_client_find_by_uuid(app_t *app, jack_uuid_t uuid)
 	sqlite3_stmt *stmt = app->query_client_find_by_uuid;
 
 	ret = sqlite3_bind_int64(stmt, 1, uuid);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -372,6 +423,7 @@ _db_client_find_by_uuid(app_t *app, jack_uuid_t uuid)
 		id = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return id;
 }
@@ -384,6 +436,7 @@ _db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
 	sqlite3_stmt *stmt = app->query_client_find_by_id;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -403,6 +456,7 @@ _db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
 	}
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -425,13 +479,19 @@ _db_client_add(app_t *app, const char *name)
 	sqlite3_stmt *stmt = app->query_client_add;
 
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_text(stmt, 2, value ? value : name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_int64(stmt, 3, uuid);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 4, elm_genlist_items_count(app->list) - 1);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	if(value)
 		free(value);
@@ -454,10 +514,13 @@ _db_client_del(app_t *app, const char *name)
 	sqlite3_stmt *stmt = app->query_client_del;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
 		itm != NULL;
@@ -485,6 +548,7 @@ _db_client_get_selected(app_t *app, int id)
 	sqlite3_stmt *stmt = app->query_client_get_selected;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -494,6 +558,7 @@ _db_client_get_selected(app_t *app, int id)
 		selected = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return selected;
 }
@@ -506,11 +571,15 @@ _db_client_set_selected(app_t *app, int id, int selected)
 	sqlite3_stmt *stmt = app->query_client_set_selected;
 
 	ret = sqlite3_bind_int(stmt, 1, selected);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -521,11 +590,15 @@ _db_client_set_pretty(app_t *app, int id, const char *pretty_name)
 	sqlite3_stmt *stmt = app->query_client_set_pretty;
 
 	ret = sqlite3_bind_text(stmt, 1, pretty_name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -536,11 +609,15 @@ _db_client_set_position(app_t *app, int id, int position)
 	sqlite3_stmt *stmt = app->query_client_set_position;
 
 	ret = sqlite3_bind_int(stmt, 1, position);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -592,18 +669,29 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	sqlite3_stmt *stmt = app->query_port_add;
 
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, client_id);
+	(void)ret;
 	ret = sqlite3_bind_text(stmt, 3, short_name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_text(stmt, 4, value ? value : short_name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 5, type_id);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 6, direction_id);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 7, uuid);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 8, terminal_id);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 9, physical_id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	if(value)
 		free(value);
@@ -639,6 +727,7 @@ _db_port_find_by_name(app_t *app, const char *name)
 	sqlite3_stmt *stmt = app->query_port_find_by_name;
 
 	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -648,6 +737,7 @@ _db_port_find_by_name(app_t *app, const char *name)
 		id = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return id;
 }
@@ -661,6 +751,7 @@ _db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
 	sqlite3_stmt *stmt = app->query_port_find_by_uuid;
 
 	ret = sqlite3_bind_int64(stmt, 1, uuid);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -670,6 +761,7 @@ _db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
 		id = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return id;
 }
@@ -682,6 +774,7 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 	sqlite3_stmt *stmt = app->query_port_find_by_id;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -705,6 +798,7 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 	}
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static int
@@ -716,6 +810,7 @@ _db_port_get_selected(app_t *app, int id)
 	sqlite3_stmt *stmt = app->query_port_get_selected;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -725,6 +820,7 @@ _db_port_get_selected(app_t *app, int id)
 		selected = -1;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return selected;
 }
@@ -737,11 +833,15 @@ _db_port_set_selected(app_t *app, int id, int selected)
 	sqlite3_stmt *stmt = app->query_port_set_selected;
 
 	ret = sqlite3_bind_int(stmt, 1, selected);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -752,6 +852,7 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 	sqlite3_stmt *stmt = app->query_port_info;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -775,6 +876,7 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 	}
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -785,11 +887,15 @@ _db_port_set_pretty(app_t *app, int id, const char *pretty_name)
 	sqlite3_stmt *stmt = app->query_port_set_pretty;
 
 	ret = sqlite3_bind_text(stmt, 1, pretty_name, -1, NULL);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -800,11 +906,15 @@ _db_port_set_type(app_t *app, int id, int type_id)
 	sqlite3_stmt *stmt = app->query_port_set_type;
 
 	ret = sqlite3_bind_int(stmt, 1, type_id);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -818,10 +928,13 @@ _db_port_del(app_t *app, const char *client_name, const char *name,
 	sqlite3_stmt *stmt = app->query_port_del;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
 		itm != NULL;
@@ -851,11 +964,15 @@ _db_connection_add(app_t *app, const char *name_source, const char *name_sink)
 	sqlite3_stmt *stmt = app->query_connection_add;
 
 	ret = sqlite3_bind_int(stmt, 1, id_source);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id_sink);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static void
@@ -869,11 +986,15 @@ _db_connection_del(app_t *app, const char *name_source, const char *name_sink)
 	sqlite3_stmt *stmt = app->query_connection_del;
 
 	ret = sqlite3_bind_int(stmt, 1, id_source);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id_sink);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
+	(void)ret;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 }
 
 static int
@@ -888,7 +1009,9 @@ _db_connection_get(app_t *app, const char *name_source, const char *name_sink)
 	sqlite3_stmt *stmt = app->query_connection_get;
 
 	ret = sqlite3_bind_int(stmt, 1, id_source);
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, id_sink);
+	(void)ret;
 
 	ret = sqlite3_step(stmt);
 
@@ -898,6 +1021,7 @@ _db_connection_get(app_t *app, const char *name_source, const char *name_sink)
 		connected = 0;
 
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	return connected;
 }
@@ -937,7 +1061,7 @@ _jack_timer_cb(void *data)
 			case EVENT_PORT_REGISTER:
 			{
 				const jack_port_t *port = jack_port_by_id(app->client, ev->port_register.id);
-				jack_uuid_t uuid = jack_port_uuid(port);
+				//jack_uuid_t uuid = jack_port_uuid(port);
 				const char *name = jack_port_name(port);
 				char *sep = strchr(name, ':');
 				char *client_name = strndup(name, sep - name);
@@ -1375,16 +1499,16 @@ _ui_client_list_label_get(void *data, Evas_Object *obj, const char *part)
 	int *id = data;
 	app_t *app = evas_object_data_get(obj, "app");
 
-	char *name;
-	char *pretty_name;
-	_db_client_find_by_id(app, *id, &name, &pretty_name);
-
 	if(!strcmp(part, "elm.text"))
 	{
+		char *pretty_name;
+		_db_client_find_by_id(app, *id, NULL, &pretty_name);
 		return pretty_name;
 	}
 	else if(!strcmp(part, "elm.text.sub"))
 	{
+		char *name;
+		_db_client_find_by_id(app, *id, &name, NULL);
 		return name;
 	}
 
@@ -1457,7 +1581,7 @@ static char *
 _ui_source_list_label_get(void *data, Evas_Object *obj, const char *part)
 {
 	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
+	//app_t *app = evas_object_data_get(obj, "app");
 
 	if(!strcmp(part, "elm.text"))
 	{
@@ -1471,7 +1595,7 @@ static char *
 _ui_sink_list_label_get(void *data, Evas_Object *obj, const char *part)
 {
 	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
+	//app_t *app = evas_object_data_get(obj, "app");
 
 	if(!strcmp(part, "elm.text"))
 	{
@@ -1725,7 +1849,7 @@ _config_changed(void *data, int ev_type, void *ev)
 {
 	app_t *app = data;
 
-	elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(400), ELM_SCALE_SIZE(400));
+	elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
 
 	return ECORE_CALLBACK_PASS_ON;
 }
@@ -1918,7 +2042,7 @@ _ui_init(app_t *app)
 		if(app->grid)
 		{
 			elm_gengrid_horizontal_set(app->grid, EINA_TRUE);
-			elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(400), ELM_SCALE_SIZE(400));
+			elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
 			elm_gengrid_select_mode_set(app->grid, ELM_OBJECT_SELECT_MODE_NONE);
 			elm_gengrid_reorder_mode_set(app->grid, EINA_TRUE);
 			evas_object_data_set(app->grid, "app", app);
@@ -1930,7 +2054,7 @@ _ui_init(app_t *app)
 
 			for(int i=0; i<4; i++)
 			{
-				int *id = calloc(1, sizeof(id));
+				int *id = calloc(1, sizeof(int));
 				*id = i;
 				elm_gengrid_item_append(app->grid, app->griditc, id, NULL, NULL);
 			}
@@ -1984,6 +2108,7 @@ _ui_populate(app_t *app)
 				_db_client_add(app, client_name);
 
 			_db_port_add(app, client_name, *source, short_name);
+			free(client_name);
 		}
 	}
 
@@ -1999,6 +2124,7 @@ _ui_populate(app_t *app)
 				_db_client_add(app, client_name);
 
 			_db_port_add(app, client_name, *sink, short_name);
+			free(client_name);
 		}
 		free(sinks);
 	}
@@ -2034,26 +2160,35 @@ _ui_refresh_single(app_t *app, int i)
 		return;
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	(void)ret;
 	int num_sources = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
 		num_sources += 1;
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	(void)ret;
 	int num_sinks = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
 		num_sinks += 1;
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	patcher_object_dimension_set(app->patcher[i], num_sources, num_sinks);
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	(void)ret;
 	for(int source=0; source<num_sources; source++)
 	{
 		ret = sqlite3_step(stmt);
+		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *name, *pretty_name;
@@ -2067,12 +2202,16 @@ _ui_refresh_single(app_t *app, int i)
 		free(pretty_name);
 	}
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
+	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	(void)ret;
 	for(int sink=0; sink<num_sinks; sink++)
 	{
 		ret = sqlite3_step(stmt);
+		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *name, *pretty_name;
@@ -2086,6 +2225,7 @@ _ui_refresh_single(app_t *app, int i)
 		free(pretty_name);
 	}
 	ret = sqlite3_reset(stmt);
+	(void)ret;
 
 	patcher_object_realize(app->patcher[i]);
 }
