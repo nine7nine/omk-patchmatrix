@@ -1493,35 +1493,15 @@ _ui_realize_request(void *data, Evas_Object *obj, void *event_info)
 	free(sink_name);
 }
 
-static char *
-_ui_client_list_label_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.text"))
-	{
-		char *pretty_name;
-		_db_client_find_by_id(app, *id, NULL, &pretty_name);
-		return pretty_name;
-	}
-	else if(!strcmp(part, "elm.text.sub"))
-	{
-		char *name;
-		_db_client_find_by_id(app, *id, &name, NULL);
-		return name;
-	}
-
-	return NULL;
-}
-
 static void
-_client_selected_changed(void *data, Evas_Object *obj, void *event_info)
+_client_link_toggle(void *data, Evas_Object *lay, const char *emission, const char *source)
 {
 	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
+	app_t *app = evas_object_data_get(lay, "app");
 
-	int selected = elm_check_state_get(obj) ? 1 : 0;
+	int selected = _db_client_get_selected(app, *id);
+	selected ^= 1; // toggle
+	elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
 
 	_db_client_set_selected(app, *id, selected);
 	_ui_refresh(app);
@@ -1535,34 +1515,45 @@ _ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
 
 	int selected = _db_client_get_selected(app, *id);
 
-	if(!strcmp(part, "elm.swallow.icon"))
+	if(!strcmp(part, "elm.swallow.content"))
 	{
-		Evas_Object *check = elm_check_add(obj);
-		if(check)
+		Evas_Object *lay = elm_layout_add(obj);
+		if(lay)
 		{
-			elm_check_state_set(check, selected);
-			evas_object_data_set(check, "app", app);
-			evas_object_smart_callback_add(check, "changed", _client_selected_changed, id);
-			evas_object_show(check);
-
-			return check;
-		}
-	}
-	else if(!strcmp(part, "elm.swallow.end"))
-	{
-		Evas_Object *elmnt = edje_object_add(evas_object_evas_get(obj));
-		if(elmnt)
-		{
-			edje_object_file_set(elmnt, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/end");
+			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+				"/patchmatrix/list/client");
+			evas_object_data_set(lay, "app", app);
+			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(lay);
+		
+			// color
 			char msg [7];
 			sprintf(msg, "col,%02i", *id % 20 + 1);
-			edje_object_signal_emit(elmnt, msg, "/patchmatrix/list/ui");
-			evas_object_size_hint_weight_set(elmnt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(elmnt);
+			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
 
-			return elmnt;
+			// link
+			elm_layout_signal_callback_add(lay, "link,toggle", "", _client_link_toggle, id);
+			elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
+
+			// name/pretty_name
+			char *name = NULL;
+			char *pretty_name = NULL;;
+			_db_client_find_by_id(app, *id, &name, &pretty_name);
+
+			if(name)
+			{
+				elm_object_part_text_set(lay, "elm.text", name);
+				free(name);
+			}
+
+			if(pretty_name)
+			{
+				//elm_object_part_text_set(lay, "elm.pretty", name); FIXME
+				free(pretty_name);
+			}
+
+			return lay;
 		}
 	}
 
@@ -1577,66 +1568,79 @@ _ui_client_list_del(void *data, Evas_Object *obj)
 	free(id);
 }
 
-static char *
-_ui_source_list_label_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	//app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.text"))
-	{
-		return strdup("Outputs");
-	}
-
-	return NULL;
-}
-
-static char *
-_ui_sink_list_label_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	//app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.text"))
-	{
-		return strdup("Inputs");
-	}
-
-	return NULL;
-}
-
-static char *
-_ui_port_list_label_get(void *data, Evas_Object *obj, const char *part)
+static Evas_Object *
+_ui_source_list_content_get(void *data, Evas_Object *obj, const char *part)
 {
 	int *id = data;
 	app_t *app = evas_object_data_get(obj, "app");
 
-	if(!id || !app)
-		return NULL;
-
-	char *short_name;
-	char *pretty_name;
-	_db_port_find_by_id(app, *id, NULL, &short_name, &pretty_name);
-
-	if(!strcmp(part, "elm.text"))
+	if(!strcmp(part, "elm.swallow.content"))
 	{
-		return pretty_name;
+		Evas_Object *lay = elm_layout_add(obj);
+		if(lay)
+		{
+			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+				"/patchmatrix/list/group");
+			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(lay);
+		
+			// color
+			char msg [7];
+			sprintf(msg, "col,%02i", *id % 20 + 1);
+			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
+
+			// group
+			elm_object_part_text_set(lay, "elm.text", "Inputs");
+
+			return lay;
+		}
 	}
-	else if(!strcmp(part, "elm.text.sub"))
+
+	return NULL;
+}
+
+static Evas_Object *
+_ui_sink_list_content_get(void *data, Evas_Object *obj, const char *part)
+{
+	int *id = data;
+	app_t *app = evas_object_data_get(obj, "app");
+
+	if(!strcmp(part, "elm.swallow.content"))
 	{
-		return short_name;
+		Evas_Object *lay = elm_layout_add(obj);
+		if(lay)
+		{
+			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+				"/patchmatrix/list/group");
+			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(lay);
+		
+			// color
+			char msg [7];
+			sprintf(msg, "col,%02i", *id % 20 + 1);
+			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
+
+			// group
+			elm_object_part_text_set(lay, "elm.text", "Outputs");
+
+			return lay;
+		}
 	}
 
 	return NULL;
 }
 
 static void
-_port_selected_changed(void *data, Evas_Object *obj, void *event_info)
+_port_link_toggle(void *data, Evas_Object *lay, const char *emission, const char *source)
 {
 	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
+	app_t *app = evas_object_data_get(lay, "app");
 
-	int selected = elm_check_state_get(obj) ? 1 : 0;
+	int selected = _db_port_get_selected(app, *id);
+	selected ^= 1; // toggle
+	elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
 
 	_db_port_set_selected(app, *id, selected);
 	_ui_refresh(app);
@@ -1657,6 +1661,64 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 	_db_port_get_info(app, *id, &type, &direction, &client_id);
 	int selected = _db_port_get_selected(app, *id);
 
+	if(!strcmp(part, "elm.swallow.content"))
+	{
+		Evas_Object *lay = elm_layout_add(obj);
+		if(lay)
+		{
+			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+				"/patchmatrix/list/port");
+			evas_object_data_set(lay, "app", app);
+			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(lay);
+
+			// link
+			elm_layout_signal_callback_add(lay, "link,toggle", "", _port_link_toggle, id);
+			elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
+			
+			// type
+			switch(type)
+			{
+				case TYPE_AUDIO:
+					elm_layout_signal_emit(lay, "type,audio", "");
+					break;
+				case TYPE_MIDI:
+					elm_layout_signal_emit(lay, "type,midi", "");
+					break;
+				case TYPE_OSC:
+					elm_layout_signal_emit(lay, "type,osc", "");
+					break;
+				case TYPE_CV:
+					elm_layout_signal_emit(lay, "type,cv", "");
+					break;
+				default:
+					elm_layout_signal_emit(lay, "type,hide", "");
+					break;
+			}
+
+			// name/pretty_name
+			char *short_name = NULL;
+			char *pretty_name = NULL;;
+			_db_port_find_by_id(app, *id, NULL, &short_name, &pretty_name);
+
+			if(short_name)
+			{
+				elm_object_part_text_set(lay, "elm.text", short_name);
+				free(short_name);
+			}
+
+			if(pretty_name)
+			{
+				//elm_object_part_text_set(lay, "elm.pretty", name); FIXME
+				free(pretty_name);
+			}
+
+			return lay;
+		}
+	}
+
+	/*
 	if(!strcmp(part, "elm.swallow.icon"))
 	{
 		Evas_Object *check = elm_check_add(obj);
@@ -1699,6 +1761,7 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 			return elmnt;
 		}
 	}
+	*/
 
 	return NULL;
 }
@@ -1916,6 +1979,36 @@ _ui_grid_content_get(void *data, Evas_Object *obj, const char *part)
 			return patcher;
 		}
 	}
+	else if(!strcmp(part, "elm.swallow.end"))
+	{
+		Evas_Object *ico = elm_layout_add(obj);
+		if(ico)
+		{
+			elm_layout_file_set(ico, PATCHMATRIX_DATA_DIR"/patchmatrix.edj", "/patchmatrix/icon");
+			evas_object_show(ico);
+
+			switch(*id)
+			{
+				case TYPE_AUDIO:
+					elm_layout_signal_emit(ico, "type,audio", "");
+					break;
+				case TYPE_MIDI:
+					elm_layout_signal_emit(ico, "type,midi", "");
+					break;
+				case TYPE_OSC:
+					elm_layout_signal_emit(ico, "type,osc", "");
+					break;
+				case TYPE_CV:
+					elm_layout_signal_emit(ico, "type,cv", "");
+					break;
+				default:
+					elm_layout_signal_emit(ico, "type,hide", "");
+					break;
+			}
+
+			return ico;
+		}
+	}
 
 	return NULL;
 }
@@ -1938,8 +2031,8 @@ _ui_init(app_t *app)
 	app->clientitc = elm_genlist_item_class_new();
 	if(app->clientitc)
 	{
-		app->clientitc->item_style = "double_label";
-		app->clientitc->func.text_get = _ui_client_list_label_get;
+		app->clientitc->item_style = "full";
+		app->clientitc->func.text_get = NULL;
 		app->clientitc->func.content_get = _ui_client_list_content_get;
 		app->clientitc->func.state_get = NULL;
 		app->clientitc->func.del = _ui_client_list_del;
@@ -1948,9 +2041,9 @@ _ui_init(app_t *app)
 	app->sourceitc = elm_genlist_item_class_new();
 	if(app->sourceitc)
 	{
-		app->sourceitc->item_style = "default";
-		app->sourceitc->func.text_get = _ui_source_list_label_get;
-		app->sourceitc->func.content_get = NULL;
+		app->sourceitc->item_style = "full";
+		app->sourceitc->func.text_get = NULL;
+		app->sourceitc->func.content_get = _ui_source_list_content_get;
 		app->sourceitc->func.state_get = NULL;
 		app->sourceitc->func.del = NULL;
 	}
@@ -1958,9 +2051,9 @@ _ui_init(app_t *app)
 	app->sinkitc = elm_genlist_item_class_new();
 	if(app->sinkitc)
 	{
-		app->sinkitc->item_style = "default";
-		app->sinkitc->func.text_get = _ui_sink_list_label_get;
-		app->sinkitc->func.content_get = NULL;
+		app->sinkitc->item_style = "full";
+		app->sinkitc->func.text_get = NULL;
+		app->sinkitc->func.content_get = _ui_sink_list_content_get;
 		app->sinkitc->func.state_get = NULL;
 		app->sinkitc->func.del = NULL;
 	}
@@ -1978,8 +2071,8 @@ _ui_init(app_t *app)
 	app->portitc = elm_genlist_item_class_new();
 	if(app->portitc)
 	{
-		app->portitc->item_style = "double_label";
-		app->portitc->func.text_get = _ui_port_list_label_get;
+		app->portitc->item_style = "full";
+		app->portitc->func.text_get = NULL;
 		app->portitc->func.content_get = _ui_port_list_content_get;
 		app->portitc->func.state_get = NULL;
 		app->portitc->func.del = _ui_port_list_del;
