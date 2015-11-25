@@ -498,7 +498,8 @@ _db_client_add(app_t *app, const char *name)
 	else
 		jack_uuid_clear(&uuid);
 
-	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+	if(!jack_uuid_empty(uuid))
+		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
 #endif
 
 	sqlite3_stmt *stmt = app->query_client_add;
@@ -670,33 +671,35 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 
 #ifdef JACK_HAS_METADATA_API
 	jack_uuid_t uuid = jack_port_uuid(port);
-
-	if(type_id == 0) // signal-type
+	if(!jack_uuid_empty(uuid))
 	{
-		jack_get_property(uuid, "http://jackaudio.org/metadata/signal-type", &value, &type);
-		if(value && !strcmp(value, "CV"))
+		if(type_id == 0) // signal-type
 		{
-			type_id = TYPE_CV;
-			free(value);
+			jack_get_property(uuid, "http://jackaudio.org/metadata/signal-type", &value, &type);
+			if(value && !strcmp(value, "CV"))
+			{
+				type_id = TYPE_CV;
+				free(value);
+			}
+			if(type)
+				free(type);
 		}
-		if(type)
-			free(type);
-	}
-	else if(type_id == 1) // event-type
-	{
-		jack_get_property(uuid, "http://jackaudio.org/metadata/event-types", &value, &type);
-		if(value && strstr(value, "OSC"))
+		else if(type_id == 1) // event-type
 		{
-			type_id = TYPE_OSC;
-			free(value);
+			jack_get_property(uuid, "http://jackaudio.org/metadata/event-types", &value, &type);
+			if(value && strstr(value, "OSC"))
+			{
+				type_id = TYPE_OSC;
+				free(value);
+			}
+			if(type)
+				free(type);
 		}
-		if(type)
-			free(type);
-	}
 
-	value = NULL;
-	type = NULL;
-	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+		value = NULL;
+		type = NULL;
+		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+	}
 #endif
 
 	sqlite3_stmt *stmt = app->query_port_add;
@@ -1153,50 +1156,132 @@ _jack_timer_cb(void *data)
 					{
 						char *value = NULL;
 						char *type = NULL;
-						jack_get_property(ev->property_change.uuid,
-							ev->property_change.key, &value, &type);
-
-						if(value)
+						if(!jack_uuid_empty(ev->property_change.uuid))
 						{
-							if(!strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
+							jack_get_property(ev->property_change.uuid,
+								ev->property_change.key, &value, &type);
+
+							if(value)
 							{
-								int id;
-								if((id = _db_client_find_by_uuid(app, ev->property_change.uuid) != -1))
-									_db_client_set_pretty(app, id, value);
-								else if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
-									_db_port_set_pretty(app, id, value);
-							}
-							else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types"))
-							{
-								int id;
-								int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
-								if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
-									_db_port_set_type(app, id, type_id);
-							}
-							else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type"))
-							{
-								int id;
-								int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
-								if((id = _db_port_find_by_uuid(app, ev->property_change.uuid) != -1))
-									_db_port_set_type(app, id, type_id);
+								if(!strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
+								{
+									int id;
+									if((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_client_set_pretty(app, id, value);
+									else if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_port_set_pretty(app, id, value);
+								}
+								else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types"))
+								{
+									int id;
+									int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
+									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_port_set_type(app, id, type_id);
+								}
+								else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type"))
+								{
+									int id;
+									int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
+									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_port_set_type(app, id, type_id);
+								}
+
+								free(value);
 							}
 
-							free(value);
+							if(type)
+								free(type);
 						}
-
-						if(type)
-							free(type);
 
 						break;
 					}
 					case PropertyDeleted:
 					{
-						//FIXME key seems to be broken atm
-						break;
+						if(!jack_uuid_empty(ev->property_change.uuid))
+						{
+							int id;
+							if((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							{
+								//printf("property_delete client: %i %s\n", id, ev->property_change.key);
+
+								jack_port_t *port = jack_port_by_id(app->client, id);
+								int midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
+								int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
+
+								int needs_port_update = 0;
+								int needs_pretty_update = 0;
+
+								if(  ev->property_change.key
+									&& ( !strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type")
+										|| !strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types") ) )
+								{
+									needs_port_update = 1;
+								}
+								else if(ev->property_change.key
+									&& !strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
+								{
+									needs_pretty_update = 1;
+								}
+								else // all keys removed
+								{
+									needs_port_update = 1;
+									needs_pretty_update = 1;
+								}
+
+								if(needs_port_update)
+								{
+									_db_port_set_type(app, id, type_id);
+								}
+
+								if(needs_pretty_update)
+								{
+									char *short_name = NULL;
+									_db_port_find_by_id(app, id, NULL, &short_name, NULL);
+									if(short_name)
+									{
+										_db_port_set_pretty(app, id, short_name);
+										free(short_name);
+									}
+								}
+							}
+							else if ((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							{
+								//printf("property_delete port: %i %s\n", id, ev->property_change.key);
+								
+								int needs_pretty_update = 0;
+
+								if(ev->property_change.key
+									&& !strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
+								{
+									needs_pretty_update = 1;
+								}
+								else // all keys removed
+								{
+									needs_pretty_update = 1;
+								}
+
+								if(needs_pretty_update)
+								{
+									char *name = NULL;
+									_db_client_find_by_id(app, id, &name, NULL);
+									if(name)
+									{
+										_db_client_set_pretty(app, id, name);
+										free(name);
+									}
+								}
+							}
+						}
+						else
+						{
+							fprintf(stderr, "all properties in current JACK session deleted\n");
+							//TODO
+						}
 					}
 				}
 
-				free(ev->property_change.key); // strdup
+				if(ev->property_change.key)
+					free(ev->property_change.key); // strdup
 
 				refresh = 1;
 
@@ -1371,11 +1456,13 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 {
 	app_t *app = arg;
 
+	//printf("_jack_property_change_cb: %lu %s %i\n", uuid, key, state);
+
 	event_t *ev = malloc(sizeof(event_t));
 	ev->app = app;
 	ev->type = EVENT_PROPERTY_CHANGE;
 	ev->property_change.uuid = uuid;
-	ev->property_change.key = strdup(key);
+	ev->property_change.key = key ? strdup(key) : NULL;
 	ev->property_change.state = state;
 
 	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
