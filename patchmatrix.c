@@ -1652,7 +1652,7 @@ _ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
 		
 			// color
 			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20 + 1);
+			sprintf(msg, "col,%02i", *id % 20);
 			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
 
 			// link
@@ -1710,7 +1710,7 @@ _ui_source_list_content_get(void *data, Evas_Object *obj, const char *part)
 		
 			// color
 			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20 + 1);
+			sprintf(msg, "col,%02i", *id % 20);
 			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
 
 			// group
@@ -1742,7 +1742,7 @@ _ui_sink_list_content_get(void *data, Evas_Object *obj, const char *part)
 		
 			// color
 			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20 + 1);
+			sprintf(msg, "col,%02i", *id % 20);
 			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
 
 			// group
@@ -2447,7 +2447,7 @@ _ui_refresh_single(app_t *app, int i)
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
 		patcher_object_source_id_set(app->patcher[i], source, id);
-		patcher_object_source_color_set(app->patcher[i], source, client_id % 20 + 1);
+		patcher_object_source_color_set(app->patcher[i], source, client_id % 20);
 		if(pretty_name)
 		{
 			patcher_object_source_label_set(app->patcher[i], source, pretty_name);
@@ -2478,7 +2478,7 @@ _ui_refresh_single(app_t *app, int i)
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
 		patcher_object_sink_id_set(app->patcher[i], sink, id);
-		patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20 + 1);
+		patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20);
 		if(pretty_name)
 		{
 			patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
