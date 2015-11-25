@@ -91,6 +91,7 @@ struct _app_t {
 	int h;
 	Evas_Object *win;
 	Evas_Object *patcher [TYPE_MAX];
+	Evas_Object *popup;
 	Evas_Object *pane;
 	Evas_Object *list;
 	Evas_Object *grid;
@@ -528,8 +529,9 @@ _db_client_add(app_t *app, const char *name)
 
 	int *id = calloc(1, sizeof(int));
 	*id = _db_client_find_by_name(app, name);
-	elm_genlist_item_append(app->list, app->clientitc, id, NULL,
+	Elm_Object_Item *elmnt = elm_genlist_item_append(app->list, app->clientitc, id, NULL,
 		ELM_GENLIST_ITEM_TREE, NULL, NULL);
+	elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
 }
 
 static void
@@ -1754,51 +1756,6 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 		}
 	}
 
-	/*
-	if(!strcmp(part, "elm.swallow.icon"))
-	{
-		Evas_Object *check = elm_check_add(obj);
-		if(check)
-		{
-			elm_check_state_set(check, selected);
-			evas_object_data_set(check, "app", app);
-			evas_object_smart_callback_add(check, "changed", _port_selected_changed, id);
-			evas_object_show(check);
-
-			return check;
-		}
-	}
-	else if(!strcmp(part, "elm.swallow.end"))
-	{
-		Evas_Object *elmnt = edje_object_add(evas_object_evas_get(obj));
-		if(elmnt)
-		{
-			edje_object_file_set(elmnt, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/type");
-			switch(type)
-			{
-				case TYPE_AUDIO:
-					edje_object_part_text_set(elmnt, "label", "AUDIO");
-					break;
-				case TYPE_MIDI:
-					edje_object_part_text_set(elmnt, "label", "MIDI");
-					break;
-				case TYPE_OSC:
-					edje_object_part_text_set(elmnt, "label", "OSC");
-					break;
-				case TYPE_CV:
-					edje_object_part_text_set(elmnt, "label", "CV");
-					break;
-			}
-			evas_object_size_hint_weight_set(elmnt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(elmnt);
-
-			return elmnt;
-		}
-	}
-	*/
-
 	return NULL;
 }
 
@@ -2063,6 +2020,21 @@ _ui_grid_del(void *data, Evas_Object *obj)
 	free(id);
 }
 
+static void
+_ui_menu_about(void *data, Evas_Object *obj, void *event_info)
+{
+	Elm_Object_Item *itm = event_info;
+	app_t *app = data;
+
+	if(app->popup)
+	{
+		if(evas_object_visible_get(app->popup))
+			evas_object_hide(app->popup);
+		else
+			evas_object_show(app->popup);
+	}
+}
+
 static int
 _ui_init(app_t *app)
 {
@@ -2139,6 +2111,61 @@ _ui_init(app_t *app)
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
 
+	Evas_Object *menu = elm_win_main_menu_get(app->win);
+	if(menu)
+	{
+		elm_menu_item_add(menu, NULL, "help-about", "About", _ui_menu_about, app);
+	}
+
+	app->popup = elm_popup_add(app->win);
+	if(app->popup)
+	{
+		elm_popup_allow_events_set(app->popup, EINA_TRUE);
+		elm_popup_timeout_set(app->popup, 0.f);
+
+		Evas_Object *hbox = elm_box_add(app->popup);
+		if(hbox)
+		{
+			elm_box_horizontal_set(hbox, EINA_TRUE);
+			elm_box_homogeneous_set(hbox, EINA_FALSE);
+			elm_box_padding_set(hbox, 10, 0);
+			evas_object_show(hbox);
+			elm_object_content_set(app->popup, hbox);
+
+			Evas_Object *icon = elm_icon_add(hbox);
+			if(icon)
+			{
+				elm_image_file_set(icon, PATCHMATRIX_DATA_DIR"/omk_logo_256x256.png", NULL);
+				evas_object_size_hint_min_set(icon, 128, 128);
+				evas_object_size_hint_max_set(icon, 256, 256);
+				evas_object_size_hint_aspect_set(icon, EVAS_ASPECT_CONTROL_BOTH, 1, 1);
+				evas_object_show(icon);
+				elm_box_pack_end(hbox, icon);
+			}
+
+			Evas_Object *label2 = elm_label_add(hbox);
+			if(label2)
+			{
+				elm_object_text_set(label2,
+					"<color=#b00 shadow_color=#fff font_size=20>"
+					"PatchMatrix - JACK Matrix Patchbay"
+					"</color></br><align=left>"
+					"Version "PATCHMATRIX_VERSION"</br></br>"
+					"Copyright (c) 2015 Hanspeter Portner</br></br>"
+					"This is free and libre software</br>"
+					"Released under Artistic License 2.0</br>"
+					"By Open Music Kontrollers</br></br>"
+					"<color=#bbb>"
+					"https://github.com/OpenMusicKontrollers/patchmatrix</br>"
+					"dev@open-music-kontrollers.ch"
+					"</color></align>");
+
+				evas_object_show(label2);
+				elm_box_pack_end(hbox, label2);
+			}
+		}
+	}
+
 	app->pane = elm_panes_add(app->win);
 	if(app->pane)
 	{
@@ -2208,8 +2235,7 @@ _ui_deinit(app_t *app)
 	if(!app->win)
 		return;
 
-	for(int i=0; i<TYPE_MAX; i++)
-		evas_object_del(app->patcher[i]);
+	elm_gengrid_clear(app->grid);
 	evas_object_del(app->win);
 
 	if(app->clientitc)
