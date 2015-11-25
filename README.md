@@ -1,7 +1,12 @@
 # Patch Matrix
 
-## A Simple JACK Patch Bay
+## JACK Matrix Patchbay
 
+### Build status
+
+[![Build Status](https://travis-ci.org/OpenMusicKontrollers/patchmatrix.svg?branch=master)](https://travis-ci.org/OpenMusicKontrollers/patchmatrix)
+
+### Screenshot
 ![Screenshot](https://raw.githubusercontent.com/OpenMusicKontrollers/patchmatrix/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
 
 ### Dependencies
