@@ -20,8 +20,10 @@
 #include <sqlite3.h>
 
 #include <jack/jack.h>
-#include <jack/metadata.h>
-#include <jack/uuid.h>
+#ifdef JACK_HAS_METADATA_API
+#	include <jack/uuid.h>
+#	include <jack/metadata.h>
+#endif
 
 #include <patcher.h>
 
@@ -40,8 +42,11 @@ enum {
 enum {
 	TYPE_AUDIO	= 0,
 	TYPE_MIDI		= 1,
+#ifdef JACK_HAS_METADATA_API
 	TYPE_OSC		= 2,
 	TYPE_CV			= 3,
+#endif
+	TYPE_MAX
 };
 
 struct _event_t {
@@ -65,11 +70,13 @@ struct _event_t {
 			int state;
 		} port_connect;
 
+#ifdef JACK_HAS_METADATA_API
 		struct {
 			jack_uuid_t uuid;
 			char *key;
 			jack_property_change_t state;
 		} property_change;
+#endif
 
 		struct {
 			jack_status_t code;
@@ -83,7 +90,7 @@ struct _app_t {
 	int w;
 	int h;
 	Evas_Object *win;
-	Evas_Object *patcher [4];
+	Evas_Object *patcher [TYPE_MAX];
 	Evas_Object *pane;
 	Evas_Object *list;
 	Evas_Object *grid;
@@ -105,7 +112,9 @@ struct _app_t {
 	sqlite3_stmt *query_client_add;
 	sqlite3_stmt *query_client_del;
 	sqlite3_stmt *query_client_find_by_name;
+#ifdef JACK_HAS_METADATA_API
 	sqlite3_stmt *query_client_find_by_uuid;
+#endif
 	sqlite3_stmt *query_client_find_by_id;
 	sqlite3_stmt *query_client_get_selected;
 	sqlite3_stmt *query_client_set_selected;
@@ -115,7 +124,9 @@ struct _app_t {
 	sqlite3_stmt *query_port_add;
 	sqlite3_stmt *query_port_del;
 	sqlite3_stmt *query_port_find_by_name;
+#ifdef JACK_HAS_METADATA_API
 	sqlite3_stmt *query_port_find_by_uuid;
+#endif
 	sqlite3_stmt *query_port_find_by_id;
 	sqlite3_stmt *query_port_get_selected;
 	sqlite3_stmt *query_port_set_selected;
@@ -211,10 +222,12 @@ _db_init(app_t *app)
 		"SELECT id FROM Clients WHERE name=$1",
 		-1, &app->query_client_find_by_name, NULL);
 	(void)ret;
+#ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Clients WHERE uuid=$1",
 		-1, &app->query_client_find_by_uuid, NULL);
 	(void)ret;
+#endif
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, pretty_name FROM Clients WHERE id=$1",
 		-1, &app->query_client_find_by_id, NULL);
@@ -252,10 +265,12 @@ _db_init(app_t *app)
 		"SELECT id FROM Ports WHERE name=$1",
 		-1, &app->query_port_find_by_name, NULL);
 	(void)ret;
+#ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT id FROM Ports WHERE uuid=$1",
 		-1, &app->query_port_find_by_uuid, NULL);
 	(void)ret;
+#endif
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, short_name, pretty_name FROM Ports WHERE id=$1",
 		-1, &app->query_port_find_by_id, NULL);
@@ -330,8 +345,10 @@ _db_deinit(app_t *app)
 	(void)ret;
 	ret = sqlite3_finalize(app->query_client_find_by_name);
 	(void)ret;
+#ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_finalize(app->query_client_find_by_uuid);
 	(void)ret;
+#endif
 	ret = sqlite3_finalize(app->query_client_find_by_id);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_client_get_selected);
@@ -349,8 +366,10 @@ _db_deinit(app_t *app)
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_find_by_name);
 	(void)ret;
+#ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_finalize(app->query_port_find_by_uuid);
 	(void)ret;
+#endif
 	ret = sqlite3_finalize(app->query_port_find_by_id);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_get_selected);
@@ -404,6 +423,7 @@ _db_client_find_by_name(app_t *app, const char *name)
 	return id;
 }
 
+#ifdef JACK_HAS_METADATA_API
 static int
 _db_client_find_by_uuid(app_t *app, jack_uuid_t uuid)
 {
@@ -427,6 +447,7 @@ _db_client_find_by_uuid(app_t *app, jack_uuid_t uuid)
 
 	return id;
 }
+#endif
 
 static void
 _db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
@@ -464,6 +485,10 @@ _db_client_add(app_t *app, const char *name)
 {
 	int ret;
 
+	char *value = NULL;
+	char *type = NULL;
+
+#ifdef JACK_HAS_METADATA_API
 	jack_uuid_t uuid;
 
 	const char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
@@ -472,9 +497,8 @@ _db_client_add(app_t *app, const char *name)
 	else
 		jack_uuid_clear(&uuid);
 
-	char *value = NULL;
-	char *type = NULL;
 	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+#endif
 
 	sqlite3_stmt *stmt = app->query_client_add;
 
@@ -482,7 +506,11 @@ _db_client_add(app_t *app, const char *name)
 	(void)ret;
 	ret = sqlite3_bind_text(stmt, 2, value ? value : name, -1, NULL);
 	(void)ret;
+#ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_bind_int64(stmt, 3, uuid);
+#else
+	ret = sqlite3_bind_int64(stmt, 3, 0);
+#endif
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 4, elm_genlist_items_count(app->list) - 1);
 	(void)ret;
@@ -634,10 +662,12 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	int direction_id = flags & JackPortIsInput ? 1 : 0;
 	int terminal_id = flags & JackPortIsTerminal ? 1 : 0;
 	int physical_id = flags & JackPortIsPhysical ? 1 : 0;
-	jack_uuid_t uuid = jack_port_uuid(port);
 
 	char *value = NULL;
 	char *type = NULL;
+
+#ifdef JACK_HAS_METADATA_API
+	jack_uuid_t uuid = jack_port_uuid(port);
 
 	if(type_id == 0) // signal-type
 	{
@@ -665,6 +695,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	value = NULL;
 	type = NULL;
 	jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+#endif
 
 	sqlite3_stmt *stmt = app->query_port_add;
 
@@ -680,7 +711,11 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 6, direction_id);
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 7, uuid);
+#ifdef JACK_HAS_METADATA_API
+	ret = sqlite3_bind_int64(stmt, 7, uuid);
+#else
+	ret = sqlite3_bind_int64(stmt, 7, 0);
+#endif
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 8, terminal_id);
 	(void)ret;
@@ -742,6 +777,7 @@ _db_port_find_by_name(app_t *app, const char *name)
 	return id;
 }
 
+#ifdef JACK_HAS_METADATA_API
 static int
 _db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
 {
@@ -765,6 +801,7 @@ _db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
 
 	return id;
 }
+#endif
 
 static void
 _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **pretty_name)
@@ -1061,7 +1098,6 @@ _jack_timer_cb(void *data)
 			case EVENT_PORT_REGISTER:
 			{
 				const jack_port_t *port = jack_port_by_id(app->client, ev->port_register.id);
-				//jack_uuid_t uuid = jack_port_uuid(port);
 				const char *name = jack_port_name(port);
 				char *sep = strchr(name, ':');
 				char *client_name = strndup(name, sep - name);
@@ -1099,6 +1135,7 @@ _jack_timer_cb(void *data)
 
 				break;
 			}
+#ifdef JACK_HAS_METADATA_API
 			case EVENT_PROPERTY_CHANGE:
 			{
 				//printf("property_change: %lu %s %i\n", ev->property_change.uuid,
@@ -1163,6 +1200,7 @@ _jack_timer_cb(void *data)
 
 				break;
 			}
+#endif
 			case EVENT_ON_INFO_SHUTDOWN:
 			{
 				app->client = NULL; // JACK has shut down, hasn't it?
@@ -1291,14 +1329,6 @@ _jack_port_connect_cb(jack_port_id_t id_source, jack_port_id_t id_sink, int stat
 {
 	app_t *app = arg;
 
-	/*
-	const jack_port_t *port_source = jack_port_by_id(app->client, id_source);
-	const jack_port_t *port_sink = jack_port_by_id(app->client, id_sink);
-
-	jack_uuid_t uuid_source = jack_port_uuid(port_source);
-	jack_uuid_t uuid_sink = jack_port_uuid(port_sink);
-	*/
-
 	event_t *ev = malloc(sizeof(event_t));
 	ev->app = app;
 	ev->type = EVENT_PORT_CONNECT;
@@ -1333,6 +1363,7 @@ _jack_graph_order_cb(void *arg)
 	return 0;
 }
 
+#ifdef JACK_HAS_METADATA_API
 static void
 _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change_t state, void *arg)
 {
@@ -1347,6 +1378,7 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 
 	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
 }
+#endif
 
 static int
 _jack_init(app_t *app)
@@ -1369,7 +1401,9 @@ _jack_init(app_t *app)
 	jack_set_port_connect_callback(app->client, _jack_port_connect_cb, app);
 	jack_set_xrun_callback(app->client, _jack_xrun_cb, app);
 	jack_set_graph_order_callback(app->client, _jack_graph_order_cb, app);
+#ifdef JACK_HAS_METADATA_API
 	jack_set_property_change_callback(app->client, _jack_property_change_cb, app);
+#endif
 
 	jack_activate(app->client);
 
@@ -1686,12 +1720,14 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 				case TYPE_MIDI:
 					elm_layout_signal_emit(lay, "type,midi", "");
 					break;
+#ifdef JACK_HAS_METADATA_API
 				case TYPE_OSC:
 					elm_layout_signal_emit(lay, "type,osc", "");
 					break;
 				case TYPE_CV:
 					elm_layout_signal_emit(lay, "type,cv", "");
 					break;
+#endif
 				default:
 					elm_layout_signal_emit(lay, "type,hide", "");
 					break;
@@ -1930,10 +1966,14 @@ _ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
 				return strdup("Audio Ports");
 			case TYPE_MIDI:
 				return strdup("MIDI Ports");
+#ifdef JACK_HAS_METADATA_API
 			case TYPE_OSC:
 				return strdup("OSC Ports");
 			case TYPE_CV:
 				return strdup("CV Ports");
+#endif
+			default:
+				break;
 		}
 	}
 
@@ -1995,12 +2035,14 @@ _ui_grid_content_get(void *data, Evas_Object *obj, const char *part)
 				case TYPE_MIDI:
 					elm_layout_signal_emit(ico, "type,midi", "");
 					break;
+#ifdef JACK_HAS_METADATA_API
 				case TYPE_OSC:
 					elm_layout_signal_emit(ico, "type,osc", "");
 					break;
 				case TYPE_CV:
 					elm_layout_signal_emit(ico, "type,cv", "");
 					break;
+#endif
 				default:
 					elm_layout_signal_emit(ico, "type,hide", "");
 					break;
@@ -2145,12 +2187,15 @@ _ui_init(app_t *app)
 
 			elm_object_part_content_set(app->pane, "right", app->grid);
 
-			for(int i=0; i<4; i++)
+			for(int i=0; i<TYPE_MAX; i++)
 			{
 				int *id = calloc(1, sizeof(int));
 				*id = i;
 				elm_gengrid_item_append(app->grid, app->griditc, id, NULL, NULL);
 			}
+			elm_gengrid_item_show(elm_gengrid_nth_item_get(app->grid, 0),
+				ELM_GENGRID_ITEM_SCROLLTO_NONE);
+
 		} // app->grid
 	} // app->pane
 
@@ -2163,7 +2208,7 @@ _ui_deinit(app_t *app)
 	if(!app->win)
 		return;
 
-	for(int i=0; i<4; i++)
+	for(int i=0; i<TYPE_MAX; i++)
 		evas_object_del(app->patcher[i]);
 	evas_object_del(app->win);
 
@@ -2327,7 +2372,7 @@ _ui_refresh_single(app_t *app, int i)
 static void
 _ui_refresh(app_t *app)
 {
-	for(int i=0; i<4; i++)
+	for(int i=0; i<TYPE_MAX; i++)
 		_ui_refresh_single(app, i);
 }
 
@@ -2335,7 +2380,7 @@ _ui_refresh(app_t *app)
 static void
 _ui_realize(app_t *app)
 {
-	for(int i=0; i<4; i++)
+	for(int i=0; i<TYPE_MAX; i++)
 	{
 		if(!app->patcher[i])
 			continue;

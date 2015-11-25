@@ -24,6 +24,13 @@ pkg_search_module(JACK REQUIRED jack)
 include_directories(${JACK_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${JACK_LDFLAGS})
 
+# metadata
+include(CheckIncludeFiles)
+CHECK_INCLUDE_FILES("jack/metadata.h" JACK_HAS_METADATA_API)
+if(${JACK_HAS_METADATA_API})
+	add_definitions("-DJACK_HAS_METADATA_API")
+endif()
+
 # elementary
 pkg_search_module(ELEMENTARY REQUIRED elementary>=1.8)
 include_directories(${ELEMENTARY_INCLUDE_DIRS})
