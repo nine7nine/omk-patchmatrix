@@ -203,7 +203,9 @@ _source_in(void *data, Evas_Object *edj, const char *emission, const char *sourc
 	int first = 1;
 	for(int j=0; j<priv->sinks; j++)
 	{
-		int snk = j + priv->max - priv->sinks;
+		int snk;
+		_rel_to_abs(priv, 0, j, NULL, &snk);
+
 		if(priv->state[src_idx][j]) // connected
 		{
 			for(int i=src+1; i<priv->max; i++)
@@ -254,7 +256,9 @@ _source_out(void *data, Evas_Object *edj, const char *emission, const char *sour
 	
 	for(int j=0; j<priv->sinks; j++)
 	{
-		int snk = j + priv->max - priv->sinks;
+		int snk;
+		_rel_to_abs(priv, 0, j, NULL, &snk);
+
 		if(priv->state[src_idx][j]) // connected
 		{
 			for(int i=src+1; i<priv->max; i++)
@@ -342,7 +346,9 @@ _sink_in(void *data, Evas_Object *edj, const char *emission, const char *source)
 	int first = 1;
 	for(int i=0; i<priv->sources; i++)
 	{
-		int src = i + priv->max - priv->sources;
+		int src;
+		_rel_to_abs(priv, i, 0, &src, NULL);
+
 		if(priv->state[i][snk_idx]) // connected
 		{
 			for(int j=snk+1; j<priv->max; j++)
@@ -393,7 +399,9 @@ _sink_out(void *data, Evas_Object *edj, const char *emission, const char *source
 	
 	for(int i=0; i<priv->sources; i++)
 	{
-		int src = i + priv->max - priv->sources;
+		int src;
+		_rel_to_abs(priv, i, 0, &src, NULL);
+
 		if(priv->state[i][snk_idx]) // connected
 		{
 			for(int j=snk+1; j<priv->max; j++)
