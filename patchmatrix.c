@@ -1860,7 +1860,20 @@ _ui_list_activated(void *data, Evas_Object *obj, void *event_info)
 	Elm_Object_Item *itm = event_info;
 	app_t *app = data;
 
-	//TODO
+	if(!itm)
+		return;
+
+	int *id = elm_object_item_data_get(itm);
+	const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
+	Evas_Object *lay = elm_object_item_part_content_get(itm, "elm.swallow.content");
+
+	if(!id || !itc || !lay)
+		return;
+
+	if(itc == app->clientitc)
+		_client_link_toggle(id, lay, NULL, NULL);
+	else if(itc == app->portitc)
+		_port_link_toggle(id, lay, NULL, NULL);
 }
 
 static void
