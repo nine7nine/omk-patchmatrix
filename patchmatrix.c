@@ -1449,8 +1449,8 @@ _ui_connect_request(void *data, Evas_Object *obj, void *event_info)
 	int source_id = source->id;
 	int sink_id = sink->id;
 
-	char *source_name;
-	char *sink_name;
+	char *source_name = NULL;
+	char *sink_name = NULL;
 	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
 	_db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
 	if(!source_name || !sink_name)
@@ -1481,8 +1481,8 @@ _ui_disconnect_request(void *data, Evas_Object *obj, void *event_info)
 	int source_id = source->id;
 	int sink_id = sink->id;
 
-	char *source_name;
-	char *sink_name;
+	char *source_name = NULL;
+	char *sink_name = NULL;
 	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
 	_db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
 	if(!source_name || !sink_name)
@@ -1512,8 +1512,8 @@ _ui_realize_request(void *data, Evas_Object *obj, void *event_info)
 	int source_id = source->id;
 	int sink_id = sink->id;
 
-	char *source_name;
-	char *sink_name;
+	char *source_name = NULL;
+	char *sink_name = NULL;
 	 _db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
 	 _db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
 	if(!source_name || !sink_name)
@@ -1577,16 +1577,16 @@ _ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
 			char *pretty_name = NULL;;
 			_db_client_find_by_id(app, *id, &name, &pretty_name);
 
-			if(name)
-			{
-				elm_object_part_text_set(lay, "elm.text", name);
-				free(name);
-			}
-
 			if(pretty_name)
 			{
-				//elm_object_part_text_set(lay, "elm.pretty", name); FIXME
+				elm_object_part_text_set(lay, "elm.text", pretty_name);
 				free(pretty_name);
+			}
+			if(name)
+			{
+				if(!pretty_name)
+					elm_object_part_text_set(lay, "elm.text", name);
+				free(name);
 			}
 
 			return lay;
@@ -1740,16 +1740,16 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 			char *pretty_name = NULL;;
 			_db_port_find_by_id(app, *id, NULL, &short_name, &pretty_name);
 
-			if(short_name)
-			{
-				elm_object_part_text_set(lay, "elm.text", short_name);
-				free(short_name);
-			}
-
 			if(pretty_name)
 			{
-				//elm_object_part_text_set(lay, "elm.pretty", name); FIXME
+				elm_object_part_text_set(lay, "elm.text", pretty_name);
 				free(pretty_name);
+			}
+			if(short_name)
+			{
+				if(!pretty_name)
+					elm_object_part_text_set(lay, "elm.text", short_name);
+				free(short_name);
 			}
 
 			return lay;
@@ -1807,11 +1807,11 @@ _ui_list_expanded(void *data, Evas_Object *obj, void *event_info)
 	{
 		Elm_Object_Item *elmnt;
 
-		elmnt = elm_genlist_item_append(app->list, app->sinkitc,
+		elmnt = elm_genlist_item_append(app->list, app->sourceitc,
 			client_id, itm, ELM_GENLIST_ITEM_TREE, NULL, NULL);
 		elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
 
-		elmnt = elm_genlist_item_append(app->list, app->sourceitc,
+		elmnt = elm_genlist_item_append(app->list, app->sinkitc,
 			client_id, itm, ELM_GENLIST_ITEM_TREE, NULL, NULL);
 		elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
 
@@ -2355,15 +2355,23 @@ _ui_refresh_single(app_t *app, int i)
 		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
-		char *name, *pretty_name;
+		char *name = NULL;
+		char *pretty_name = NULL;
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
 		patcher_object_source_id_set(app->patcher[i], source, id);
 		patcher_object_source_color_set(app->patcher[i], source, client_id % 20 + 1);
-		patcher_object_source_label_set(app->patcher[i], source, pretty_name);
-
-		free(name);
-		free(pretty_name);
+		if(pretty_name)
+		{
+			patcher_object_source_label_set(app->patcher[i], source, pretty_name);
+			free(pretty_name);
+		}
+		if(name)
+		{
+			if(!pretty_name)
+				patcher_object_source_label_set(app->patcher[i], source, name);
+			free(name);
+		}
 	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
@@ -2378,15 +2386,23 @@ _ui_refresh_single(app_t *app, int i)
 		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
-		char *name, *pretty_name;
+		char *name = NULL;
+		char *pretty_name;
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
 		patcher_object_sink_id_set(app->patcher[i], sink, id);
 		patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20 + 1);
-		patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
-
-		free(name);
-		free(pretty_name);
+		if(pretty_name)
+		{
+			patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
+			free(pretty_name);
+		}
+		if(name)
+		{
+			if(!pretty_name)
+				patcher_object_sink_label_set(app->patcher[i], sink, name);
+			free(name);
+		}
 	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
