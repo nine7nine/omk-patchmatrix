@@ -44,7 +44,7 @@ include_directories(${ELEMENTARY_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${ELEMENTARY_LDFLAGS})
 
 # sqlite3
-pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.8)
+pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.0)
 include_directories(${SQLITE3_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${SQLITE3_LDFLAGS})
 
