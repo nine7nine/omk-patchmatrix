@@ -89,18 +89,25 @@ struct _app_t {
 	// UI
 	int w;
 	int h;
+	int type;
 	Evas_Object *win;
-	Evas_Object *patcher [TYPE_MAX];
+	Evas_Object *patcher;
 	Evas_Object *popup;
-	Evas_Object *pane;
+	Evas_Object *hbox;
+	Evas_Object *tools;
 	Evas_Object *list;
-	Evas_Object *grid;
 	Elm_Genlist_Item_Class *clientitc;
 	Elm_Genlist_Item_Class *sourceitc;
 	Elm_Genlist_Item_Class *sinkitc;
 	Elm_Genlist_Item_Class *sepitc;
 	Elm_Genlist_Item_Class *portitc;
-	Elm_Gengrid_Item_Class *griditc;
+	Elm_Object_Item *tool_audio;
+	Elm_Object_Item *tool_midi;
+#ifdef JACK_HAS_METADATA_API
+	Elm_Object_Item *tool_osc;
+	Elm_Object_Item *tool_cv;
+#endif
+	Elm_Object_Item *tool_about;
 
 	// JACK
 	jack_client_t *client;
@@ -2042,133 +2049,55 @@ _config_changed(void *data, int ev_type, void *ev)
 {
 	app_t *app = data;
 
-	elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
+	//FIXME
+	//elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
 
 	return ECORE_CALLBACK_PASS_ON;
 }
 
-static char *
-_ui_grid_label_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-
-	if(!strcmp(part, "elm.text"))
-	{
-		switch(*id)
-		{
-			case TYPE_AUDIO:
-				return strdup("Audio Ports");
-			case TYPE_MIDI:
-				return strdup("MIDI Ports");
-#ifdef JACK_HAS_METADATA_API
-			case TYPE_OSC:
-				return strdup("OSC Ports");
-			case TYPE_CV:
-				return strdup("CV Ports");
-#endif
-			default:
-				break;
-		}
-	}
-
-	return NULL;
-}
-
 static void
-_ui_patcher_free(void *data, Evas *e, Evas_Object *obj, void *event_info)
+_toolbar_selected(void *data, Evas_Object *obj, void *event_info)
 {
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	app->patcher[*id] = NULL;
-}
-
-static Evas_Object *
-_ui_grid_content_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.swallow.icon"))
-	{
-		Evas_Object *patcher = patcher_object_add(evas_object_evas_get(obj));
-		if(patcher)
-		{
-			evas_object_data_set(patcher, "app", app);
-			evas_object_smart_callback_add(patcher, "connect,request",
-				_ui_connect_request, app);
-			evas_object_smart_callback_add(patcher, "disconnect,request",
-				_ui_disconnect_request, app);
-			evas_object_smart_callback_add(patcher, "realize,request",
-				_ui_realize_request, app);
-			evas_object_size_hint_weight_set(patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_event_callback_add(patcher, EVAS_CALLBACK_DEL, _ui_patcher_free, id);
-			evas_object_show(patcher);
-
-			app->patcher[*id] = patcher;
-
-			_ui_refresh_single(app, *id);
-
-			return patcher;
-		}
-	}
-	else if(!strcmp(part, "elm.swallow.end"))
-	{
-		Evas_Object *ico = elm_layout_add(obj);
-		if(ico)
-		{
-			elm_layout_file_set(ico, PATCHMATRIX_DATA_DIR"/patchmatrix.edj", "/patchmatrix/icon");
-			evas_object_show(ico);
-
-			switch(*id)
-			{
-				case TYPE_AUDIO:
-					elm_layout_signal_emit(ico, "type,audio", "");
-					break;
-				case TYPE_MIDI:
-					elm_layout_signal_emit(ico, "type,midi", "");
-					break;
-#ifdef JACK_HAS_METADATA_API
-				case TYPE_OSC:
-					elm_layout_signal_emit(ico, "type,osc", "");
-					break;
-				case TYPE_CV:
-					elm_layout_signal_emit(ico, "type,cv", "");
-					break;
-#endif
-				default:
-					elm_layout_signal_emit(ico, "type,hide", "");
-					break;
-			}
-
-			return ico;
-		}
-	}
-
-	return NULL;
-}
-
-static void
-_ui_grid_del(void *data, Evas_Object *obj)
-{
-	int *id = data;
-
-	free(id);
-}
-
-static void
-_ui_menu_about(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
 	app_t *app = data;
+	Elm_Object_Item *itm = event_info;
 
-	if(app->popup)
+	if(itm == app->tool_audio)
 	{
-		if(evas_object_visible_get(app->popup))
-			evas_object_hide(app->popup);
-		else
-			evas_object_show(app->popup);
+		app->type = TYPE_AUDIO;
+		_ui_refresh(app);
+	}
+	else if(itm == app->tool_midi)
+	{
+		app->type = TYPE_MIDI;
+		_ui_refresh(app);
+	}
+#ifdef JACK_HAS_METADATA_API
+	else if(itm == app->tool_osc)
+	{
+		app->type = TYPE_OSC;
+		_ui_refresh(app);
+	}
+	else if(itm == app->tool_cv)
+	{
+		app->type = TYPE_CV;
+		_ui_refresh(app);
+	}
+#endif
+	else if(itm == app->tool_about)
+	{
+		evas_object_show(app->popup);
+	}
+}
+
+static void
+_toolbar_unselected(void *data, Evas_Object *obj, void *event_info)
+{
+	app_t *app = data;
+	Elm_Object_Item *itm = event_info;
+
+	if(itm == app->tool_about)
+	{
+		evas_object_hide(app->popup);
 	}
 }
 
@@ -2178,6 +2107,7 @@ _ui_init(app_t *app)
 	// UI
 	app->w = 1024;
 	app->h = 420;
+	app->type = TYPE_AUDIO;
 
 	app->clientitc = elm_genlist_item_class_new();
 	if(app->clientitc)
@@ -2229,16 +2159,6 @@ _ui_init(app_t *app)
 		app->portitc->func.del = _ui_port_list_del;
 	}
 
-	app->griditc = elm_gengrid_item_class_new();
-	if(app->griditc)
-	{
-		app->griditc->item_style = "default";
-		app->griditc->func.text_get = _ui_grid_label_get;
-		app->griditc->func.content_get = _ui_grid_content_get;
-		app->griditc->func.state_get = NULL;
-		app->griditc->func.del = _ui_grid_del;
-	}
-
 	app->win = elm_win_util_standard_add("PatchMatrix", "PatchMarix");
 	if(!app->win)
 		return -1;
@@ -2247,12 +2167,6 @@ _ui_init(app_t *app)
 	ecore_event_handler_add(ELM_EVENT_CONFIG_ALL_CHANGED, _config_changed, app);
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
-
-	Evas_Object *menu = elm_win_main_menu_get(app->win);
-	if(menu)
-	{
-		elm_menu_item_add(menu, NULL, "help-about", "About", _ui_menu_about, app);
-	}
 
 	app->popup = elm_popup_add(app->win);
 	if(app->popup)
@@ -2303,17 +2217,17 @@ _ui_init(app_t *app)
 		}
 	}
 
-	app->pane = elm_panes_add(app->win);
-	if(app->pane)
+	app->hbox = elm_box_add(app->win);
+	if(app->hbox)
 	{
-		elm_panes_horizontal_set(app->pane, EINA_FALSE);
-		elm_panes_content_left_size_set(app->pane, 0.25);
-		evas_object_size_hint_weight_set(app->pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-		evas_object_size_hint_align_set(app->pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
-		elm_win_resize_object_add(app->win, app->pane);
-		evas_object_show(app->pane);
+		elm_box_horizontal_set(app->hbox, EINA_TRUE);
+		elm_box_homogeneous_set(app->hbox, EINA_FALSE);
+		evas_object_size_hint_weight_set(app->hbox, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+		evas_object_size_hint_align_set(app->hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
+		elm_win_resize_object_add(app->win, app->hbox);
+		evas_object_show(app->hbox);
 
-		app->list = elm_genlist_add(app->pane);
+		app->list = elm_genlist_add(app->hbox);
 		if(app->list)
 		{
 			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
@@ -2334,34 +2248,60 @@ _ui_init(app_t *app)
 			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
 			evas_object_show(app->list);
 
-			elm_object_part_content_set(app->pane, "left", app->list);
+			elm_box_pack_end(app->hbox, app->list);
 		} // app->list
 
-		app->grid = elm_gengrid_add(app->pane);
-		if(app->grid)
+		app->tools = elm_toolbar_add(app->hbox);
+		if(app->tools)
 		{
-			elm_gengrid_horizontal_set(app->grid, EINA_TRUE);
-			elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
-			elm_gengrid_select_mode_set(app->grid, ELM_OBJECT_SELECT_MODE_NONE);
-			elm_gengrid_reorder_mode_set(app->grid, EINA_TRUE);
-			evas_object_data_set(app->grid, "app", app);
-			evas_object_size_hint_weight_set(app->grid, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(app->grid, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(app->grid);
+			elm_toolbar_horizontal_set(app->tools, EINA_FALSE);
+			elm_toolbar_homogeneous_set(app->tools, EINA_TRUE);
+			elm_toolbar_align_set(app->tools, 0.f);
+			elm_toolbar_select_mode_set(app->tools, ELM_OBJECT_SELECT_MODE_ALWAYS);
+			evas_object_smart_callback_add(app->tools, "selected",
+				_toolbar_selected, app);
+			evas_object_smart_callback_add(app->tools, "unselected",
+				_toolbar_unselected, app);
+			evas_object_size_hint_weight_set(app->tools, 0.f, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(app->tools, 0.f, EVAS_HINT_FILL);
+			evas_object_show(app->tools);
 
-			elm_object_part_content_set(app->pane, "right", app->grid);
+			app->tool_audio = elm_toolbar_item_append(app->tools,
+				PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
+			elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
+			app->tool_midi = elm_toolbar_item_append(app->tools,
+				PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
+#ifdef JACK_HAS_METADATA_API
+			app->tool_osc = elm_toolbar_item_append(app->tools,
+				PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
+			app->tool_cv = elm_toolbar_item_append(app->tools,
+				PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
+#endif
+			app->tool_about = elm_toolbar_item_append(app->tools,
+				"help-about", "About", NULL, NULL);
 
-			for(int i=0; i<TYPE_MAX; i++)
-			{
-				int *id = calloc(1, sizeof(int));
-				*id = i;
-				elm_gengrid_item_append(app->grid, app->griditc, id, NULL, NULL);
-			}
-			elm_gengrid_item_show(elm_gengrid_nth_item_get(app->grid, 0),
-				ELM_GENGRID_ITEM_SCROLLTO_NONE);
+			elm_box_pack_end(app->hbox, app->tools);
+		} // app->tools
 
-		} // app->grid
-	} // app->pane
+		app->patcher = patcher_object_add(evas_object_evas_get(app->hbox));
+		if(app->patcher)
+		{
+			evas_object_data_set(app->patcher, "app", app);
+			evas_object_smart_callback_add(app->patcher, "connect,request",
+				_ui_connect_request, app);
+			evas_object_smart_callback_add(app->patcher, "disconnect,request",
+				_ui_disconnect_request, app);
+			evas_object_smart_callback_add(app->patcher, "realize,request",
+				_ui_realize_request, app);
+			evas_object_size_hint_weight_set(app->patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(app->patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(app->patcher);
+
+			elm_box_pack_end(app->hbox, app->patcher);
+
+			_ui_refresh(app);
+		} // app->patcher
+	} // app->hbox
 
 	return 0;
 }
@@ -2372,7 +2312,7 @@ _ui_deinit(app_t *app)
 	if(!app->win)
 		return;
 
-	elm_gengrid_clear(app->grid);
+	elm_box_clear(app->hbox);
 	evas_object_del(app->win);
 
 	if(app->clientitc)
@@ -2385,8 +2325,6 @@ _ui_deinit(app_t *app)
 		elm_genlist_item_class_free(app->sepitc);
 	if(app->portitc)
 		elm_genlist_item_class_free(app->portitc);
-	if(app->griditc)
-		elm_gengrid_item_class_free(app->griditc);
 }
 
 static void
@@ -2463,7 +2401,7 @@ _ui_refresh_single(app_t *app, int i)
 
 	sqlite3_stmt *stmt = app->query_port_list;
 
-	if(!app->patcher[i])
+	if(!app->patcher)
 		return;
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
@@ -2486,7 +2424,7 @@ _ui_refresh_single(app_t *app, int i)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	patcher_object_dimension_set(app->patcher[i], num_sources, num_sinks);
+	patcher_object_dimension_set(app->patcher, num_sources, num_sinks);
 
 	ret = sqlite3_bind_int(stmt, 1, i); // type
 	(void)ret;
@@ -2502,17 +2440,17 @@ _ui_refresh_single(app_t *app, int i)
 		char *pretty_name = NULL;
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
-		patcher_object_source_id_set(app->patcher[i], source, id);
-		patcher_object_source_color_set(app->patcher[i], source, client_id % 20);
+		patcher_object_source_id_set(app->patcher, source, id);
+		patcher_object_source_color_set(app->patcher, source, client_id % 20);
 		if(pretty_name)
 		{
-			patcher_object_source_label_set(app->patcher[i], source, pretty_name);
+			patcher_object_source_label_set(app->patcher, source, pretty_name);
 			free(pretty_name);
 		}
 		if(name)
 		{
 			if(!pretty_name)
-				patcher_object_source_label_set(app->patcher[i], source, name);
+				patcher_object_source_label_set(app->patcher, source, name);
 			free(name);
 		}
 	}
@@ -2533,45 +2471,39 @@ _ui_refresh_single(app_t *app, int i)
 		char *pretty_name;
 		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
 
-		patcher_object_sink_id_set(app->patcher[i], sink, id);
-		patcher_object_sink_color_set(app->patcher[i], sink, client_id % 20);
+		patcher_object_sink_id_set(app->patcher, sink, id);
+		patcher_object_sink_color_set(app->patcher, sink, client_id % 20);
 		if(pretty_name)
 		{
-			patcher_object_sink_label_set(app->patcher[i], sink, pretty_name);
+			patcher_object_sink_label_set(app->patcher, sink, pretty_name);
 			free(pretty_name);
 		}
 		if(name)
 		{
 			if(!pretty_name)
-				patcher_object_sink_label_set(app->patcher[i], sink, name);
+				patcher_object_sink_label_set(app->patcher, sink, name);
 			free(name);
 		}
 	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	patcher_object_realize(app->patcher[i]);
+	patcher_object_realize(app->patcher);
 }
 
 // update all grids and connections
 static void
 _ui_refresh(app_t *app)
 {
-	for(int i=0; i<TYPE_MAX; i++)
-		_ui_refresh_single(app, i);
+	_ui_refresh_single(app, app->type);
 }
 
 // update connections
 static void
 _ui_realize(app_t *app)
 {
-	for(int i=0; i<TYPE_MAX; i++)
-	{
-		if(!app->patcher[i])
-			continue;
-
-		patcher_object_realize(app->patcher[i]);
-	}
+	if(app->patcher)
+		patcher_object_realize(app->patcher);
 }
 
 static int
