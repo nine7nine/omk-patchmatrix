@@ -106,6 +106,9 @@ struct _app_t {
 	jack_client_t *client;
 	Eina_List *events;
 	Ecore_Timer *timer;
+#ifdef JACK_HAS_METADATA_API
+	jack_uuid_t uuid;
+#endif
 
 	// SQLite3
 	sqlite3 *db;
@@ -141,6 +144,7 @@ struct _app_t {
 
 	sqlite3_stmt *query_port_list;
 	sqlite3_stmt *query_client_port_list;
+	sqlite3_stmt *query_client_port_count;
 };
 
 static void _ui_refresh_single(app_t *app, int i);
@@ -328,6 +332,10 @@ _db_init(app_t *app)
 		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id",
 		-1, &app->query_client_port_list, NULL);
 	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
+		"SELECT COUNT(id) FROM Ports WHERE client_id=$1",
+		-1, &app->query_client_port_count, NULL);
+	(void)ret;
 
 	return 0;
 }
@@ -394,6 +402,8 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_port_list);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_client_port_list);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_client_port_count);
 	(void)ret;
 
 	if( (ret = sqlite3_close(app->db)) )
@@ -1094,7 +1104,8 @@ _jack_timer_cb(void *data)
 				else
 					_db_client_del(app, ev->client_register.name);
 
-				free(ev->client_register.name); // strdup
+				if(ev->client_register.name)
+					free(ev->client_register.name); // strdup
 
 				refresh = 1;
 
@@ -1110,12 +1121,15 @@ _jack_timer_cb(void *data)
 
 				//printf("port_register: %s %i\n", name, ev->port_register.state);
 
-				if(ev->port_register.state)
-					_db_port_add(app, client_name, name, short_name);
-				else
-					_db_port_del(app, client_name, name, short_name);
+				if(client_name)
+				{
+					if(ev->port_register.state)
+						_db_port_add(app, client_name, name, short_name);
+					else
+						_db_port_del(app, client_name, name, short_name);
 
-				free(client_name); // strdup
+					free(client_name); // strdup
+				}
 
 				refresh = 1;
 
@@ -1478,6 +1492,21 @@ _jack_init(app_t *app)
 	if(!app->client)
 		return -1;
 
+#ifdef JACK_HAS_METADATA_API
+	const char *client_name = jack_get_client_name(app->client);
+	const char *uuid_str = jack_get_uuid_for_client_name(app->client, client_name);
+	if(uuid_str)
+		jack_uuid_parse(uuid_str, &app->uuid);
+	else
+		jack_uuid_clear(&app->uuid);
+
+	if(!jack_uuid_empty(app->uuid))
+	{
+		jack_set_property(app->client, app->uuid,
+			JACK_METADATA_PRETTY_NAME, "Pathmatrix", "text/plain");
+	}
+#endif
+
 	jack_on_info_shutdown(app->client, _jack_on_info_shutdown_cb, app);
 
 	jack_set_freewheel_callback(app->client, _jack_freewheel_cb, app);
@@ -1502,11 +1531,19 @@ _jack_init(app_t *app)
 static void
 _jack_deinit(app_t *app)
 {
+	if(app->timer)
+		ecore_timer_del(app->timer);
+
 	if(!app->client)
 		return;
 
-	if(app->timer)
-		ecore_timer_del(app->timer);
+#ifdef JACK_HAS_METADATA_API
+	if(!jack_uuid_empty(app->uuid))
+	{
+		jack_remove_properties(app->client, app->uuid);
+	}
+#endif
+
 	jack_deactivate(app->client);
 	jack_client_close(app->client);
 }
@@ -2368,11 +2405,14 @@ _ui_populate(app_t *app)
 			char *client_name = strndup(*source, sep - *source);
 			const char *short_name = sep + 1;
 
-			if(_db_client_find_by_name(app, client_name) < 0)
-				_db_client_add(app, client_name);
+			if(client_name)
+			{
+				if(_db_client_find_by_name(app, client_name) < 0)
+					_db_client_add(app, client_name);
 
-			_db_port_add(app, client_name, *source, short_name);
-			free(client_name);
+				_db_port_add(app, client_name, *source, short_name);
+				free(client_name);
+			}
 		}
 	}
 
@@ -2384,11 +2424,14 @@ _ui_populate(app_t *app)
 			char *client_name = strndup(*sink, sep - *sink);
 			const char *short_name = sep + 1;
 
-			if(_db_client_find_by_name(app, client_name) < 0)
-				_db_client_add(app, client_name);
+			if(client_name)
+			{
+				if(_db_client_find_by_name(app, client_name) < 0)
+					_db_client_add(app, client_name);
 
-			_db_port_add(app, client_name, *sink, short_name);
-			free(client_name);
+				_db_port_add(app, client_name, *sink, short_name);
+				free(client_name);
+			}
 		}
 		free(sinks);
 	}
