@@ -172,7 +172,7 @@ _db_init(app_t *app)
 	if( (ret = sqlite3_exec(app->db,
 		"CREATE TABLE Clients ("
 			"id INTEGER PRIMARY KEY,"
-			"name TEXT,"
+			"name TEXT UNIQUE ON CONFLICT REPLACE,"
 			"pretty_name TEXT,"
 			"selected BOOL,"
 			"uuid UNSIGNED BIG INT,"
@@ -180,7 +180,7 @@ _db_init(app_t *app)
 			""
 		"CREATE TABLE Ports ("
 			"id INTEGER PRIMARY KEY,"
-			"name TEXT,"
+			"name TEXT UNIQUE ON CONFLICT REPLACE,"
 			"short_name TEXT,"
 			"pretty_name TEXT,"
 			"client_id INT,"
