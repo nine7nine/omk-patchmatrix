@@ -332,11 +332,11 @@ _db_init(app_t *app)
 			"AND Clients.selected=1 "
 			"AND Types.id=$1 "
 			"AND Directions.id=$2 "
-			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position",
+			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.short_name",
 		-1, &app->query_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id",
+		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id, short_name",
 		-1, &app->query_client_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
