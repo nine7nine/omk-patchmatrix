@@ -429,21 +429,45 @@ group {
 	}
 }
 
+styles {
+	style {
+		name: "label_style";
+		base: "font=mono font_size=10 align=left color=#ffffffff style=soft_shadow shadow_color=#00000080";
+		tag: "b" "+ style=shadow";
+	}
+}
+
 group {
 	name: "/patchmatrix/patcher/label/horizontal";
 
 	parts {
 		part {
+			name: "center";
+			type: RECT;
+			mouse_events: 0;
+			description {
+				state: "default" 0.0;
+				rel1.relative: 0.0 0.5;
+				rel2.relative: 0.0 0.5;
+			}
+		}
+		part {
 			name: "default";
-			type: TEXT;
+			type: TEXTBLOCK;
 			mouse_events: 0;
 			scale: 1;
 			description {
 				state: "default" 0.0;
+				rel1.relative: 0.0 -0.5;
+				rel2.relative: 1.0 1.5;
+				map {
+					on: 1;
+					rotation.center: "center";
+					rotation.z: 22.5;
+				}
 				text {
-					text: "Sources";
-					size: 10;
 					align: 0.0 0.5;
+					style: "label_style";
 				}
 				color: 128 128 128 255;
 			}
@@ -487,22 +511,21 @@ group {
 		}
 		part {
 			name: "default";
-			type: TEXT;
+			type: TEXTBLOCK;
 			mouse_events: 0;
 			scale: 1;
 			description {
 				state: "default" 0.0;
 				rel1.relative: 0.5 -0.5;
-				rel2.relative: 12.5 0.5;
+				rel2.relative: 15.5 0.5;
 				map {
 					on: 1;
 					rotation.center: "center";
-					rotation.z: 90;
+					rotation.z: 67.5;
 				}
 				text {
-					text: "Sinks";
-					size: 10;
 					align: 0.0 0.5;
+					style: "label_style";
 				}
 				color: 128 128 128 255;
 			}

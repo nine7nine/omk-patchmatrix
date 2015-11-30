@@ -2413,7 +2413,9 @@ _ui_refresh_single(app_t *app, int i)
 	(void)ret;
 	int num_sources = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
+	{
 		num_sources += 1;
+	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
@@ -2423,7 +2425,9 @@ _ui_refresh_single(app_t *app, int i)
 	(void)ret;
 	int num_sinks = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
+	{
 		num_sinks += 1;
+	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
@@ -2439,22 +2443,48 @@ _ui_refresh_single(app_t *app, int i)
 		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
-		char *name = NULL;
-		char *pretty_name = NULL;
-		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
+		char *port_pretty_name = NULL;
+		char *client_pretty_name = NULL;
+		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
+		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
 		patcher_object_source_id_set(app->patcher, source, id);
 		patcher_object_source_color_set(app->patcher, source, client_id % 20);
-		if(pretty_name)
+
+		if(port_pretty_name)
 		{
-			patcher_object_source_label_set(app->patcher, source, pretty_name);
-			free(pretty_name);
+			if(client_pretty_name)
+			{
+				char *pretty_name = NULL;
+				const int width0 = 24;
+				const int width1 = strlen(port_pretty_name);
+				const int width2 = width0 - (width1 + 1);
+				if(width2 >= (int)strlen(client_pretty_name))
+					asprintf(&pretty_name, "%.*s <b>%*s</b>", width1, port_pretty_name, width2, client_pretty_name);
+				else if(width2 > 0)
+					asprintf(&pretty_name, "%.*s <b>%s</b>", width1, port_pretty_name, &client_pretty_name[strlen(client_pretty_name)-width2]);
+				else
+					asprintf(&pretty_name, "%.*s", width1, port_pretty_name);
+
+				if(pretty_name)
+				{
+					patcher_object_source_label_set(app->patcher, source, pretty_name);
+					free(pretty_name);
+				}
+				else
+				{
+					patcher_object_source_label_set(app->patcher, source, port_pretty_name);
+				}
+			}
+			else
+			{
+				patcher_object_source_label_set(app->patcher, source, port_pretty_name);
+			}
+			free(port_pretty_name);
 		}
-		if(name)
+		if(client_pretty_name)
 		{
-			if(!pretty_name)
-				patcher_object_source_label_set(app->patcher, source, name);
-			free(name);
+			free(client_pretty_name);
 		}
 	}
 	ret = sqlite3_reset(stmt);
@@ -2470,22 +2500,48 @@ _ui_refresh_single(app_t *app, int i)
 		(void)ret;
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
-		char *name = NULL;
-		char *pretty_name;
-		_db_port_find_by_id(app, id, &name, NULL, &pretty_name);
+		char *port_pretty_name;
+		char *client_pretty_name;
+		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
+		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
 		patcher_object_sink_id_set(app->patcher, sink, id);
 		patcher_object_sink_color_set(app->patcher, sink, client_id % 20);
-		if(pretty_name)
+
+		if(port_pretty_name)
 		{
-			patcher_object_sink_label_set(app->patcher, sink, pretty_name);
-			free(pretty_name);
+			if(client_pretty_name)
+			{
+				char *pretty_name = NULL;
+				const int width0 = 24;
+				const int width1 = strlen(port_pretty_name);
+				const int width2 = width0 - (width1 + 1);
+				if(width2 >= (int)strlen(client_pretty_name))
+					asprintf(&pretty_name, "%.*s <b>%*s</b>", width1, port_pretty_name, width2, client_pretty_name);
+				else if(width2 > 0)
+					asprintf(&pretty_name, "%.*s <b>%s</b>", width1, port_pretty_name, &client_pretty_name[strlen(client_pretty_name)-width2]);
+				else
+					asprintf(&pretty_name, "%.*s", width1, port_pretty_name);
+
+				if(pretty_name)
+				{
+					patcher_object_sink_label_set(app->patcher, sink, pretty_name);
+					free(pretty_name);
+				}
+				else
+				{
+					patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
+				}
+			}
+			else
+			{
+				patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
+			}
+			free(port_pretty_name);
 		}
-		if(name)
+		if(client_pretty_name)
 		{
-			if(!pretty_name)
-				patcher_object_sink_label_set(app->patcher, sink, name);
-			free(name);
+			free(client_pretty_name);
 		}
 	}
 	ret = sqlite3_reset(stmt);

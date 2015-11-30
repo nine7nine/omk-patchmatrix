@@ -25,7 +25,7 @@
 #define PATCHER_DISCONNECT_REQUEST "disconnect,request"
 #define PATCHER_REALIZE_REQUEST "realize,request"
 
-#define LEN 12
+#define LEN 16
 
 typedef struct _patcher_t patcher_t;
 
@@ -717,6 +717,8 @@ patcher_object_dimension_set(Evas_Object *o, int sources, int sinks)
 	priv->max = sources >= sinks
 		? sources
 		: sinks;
+	if(priv->max < LEN)
+		priv->max = LEN;
 
 	_patcher_smart_init(o);
 }
