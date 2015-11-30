@@ -26,7 +26,6 @@
 #define PATCHER_REALIZE_REQUEST "realize,request"
 
 #define LEN 12
-#define SPAN (20 + LEN)
 
 typedef struct _patcher_t patcher_t;
 
@@ -594,9 +593,6 @@ _patcher_smart_init(Evas_Object *o)
 		evas_object_show(elmnt);
 		evas_object_table_pack(priv->matrix, elmnt, src_abs + 1, snk_abs, LEN, 1);
 	}
-
-	elmnt = evas_object_rectangle_add(e);
-	evas_object_table_pack(priv->matrix, elmnt, SPAN-1, SPAN-1, 1, 1); //FIXME
 }
 
 static void
@@ -680,12 +676,12 @@ _patcher_smart_calculate(Evas_Object *o)
 	Evas_Coord x, y, w, h;
 
 	evas_object_geometry_get(o, &x, &y, &w, &h);
-	float dw = (float)w / SPAN;
-	float dh = (float)h / SPAN;
+	float dw = (float)w / priv->max;
+	float dh = (float)h / priv->max;
 	if(dw < dh)
-		h = dw * SPAN;
+		h = dw * priv->max;
 	else // dw >= dh
-		w = dh * SPAN;
+		w = dh * priv->max;
 	evas_object_resize(priv->matrix, w, h);
 	evas_object_move(priv->matrix, x, y);
 }
@@ -718,7 +714,9 @@ patcher_object_dimension_set(Evas_Object *o, int sources, int sinks)
 
 	priv->sources = sources;
 	priv->sinks = sinks;
-	priv->max = SPAN - LEN;
+	priv->max = sources >= sinks
+		? sources
+		: sinks;
 
 	_patcher_smart_init(o);
 }

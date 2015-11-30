@@ -1226,7 +1226,9 @@ _jack_timer_cb(void *data)
 								//printf("property_delete port: %i %s\n", id, ev->property_change.key);
 
 								jack_port_t *port = jack_port_by_id(app->client, id);
-								int midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
+								int midi = 0;
+								if(port) //FIXME
+									midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
 								int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
 
 								int needs_port_update = 0;
@@ -2179,7 +2181,7 @@ _ui_init(app_t *app)
 		{
 			elm_box_horizontal_set(hbox, EINA_TRUE);
 			elm_box_homogeneous_set(hbox, EINA_FALSE);
-			elm_box_padding_set(hbox, 10, 0);
+			elm_box_padding_set(hbox, 10, 10);
 			evas_object_show(hbox);
 			elm_object_content_set(app->popup, hbox);
 
@@ -2222,6 +2224,7 @@ _ui_init(app_t *app)
 	{
 		elm_box_horizontal_set(app->hbox, EINA_TRUE);
 		elm_box_homogeneous_set(app->hbox, EINA_FALSE);
+		elm_box_padding_set(app->hbox, 10, 0);
 		evas_object_size_hint_weight_set(app->hbox, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 		evas_object_size_hint_align_set(app->hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		elm_win_resize_object_add(app->win, app->hbox);
