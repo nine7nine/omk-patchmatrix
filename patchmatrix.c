@@ -1221,9 +1221,9 @@ _jack_timer_cb(void *data)
 						if(!jack_uuid_empty(ev->property_change.uuid))
 						{
 							int id;
-							if((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
-								//printf("property_delete client: %i %s\n", id, ev->property_change.key);
+								//printf("property_delete port: %i %s\n", id, ev->property_change.key);
 
 								jack_port_t *port = jack_port_by_id(app->client, id);
 								int midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
@@ -1265,9 +1265,9 @@ _jack_timer_cb(void *data)
 									}
 								}
 							}
-							else if ((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							else if ((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
-								//printf("property_delete port: %i %s\n", id, ev->property_change.key);
+								//printf("property_delete client: %i %s\n", id, ev->property_change.key);
 								
 								int needs_pretty_update = 0;
 
