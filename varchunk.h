@@ -37,6 +37,9 @@ extern "C" {
 
 typedef struct _varchunk_t varchunk_t;
 
+static inline int
+varchunk_is_lock_free(void);
+
 static inline varchunk_t *
 varchunk_new(size_t minimum);
 
@@ -101,21 +104,20 @@ varchunk_new(size_t minimum)
 	
 	varchunk->size = 1;
 	while(varchunk->size < minimum)
-		varchunk->size <<= 1;
+		varchunk->size <<= 1; // assure size to be a power of 2
 	varchunk->mask = varchunk->size - 1;
 
 #if defined(_WIN32)
 	varchunk->buf = _aligned_malloc(varchunk->size, sizeof(varchunk_elmnt_t));
 #else
 	posix_memalign(&varchunk->buf, sizeof(varchunk_elmnt_t), varchunk->size);
-	mlock(varchunk->buf, varchunk->size);
+	mlock(varchunk->buf, varchunk->size); // prevent memory from being flushed to disk
 #endif
 	if(!varchunk->buf)
 	{
 		free(varchunk);
 		return NULL;
 	}
-	//TODO mlock
 	
 	return varchunk;
 }
@@ -156,7 +158,7 @@ varchunk_write_request(varchunk_t *varchunk, size_t minimum)
 	size_t space; // size of writable buffer
 	size_t end; // virtual end of writable buffer
 	size_t head = atomic_load_explicit(&varchunk->head, memory_order_relaxed); // read head
-	size_t tail = atomic_load_explicit(&varchunk->tail, memory_order_acquire); // read tail ONCE (consumer modifies it any time)
+	size_t tail = atomic_load_explicit(&varchunk->tail, memory_order_acquire); // read tail (consumer modifies it any time)
 	size_t padded = 2*sizeof(varchunk_elmnt_t) + VARCHUNK_PAD(minimum);
 
 	// calculate writable space
@@ -212,7 +214,7 @@ varchunk_write_request(varchunk_t *varchunk, size_t minimum)
 			varchunk->rsvd = 0;
 			return NULL;
 		}
-		else // enough space on contiguous buffer, use it!
+		else // enough space left on contiguous buffer, use it!
 		{
 			varchunk->rsvd = minimum;
 			return buf + sizeof(varchunk_elmnt_t);
@@ -249,8 +251,8 @@ static inline const void *
 varchunk_read_request(varchunk_t *varchunk, size_t *toread)
 {
 	size_t space; // size of available buffer
-	size_t head = atomic_load_explicit(&varchunk->head, memory_order_acquire); // read head ONCE (producer modifies it any time)
 	size_t tail = atomic_load_explicit(&varchunk->tail, memory_order_relaxed); // read tail
+	size_t head = atomic_load_explicit(&varchunk->head, memory_order_acquire); // read head (producer modifies it any time)
 
 	// calculate readable space
 	if(head > tail)
