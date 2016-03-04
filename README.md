@@ -26,13 +26,15 @@ producer_main(void *arg)
 {
 	varchunk_t *varchunk = arg;
 	void *ptr;
-	size_t towrite = 128;
+	const size_t towrite = sizeof(uint32_t);
+	uint32_t counter = 0;
 
-	for(unsigned i=0; i<1000000; i++)
+	while(counter <= 1000000)
 	{
 		if( (ptr = varchunk_write_request(varchunk, towrite)) )
 		{
 			// write 'towrite' bytes to 'ptr'
+			*(uint32_t *)ptr = counter++;
 			varchunk_write_advance(varchunk, towrite);
 		}
 	}
@@ -47,11 +49,13 @@ consumer_main(void *arg)
 	const void *ptr;
 	size_t toread;
 
-	for(unsigned i=0; i<1000000; i++)
+	while(1)
 	{
 		if( (ptr = varchunk_read_request(varchunk, &toread)) )
 		{
 			// read 'toread' bytes from 'ptr'
+			if(*(uint32_t *)ptr >= 1000000)
+				break;
 			varchunk_read_advance(varchunk);
 		}
 	}
