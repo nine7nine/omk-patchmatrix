@@ -103,11 +103,13 @@ main(int argc, char **argv)
 	const int seed = time(NULL);
 	srand(seed);
 
+	if(!varchunk_is_lock_free())
+		return -1; // TEST FAILED
+
 	pthread_t producer;
 	pthread_t consumer;
 	varchunk_t *varchunk = varchunk_new(8192);
-
-	if(!varchunk_is_lock_free())
+	if(!varchunk)
 		return -1; // TEST FAILED
 
 	pthread_create(&consumer, NULL, consumer_main, varchunk);
