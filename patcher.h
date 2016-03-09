@@ -58,6 +58,12 @@ void
 patcher_object_sink_label_set(Evas_Object *o, int sink, const char *label);
 
 void
+patcher_object_source_group_set(Evas_Object *o, int source, const char *group);
+
+void
+patcher_object_sink_group_set(Evas_Object *o, int sink, const char *group);
+
+void
 patcher_object_realize(Evas_Object *o);
 
 #endif // _SYNTHPOD_PATCHER_H

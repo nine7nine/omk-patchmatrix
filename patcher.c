@@ -25,7 +25,7 @@
 #define PATCHER_DISCONNECT_REQUEST "disconnect,request"
 #define PATCHER_REALIZE_REQUEST "realize,request"
 
-#define LEN 16
+#define LEN 8
 
 typedef struct _patcher_t patcher_t;
 
@@ -136,14 +136,17 @@ _node_in(void *data, Evas_Object *edj, const char *emission, const char *source)
 
 	tar = evas_object_table_child_get(priv->matrix, src, priv->max);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
-
 	tar = evas_object_table_child_get(priv->matrix, priv->max, snk);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
 
 	tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
-
 	tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
+	edje_object_signal_emit(tar, "on", PATCHER_UI);
+
+	tar = evas_object_table_child_get(priv->matrix, src, 0);
+	edje_object_signal_emit(tar, "on", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, 0, snk);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
 }
 
@@ -173,14 +176,17 @@ _node_out(void *data, Evas_Object *edj, const char *emission, const char *source
 
 	tar = evas_object_table_child_get(priv->matrix, src, priv->max);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
-
 	tar = evas_object_table_child_get(priv->matrix, priv->max, snk);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
 
 	tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
-
 	tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
+	edje_object_signal_emit(tar, "off", PATCHER_UI);
+
+	tar = evas_object_table_child_get(priv->matrix, src, 0);
+	edje_object_signal_emit(tar, "off", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, 0, snk);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
 }
 
@@ -197,6 +203,8 @@ _source_in(void *data, Evas_Object *edj, const char *emission, const char *sourc
 	edje_object_signal_emit(edj, "on", PATCHER_UI);
 
 	Evas_Object *tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
+	edje_object_signal_emit(tar, "on", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, src, 0);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
 
 	int first = 1;
@@ -227,6 +235,8 @@ _source_in(void *data, Evas_Object *edj, const char *emission, const char *sourc
 			
 			tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
 			edje_object_signal_emit(tar, "on", PATCHER_UI);
+			tar = evas_object_table_child_get(priv->matrix, 0, snk);
+			edje_object_signal_emit(tar, "on", PATCHER_UI);
 		}
 		else if(!first)
 		{
@@ -252,6 +262,8 @@ _source_out(void *data, Evas_Object *edj, const char *emission, const char *sour
 
 	Evas_Object *tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, src, 0);
+	edje_object_signal_emit(tar, "off", PATCHER_UI);
 	
 	for(int j=0; j<priv->sinks; j++)
 	{
@@ -273,6 +285,8 @@ _source_out(void *data, Evas_Object *edj, const char *emission, const char *sour
 			edje_object_signal_emit(tar, "off", PATCHER_UI);
 			
 			tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
+			edje_object_signal_emit(tar, "off", PATCHER_UI);
+			tar = evas_object_table_child_get(priv->matrix, 0, snk);
 			edje_object_signal_emit(tar, "off", PATCHER_UI);
 		}
 		else
@@ -341,6 +355,8 @@ _sink_in(void *data, Evas_Object *edj, const char *emission, const char *source)
 
 	Evas_Object *tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
 	edje_object_signal_emit(tar, "on", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, 0, snk);
+	edje_object_signal_emit(tar, "on", PATCHER_UI);
 	
 	int first = 1;
 	for(int i=0; i<priv->sources; i++)
@@ -370,6 +386,8 @@ _sink_in(void *data, Evas_Object *edj, const char *emission, const char *source)
 			
 			tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
 			edje_object_signal_emit(tar, "on", PATCHER_UI);
+			tar = evas_object_table_child_get(priv->matrix, src, 0);
+			edje_object_signal_emit(tar, "on", PATCHER_UI);
 		}
 		else if(!first)
 		{
@@ -395,6 +413,8 @@ _sink_out(void *data, Evas_Object *edj, const char *emission, const char *source
 
 	Evas_Object *tar = evas_object_table_child_get(priv->matrix, priv->max+1, snk);
 	edje_object_signal_emit(tar, "off", PATCHER_UI);
+	tar = evas_object_table_child_get(priv->matrix, 0, snk);
+	edje_object_signal_emit(tar, "off", PATCHER_UI);
 	
 	for(int i=0; i<priv->sources; i++)
 	{
@@ -416,6 +436,8 @@ _sink_out(void *data, Evas_Object *edj, const char *emission, const char *source
 			edje_object_signal_emit(tar, "off", PATCHER_UI);
 			
 			tar = evas_object_table_child_get(priv->matrix, src, priv->max+1);
+			edje_object_signal_emit(tar, "off", PATCHER_UI);
+			tar = evas_object_table_child_get(priv->matrix, src, 0);
 			edje_object_signal_emit(tar, "off", PATCHER_UI);
 		}
 		else
@@ -565,6 +587,14 @@ _patcher_smart_init(Evas_Object *o)
 		evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		evas_object_show(elmnt);
 		evas_object_table_pack(priv->matrix, elmnt, src_abs, snk_abs + 1, 1, LEN);
+
+		elmnt = edje_object_add(e);
+		edje_object_file_set(elmnt, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+			"/patchmatrix/patcher/label/vertical2");
+		evas_object_size_hint_weight_set(elmnt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+		evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+		evas_object_show(elmnt);
+		evas_object_table_pack(priv->matrix, elmnt, src_abs, 0, 1, LEN);
 	}
 
 	// create sink ports & labels
@@ -592,6 +622,14 @@ _patcher_smart_init(Evas_Object *o)
 		evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		evas_object_show(elmnt);
 		evas_object_table_pack(priv->matrix, elmnt, src_abs + 1, snk_abs, LEN, 1);
+		
+		elmnt = edje_object_add(e);
+		edje_object_file_set(elmnt, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+			"/patchmatrix/patcher/label/horizontal2");
+		evas_object_size_hint_weight_set(elmnt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+		evas_object_size_hint_align_set(elmnt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+		evas_object_show(elmnt);
+		evas_object_table_pack(priv->matrix, elmnt, 0, snk_abs, LEN, 1);
 	}
 }
 
@@ -715,10 +753,12 @@ patcher_object_dimension_set(Evas_Object *o, int sources, int sinks)
 	priv->sources = sources;
 	priv->sinks = sinks;
 	priv->max = sources >= sinks
-		? sources
-		: sinks;
-	if(priv->max < LEN)
-		priv->max = LEN;
+		? 1 + LEN + sources
+		: 1 + LEN + sinks;
+	/* FIXME
+	if(priv->max < 2*LEN)
+		priv->max = 2*LEN;
+	*/
 
 	_patcher_smart_init(o);
 }
@@ -844,7 +884,9 @@ void
 patcher_object_source_label_set(Evas_Object *o, int src_idx, const char *label)
 {
 	patcher_t *priv = evas_object_smart_data_get(o);
-	Evas_Object *edj = _rel_child_get(priv, src_idx, priv->sinks+1);
+	int src_abs;
+	_rel_to_abs(priv, src_idx, 0, &src_abs, NULL);
+	Evas_Object *edj = evas_object_table_child_get(priv->matrix, src_abs, 0);
 
 	edje_object_part_text_set(edj, "default", label);
 }
@@ -853,9 +895,33 @@ void
 patcher_object_sink_label_set(Evas_Object *o, int snk_idx, const char *label)
 {
 	patcher_t *priv = evas_object_smart_data_get(o);
-	Evas_Object *edj = _rel_child_get(priv, priv->sources+1, snk_idx);
+	int snk_abs;
+	_rel_to_abs(priv, 0, snk_idx, NULL, &snk_abs);
+	Evas_Object *edj = evas_object_table_child_get(priv->matrix, priv->max+1, snk_abs);
 
 	edje_object_part_text_set(edj, "default", label);
+}
+
+void
+patcher_object_source_group_set(Evas_Object *o, int src_idx, const char *group)
+{
+	patcher_t *priv = evas_object_smart_data_get(o);
+	int src_abs;
+	_rel_to_abs(priv, src_idx, 0, &src_abs, NULL);
+	Evas_Object *edj = evas_object_table_child_get(priv->matrix, src_abs, priv->max+1);
+
+	edje_object_part_text_set(edj, "default", group);
+}
+
+void
+patcher_object_sink_group_set(Evas_Object *o, int snk_idx, const char *group)
+{
+	patcher_t *priv = evas_object_smart_data_get(o);
+	int snk_abs;
+	_rel_to_abs(priv, 0, snk_idx, NULL, &snk_abs);
+	Evas_Object *edj = evas_object_table_child_get(priv->matrix, 0, snk_abs);
+
+	edje_object_part_text_set(edj, "default", group);
 }
 
 void

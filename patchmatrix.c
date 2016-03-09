@@ -2453,37 +2453,13 @@ _ui_refresh_single(app_t *app, int i)
 
 		if(port_pretty_name)
 		{
-			if(client_pretty_name)
-			{
-				char *pretty_name = NULL;
-				const int width0 = 24;
-				const int width1 = strlen(port_pretty_name);
-				const int width2 = width0 - (width1 + 1);
-				if(width2 >= (int)strlen(client_pretty_name))
-					asprintf(&pretty_name, "%.*s <b>%*s</b>", width1, port_pretty_name, width2, client_pretty_name);
-				else if(width2 > 0)
-					asprintf(&pretty_name, "%.*s <b>%s</b>", width1, port_pretty_name, &client_pretty_name[strlen(client_pretty_name)-width2]);
-				else
-					asprintf(&pretty_name, "%.*s", width1, port_pretty_name);
-
-				if(pretty_name)
-				{
-					patcher_object_source_label_set(app->patcher, source, pretty_name);
-					free(pretty_name);
-				}
-				else
-				{
-					patcher_object_source_label_set(app->patcher, source, port_pretty_name);
-				}
-			}
-			else
-			{
-				patcher_object_source_label_set(app->patcher, source, port_pretty_name);
-			}
+			patcher_object_source_label_set(app->patcher, source, port_pretty_name);
 			free(port_pretty_name);
 		}
+
 		if(client_pretty_name)
 		{
+			patcher_object_source_group_set(app->patcher, source, client_pretty_name);
 			free(client_pretty_name);
 		}
 	}
@@ -2510,37 +2486,13 @@ _ui_refresh_single(app_t *app, int i)
 
 		if(port_pretty_name)
 		{
-			if(client_pretty_name)
-			{
-				char *pretty_name = NULL;
-				const int width0 = 24;
-				const int width1 = strlen(port_pretty_name);
-				const int width2 = width0 - (width1 + 1);
-				if(width2 >= (int)strlen(client_pretty_name))
-					asprintf(&pretty_name, "%.*s <b>%*s</b>", width1, port_pretty_name, width2, client_pretty_name);
-				else if(width2 > 0)
-					asprintf(&pretty_name, "%.*s <b>%s</b>", width1, port_pretty_name, &client_pretty_name[strlen(client_pretty_name)-width2]);
-				else
-					asprintf(&pretty_name, "%.*s", width1, port_pretty_name);
-
-				if(pretty_name)
-				{
-					patcher_object_sink_label_set(app->patcher, sink, pretty_name);
-					free(pretty_name);
-				}
-				else
-				{
-					patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
-				}
-			}
-			else
-			{
-				patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
-			}
+			patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
 			free(port_pretty_name);
 		}
+
 		if(client_pretty_name)
 		{
+			patcher_object_sink_group_set(app->patcher, sink, client_pretty_name);
 			free(client_pretty_name);
 		}
 	}
