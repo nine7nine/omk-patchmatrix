@@ -26,7 +26,7 @@ typedef struct _patcher_event_t patcher_event_t;
 
 struct _patcher_event_t {
 	int index;
-	int id;
+	intptr_t id;
 };
 
 Evas_Object *
@@ -36,14 +36,14 @@ void
 patcher_object_dimension_set(Evas_Object *o, int sources, int sinks);
 
 void
-patcher_object_connected_set(Evas_Object *o, int source_id, int sink_id,
+patcher_object_connected_set(Evas_Object *o, intptr_t source_id, intptr_t sink_id,
 	Eina_Bool state, int indirect);
 
 void
-patcher_object_source_id_set(Evas_Object *o, int source, int id);
+patcher_object_source_id_set(Evas_Object *o, int source, intptr_t id);
 
 void
-patcher_object_sink_id_set(Evas_Object *o, int sink, int id);
+patcher_object_sink_id_set(Evas_Object *o, int sink, intptr_t id);
 
 void
 patcher_object_source_color_set(Evas_Object *o, int source, int col);

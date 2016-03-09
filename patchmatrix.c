@@ -93,7 +93,6 @@ struct _app_t {
 	Evas_Object *win;
 	Evas_Object *patcher;
 	Evas_Object *popup;
-	Evas_Object *hbox;
 	Evas_Object *tools;
 	Evas_Object *list;
 	Elm_Genlist_Item_Class *clientitc;
@@ -2219,74 +2218,86 @@ _ui_init(app_t *app)
 		}
 	}
 
-	app->hbox = elm_box_add(app->win);
-	if(app->hbox)
+	Evas_Object *pane = elm_panes_add(app->win);
+	if(pane)
 	{
-		elm_box_horizontal_set(app->hbox, EINA_TRUE);
-		elm_box_homogeneous_set(app->hbox, EINA_FALSE);
-		elm_box_padding_set(app->hbox, 10, 0);
-		evas_object_size_hint_weight_set(app->hbox, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-		evas_object_size_hint_align_set(app->hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
-		elm_win_resize_object_add(app->win, app->hbox);
-		evas_object_show(app->hbox);
+		elm_panes_horizontal_set(pane, EINA_FALSE);
+		elm_panes_content_left_size_set(pane, 0.7);
+		evas_object_size_hint_weight_set(pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+		evas_object_size_hint_align_set(pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
+		elm_win_resize_object_add(app->win, pane);
+		evas_object_show(pane);
 
-		app->list = elm_genlist_add(app->hbox);
-		if(app->list)
+		Evas_Object *hbox = elm_box_add(pane);
+		if(hbox)
 		{
-			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
-			evas_object_smart_callback_add(app->list, "activated",
-				_ui_list_activated, app);
-			evas_object_smart_callback_add(app->list, "expand,request",
-				_ui_list_expand_request, app);
-			evas_object_smart_callback_add(app->list, "contract,request",
-				_ui_list_contract_request, app);
-			evas_object_smart_callback_add(app->list, "expanded",
-				_ui_list_expanded, app);
-			evas_object_smart_callback_add(app->list, "contracted",
-				_ui_list_contracted, app);
-			evas_object_smart_callback_add(app->list, "moved",
-				_ui_list_moved, app);
-			evas_object_data_set(app->list, "app", app);
-			evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(app->list);
+			elm_box_horizontal_set(hbox, EINA_TRUE);
+			elm_box_homogeneous_set(hbox, EINA_FALSE);
+			elm_box_padding_set(hbox, 10, 0);
+			evas_object_size_hint_weight_set(hbox, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(hbox);
 
-			elm_box_pack_end(app->hbox, app->list);
-		} // app->list
+			elm_object_part_content_set(pane, "right", hbox);
 
-		app->tools = elm_toolbar_add(app->hbox);
-		if(app->tools)
-		{
-			elm_toolbar_horizontal_set(app->tools, EINA_FALSE);
-			elm_toolbar_homogeneous_set(app->tools, EINA_TRUE);
-			elm_toolbar_align_set(app->tools, 0.f);
-			elm_toolbar_select_mode_set(app->tools, ELM_OBJECT_SELECT_MODE_ALWAYS);
-			evas_object_smart_callback_add(app->tools, "selected",
-				_toolbar_selected, app);
-			evas_object_smart_callback_add(app->tools, "unselected",
-				_toolbar_unselected, app);
-			evas_object_size_hint_weight_set(app->tools, 0.f, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(app->tools, 0.f, EVAS_HINT_FILL);
-			evas_object_show(app->tools);
+			app->tools = elm_toolbar_add(hbox);
+			if(app->tools)
+			{
+				elm_toolbar_horizontal_set(app->tools, EINA_FALSE);
+				elm_toolbar_homogeneous_set(app->tools, EINA_TRUE);
+				elm_toolbar_align_set(app->tools, 0.f);
+				elm_toolbar_select_mode_set(app->tools, ELM_OBJECT_SELECT_MODE_ALWAYS);
+				evas_object_smart_callback_add(app->tools, "selected",
+					_toolbar_selected, app);
+				evas_object_smart_callback_add(app->tools, "unselected",
+					_toolbar_unselected, app);
+				evas_object_size_hint_weight_set(app->tools, 0.f, EVAS_HINT_EXPAND);
+				evas_object_size_hint_align_set(app->tools, 0.f, EVAS_HINT_FILL);
+				evas_object_show(app->tools);
 
-			app->tool_audio = elm_toolbar_item_append(app->tools,
-				PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
-			elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
-			app->tool_midi = elm_toolbar_item_append(app->tools,
-				PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
+				app->tool_audio = elm_toolbar_item_append(app->tools,
+					PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
+				elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
+				app->tool_midi = elm_toolbar_item_append(app->tools,
+					PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
 #ifdef JACK_HAS_METADATA_API
-			app->tool_osc = elm_toolbar_item_append(app->tools,
-				PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
-			app->tool_cv = elm_toolbar_item_append(app->tools,
-				PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
+				app->tool_osc = elm_toolbar_item_append(app->tools,
+					PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
+				app->tool_cv = elm_toolbar_item_append(app->tools,
+					PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
 #endif
-			app->tool_about = elm_toolbar_item_append(app->tools,
-				"help-about", "About", NULL, NULL);
+				app->tool_about = elm_toolbar_item_append(app->tools,
+					"help-about", "About", NULL, NULL);
 
-			elm_box_pack_end(app->hbox, app->tools);
-		} // app->tools
+				elm_box_pack_end(hbox, app->tools);
+			} // app->tools
 
-		app->patcher = patcher_object_add(evas_object_evas_get(app->hbox));
+			app->list = elm_genlist_add(hbox);
+			if(app->list)
+			{
+				elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
+				evas_object_smart_callback_add(app->list, "activated",
+					_ui_list_activated, app);
+				evas_object_smart_callback_add(app->list, "expand,request",
+					_ui_list_expand_request, app);
+				evas_object_smart_callback_add(app->list, "contract,request",
+					_ui_list_contract_request, app);
+				evas_object_smart_callback_add(app->list, "expanded",
+					_ui_list_expanded, app);
+				evas_object_smart_callback_add(app->list, "contracted",
+					_ui_list_contracted, app);
+				evas_object_smart_callback_add(app->list, "moved",
+					_ui_list_moved, app);
+				evas_object_data_set(app->list, "app", app);
+				evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+				evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
+				evas_object_show(app->list);
+
+				elm_box_pack_end(hbox, app->list);
+			} // app->list
+		} // hbox
+
+		app->patcher = patcher_object_add(pane);
 		if(app->patcher)
 		{
 			evas_object_data_set(app->patcher, "app", app);
@@ -2300,11 +2311,11 @@ _ui_init(app_t *app)
 			evas_object_size_hint_align_set(app->patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
 			evas_object_show(app->patcher);
 
-			elm_box_pack_end(app->hbox, app->patcher);
+			elm_object_part_content_set(pane, "left", app->patcher);
 
 			_ui_refresh(app);
 		} // app->patcher
-	} // app->hbox
+	} // pane
 
 	return 0;
 }
@@ -2312,12 +2323,6 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
-	if(!app->win)
-		return;
-
-	elm_box_clear(app->hbox);
-	evas_object_del(app->win);
-
 	if(app->clientitc)
 		elm_genlist_item_class_free(app->clientitc);
 	if(app->sourceitc)
@@ -2328,6 +2333,9 @@ _ui_deinit(app_t *app)
 		elm_genlist_item_class_free(app->sepitc);
 	if(app->portitc)
 		elm_genlist_item_class_free(app->portitc);
+
+	if(app->win)
+		evas_object_del(app->win);
 }
 
 static void
@@ -2521,6 +2529,9 @@ static int
 elm_main(int argc, char **argv)
 {
 	static app_t app;
+
+	elm_config_accel_preference_set("gl");
+	elm_policy_set(ELM_POLICY_QUIT, ELM_POLICY_QUIT_LAST_WINDOW_CLOSED);
 
 	if(_jack_init(&app))
 		goto cleanup;
