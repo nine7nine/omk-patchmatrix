@@ -819,6 +819,8 @@ _patcher_smart_init(Evas_Object *o)
 		}
 	}
 
+	priv->needs_predraw = true;
+	elm_glview_changed_set(priv->glview); // refresh
 	_patcher_labels_move_resize(priv);
 }
 
