@@ -15,6 +15,8 @@
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
+#include <stdbool.h>
+
 #include <Elementary.h>
 
 #include <sqlite3.h>
@@ -151,6 +153,8 @@ struct _app_t {
 	sqlite3_stmt *query_port_list;
 	sqlite3_stmt *query_client_port_list;
 	sqlite3_stmt *query_client_port_count;
+
+	bool populating;
 };
 
 static void _ui_refresh_single(app_t *app, int i);
@@ -765,7 +769,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		int *ref = elm_object_item_data_get(itm);
 		if(ref && (*ref == client_id) )
 		{
-			if(elm_genlist_item_expanded_get(itm))
+			if(!app->populating && elm_genlist_item_expanded_get(itm))
 			{
 				elm_genlist_item_expanded_set(itm, EINA_FALSE);
 				elm_genlist_item_expanded_set(itm, EINA_TRUE);
@@ -2346,6 +2350,8 @@ _ui_populate(app_t *app)
 	const char **sources = jack_get_ports(app->client, NULL, NULL, JackPortIsOutput);
 	const char **sinks = jack_get_ports(app->client, NULL, NULL, JackPortIsInput);
 
+	app->populating = true;
+
 	if(sources)
 	{
 		for(const char **source=sources; *source; source++)
@@ -2401,6 +2407,23 @@ _ui_populate(app_t *app)
 			}
 		}
 		free(sources);
+	}
+
+	app->populating = false;
+
+	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
+		itm != NULL;
+		itm = elm_genlist_item_next_get(itm))
+	{
+		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
+		if(itc != app->clientitc)
+			continue; // ignore non-client items
+
+		if(elm_genlist_item_expanded_get(itm))
+		{
+			elm_genlist_item_expanded_set(itm, EINA_FALSE);
+			elm_genlist_item_expanded_set(itm, EINA_TRUE);
+		}
 	}
 }
 
