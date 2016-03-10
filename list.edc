@@ -25,6 +25,7 @@ images {
 	image: "midi.png" COMP;
 	image: "cv.png" COMP;
 	image: "osc.png" COMP;
+	image: "icon_arrow_right.png" COMP;
 }
 
 group {

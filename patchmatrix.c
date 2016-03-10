@@ -2468,6 +2468,7 @@ _ui_refresh_single(app_t *app, int i)
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
 	(void)ret;
+	int last_client_id = -1;
 	for(int source=0; source<num_sources; source++)
 	{
 		ret = sqlite3_step(stmt);
@@ -2490,9 +2491,14 @@ _ui_refresh_single(app_t *app, int i)
 
 		if(client_pretty_name)
 		{
-			patcher_object_source_group_set(app->patcher, source, client_pretty_name);
+			if( (last_client_id == -1) || (last_client_id != client_id) )
+				patcher_object_source_group_set(app->patcher, source, client_pretty_name);
+			else
+				patcher_object_source_group_set(app->patcher, source, "");
 			free(client_pretty_name);
 		}
+
+		last_client_id = client_id;
 	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;
@@ -2501,6 +2507,7 @@ _ui_refresh_single(app_t *app, int i)
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
 	(void)ret;
+	last_client_id = -1;
 	for(int sink=0; sink<num_sinks; sink++)
 	{
 		ret = sqlite3_step(stmt);
@@ -2523,9 +2530,14 @@ _ui_refresh_single(app_t *app, int i)
 
 		if(client_pretty_name)
 		{
-			patcher_object_sink_group_set(app->patcher, sink, client_pretty_name);
+			if( (last_client_id == -1) || (last_client_id != client_id) )
+				patcher_object_sink_group_set(app->patcher, sink, client_pretty_name);
+			else
+				patcher_object_sink_group_set(app->patcher, sink, "");
 			free(client_pretty_name);
 		}
+
+		last_client_id = client_id;
 	}
 	ret = sqlite3_reset(stmt);
 	(void)ret;

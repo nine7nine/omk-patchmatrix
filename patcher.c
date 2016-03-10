@@ -52,7 +52,6 @@ typedef struct _point_t point_t;
 typedef struct _line_t line_t;
 typedef struct _triangle_t triangle_t;
 typedef struct _rectangle_t rectangle_t;
-typedef struct _pentagon_t pentagon_t;
 typedef struct _patcher_t patcher_t;
 
 struct _point_t {
@@ -79,14 +78,6 @@ struct _rectangle_t {
 	point_t p3;
 };
 
-struct _pentagon_t {
-	point_t p0;
-	point_t p1;
-	point_t p2;
-	point_t p3;
-	point_t p4;
-};
-
 struct _patcher_t {
 	bool active;
 
@@ -109,8 +100,8 @@ struct _patcher_t {
 	GLuint vboxs;
 	int nboxs;
 
-	GLuint vpents;
-	int npents;
+	GLuint vtriangs;
+	int ntriangs;
 
 	GLuint vconns;
 	int nconns;
@@ -309,43 +300,6 @@ _predraw(patcher_t *priv)
 
 		free(vlines);
 	}
-
-	const int npents = priv->ncols + priv->nrows;
-	const size_t spents = npents * sizeof(pentagon_t);
-	pentagon_t *vpents = calloc(1, spents);
-	if(vpents)
-	{
-		for(int col = 0; col < priv->ncols; col++)
-		{
-			const int row = priv->nrows;
-			pentagon_t *pent = &vpents[col];
-
-			_rel_to_abs(priv, col+0.25, row+0.25, &pent->p0.x, &pent->p0.y);
-			_rel_to_abs(priv, col-0.25, row+0.25, &pent->p1.x, &pent->p1.y);
-			_rel_to_abs(priv, col,      row,      &pent->p2.x, &pent->p2.y);
-			_rel_to_abs(priv, col+1,    row,      &pent->p3.x, &pent->p3.y);
-			_rel_to_abs(priv, col+0.25, row+0.75, &pent->p4.x, &pent->p4.y);
-		}
-
-		for(int row = 0; row < priv->nrows; row++)
-		{
-			const int col = priv->ncols;
-			pentagon_t *pent = &vpents[priv->ncols + row];
-
-			_rel_to_abs(priv, col,     row,     &pent->p0.x, &pent->p0.y);
-			_rel_to_abs(priv, col,     row+1,   &pent->p1.x, &pent->p1.y);
-			_rel_to_abs(priv, col+0.5, row+0.5, &pent->p2.x, &pent->p2.y);
-			_rel_to_abs(priv, col+0.5, row,     &pent->p3.x, &pent->p3.y);
-			pent->p4.x = pent->p3.x;
-			pent->p4.y = pent->p3.y;
-		}
-
-		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vpents);
-		gl->glBufferData(GL_ARRAY_BUFFER, spents, vpents, GL_STATIC_DRAW);
-		priv->npents = npents * 5;
-
-		free(vpents);
-	}
 }
 
 static inline void
@@ -361,7 +315,7 @@ _patcher_labels_move_resize(patcher_t *priv)
 
 	_precalc(priv);
 
-	// get label height
+	// get label height FIXME
 	_rel_to_abs(priv, 0, 1, &fx, &fy);
 	_abs_to_screen(priv, fx, fy, &sx, &sy);
 	sspan = sy;
@@ -374,15 +328,15 @@ _patcher_labels_move_resize(patcher_t *priv)
 		_rel_to_abs(priv, i, priv->nrows, &fx, &fy);
 		_abs_to_screen(priv, fx, fy, &sx, &sy);
 		evas_object_move(priv->cols[i], priv->x, priv->y + sy);
-		evas_object_resize(priv->cols[i], sx - sspan, sspan);
+		evas_object_resize(priv->cols[i], sx, sspan);
 	}
 
 	for(int j=0; j<priv->nrows; j++)
 	{
 		_rel_to_abs(priv, priv->ncols, j, &fx, &fy);
 		_abs_to_screen(priv, fx, fy, &sx, &sy);
-		evas_object_move(priv->rows[j], priv->x + sx + sspan, priv->y + sy);
-		evas_object_resize(priv->rows[j], priv->w - sx - sspan, sspan);
+		evas_object_move(priv->rows[j], priv->x + sx, priv->y + sy);
+		evas_object_resize(priv->rows[j], priv->w - sx, sspan);
 	}
 }
 
@@ -502,11 +456,13 @@ _init_gl(Evas_Object *obj)
 	gl->glGenBuffers(1, &priv->vboxs);
 	priv->nboxs = 4;
 
+	gl->glGenBuffers(1, &priv->vtriangs);
+	priv->ntriangs = 3;
+
 	gl->glGenBuffers(1, &priv->vconns);
 	priv->nconns = 4;
 
 	gl->glGenBuffers(1, &priv->vlines);
-	gl->glGenBuffers(1, &priv->vpents);
 	
 	if(!_init_shaders(priv))
 	{
@@ -529,9 +485,9 @@ _del_gl(Evas_Object *obj)
 	gl->glDeleteShader(priv->fgmt_shader);
 	gl->glDeleteProgram(priv->program);
 	gl->glDeleteBuffers(1, &priv->vboxs);
+	gl->glDeleteBuffers(1, &priv->vtriangs);
 	gl->glDeleteBuffers(1, &priv->vconns);
 	gl->glDeleteBuffers(1, &priv->vlines);
-	gl->glDeleteBuffers(1, &priv->vpents);
 	
 	evas_object_data_del(obj, "priv");
 	debugf("done\n");
@@ -608,18 +564,6 @@ _draw_gl(Evas_Object *obj)
 	{
 		gl->glUseProgram(priv->program);
 		gl->glEnableVertexAttribArray(0);
-
-		/* FIXME
-		// draw pentagons
-		for(int i=0; i<priv->npents; i+=5)
-		{
-			gl->glLineWidth(0.f);
-			gl->glVertexAttrib4f(1, 1.f*i/priv->npents, 0.f, 0.f, 0.8);
-			gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vpents);
-			gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, (const void *)(i*sizeof(point_t)));
-			gl->glDrawArrays(GL_TRIANGLE_FAN, 0, 5);
-		}
-		*/
 
 		// draw lines
 		for(int i=0; i<priv->nlines; i+=3)
@@ -710,9 +654,42 @@ _draw_gl(Evas_Object *obj)
 			}
 		}
 
+		triangle_t vtriangs;
+		gl->glLineWidth(0.f);
+		gl->glVertexAttrib4f(1, 0.8, 0.8, 0.8, 1.f);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vtriangs);
+		for(int i=0; i<priv->ncols; i++)
+		{
+			int j = priv->nrows - 1;
+			if(priv->matrix[i][j] & (VERTICAL | VERTICAL_EDGE) )
+			{
+				_rel_to_abs(priv, i + 0.2, j + 1.0, &vtriangs.p0.x, &vtriangs.p0.y);
+				_rel_to_abs(priv, i + 0.8, j + 1.0, &vtriangs.p1.x, &vtriangs.p1.y);
+				_rel_to_abs(priv, i + 0.5, j + 1.3, &vtriangs.p2.x, &vtriangs.p2.y);
+
+				gl->glBufferData(GL_ARRAY_BUFFER, sizeof(triangle_t), &vtriangs, GL_DYNAMIC_DRAW);
+				gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, 0);
+				gl->glDrawArrays(GL_TRIANGLE_FAN, 0, priv->ntriangs);
+			}
+		}
+		for(int j=0; j<priv->nrows; j++)
+		{
+			int i = priv->ncols - 1;
+			if(priv->matrix[i][j] & (HORIZONTAL | HORIZONTAL_EDGE) )
+			{
+				_rel_to_abs(priv, i + 1.0, j + 0.2, &vtriangs.p0.x, &vtriangs.p0.y);
+				_rel_to_abs(priv, i + 1.0, j + 0.8, &vtriangs.p1.x, &vtriangs.p1.y);
+				_rel_to_abs(priv, i + 1.3, j + 0.5, &vtriangs.p2.x, &vtriangs.p2.y);
+
+				gl->glBufferData(GL_ARRAY_BUFFER, sizeof(triangle_t), &vtriangs, GL_DYNAMIC_DRAW);
+				gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, 0);
+				gl->glDrawArrays(GL_TRIANGLE_FAN, 0, priv->ntriangs);
+			}
+		}
+
 		rectangle_t vboxs;
 		gl->glLineWidth(4.f);
-		gl->glVertexAttrib4f(1, 1.f, 1.f, 1.f, 0.8);
+		gl->glVertexAttrib4f(1, 1.f, 1.f, 1.f, 1.f);
 		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vboxs);
 		for(int i=0; i<priv->ncols; i++)
 		{
@@ -775,6 +752,7 @@ _patcher_smart_init(Evas_Object *o)
 {
 	debugf("_patcher_smart_init\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
+	Evas *e = evas_object_evas_get(o);
 
 	priv->data.cols = priv->ncols ? calloc(priv->ncols, sizeof(intptr_t)) : NULL;
 	priv->data.rows = priv->nrows ? calloc(priv->nrows, sizeof(intptr_t)) : NULL;
@@ -791,11 +769,14 @@ _patcher_smart_init(Evas_Object *o)
 	{
 		for(int i=0; i<priv->ncols; i++)
 		{
-			Evas_Object *lbl = priv->parent ? elm_label_add(priv->parent) : NULL;
+			Evas_Object *lbl = edje_object_add(e);
 			if(lbl)
 			{
 				priv->cols[i] = lbl;
 
+				edje_object_file_set(lbl, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+					"/patchmatrix/patcher/port");
+				edje_object_signal_emit(lbl, "source", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
 				//evas_object_smart_member_add(lbl, o);
@@ -807,11 +788,14 @@ _patcher_smart_init(Evas_Object *o)
 	{
 		for(int j=0; j<priv->nrows; j++)
 		{
-			Evas_Object *lbl = priv->parent ? elm_label_add(priv->parent) : NULL;
+			Evas_Object *lbl = edje_object_add(e);
 			if(lbl)
 			{
 				priv->rows[j] = lbl;
 
+				edje_object_file_set(lbl, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
+					"/patchmatrix/patcher/port");
+				edje_object_signal_emit(lbl, "sink", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
 				//evas_object_smart_member_add(lbl, o);
@@ -895,6 +879,11 @@ _clear_lines(patcher_t *priv)
 			col[j] &= CONNECTED | FEEDBACK | INDIRECT; // invalidate all line data
 		}
 	}
+
+	for(int i=0; i<priv->ncols; i++)
+		edje_object_signal_emit(priv->cols[i], "off", PATCHER_UI);
+	for(int j=0; j<priv->nrows; j++)
+		edje_object_signal_emit(priv->rows[j], "off", PATCHER_UI);
 }
 
 static void
@@ -956,6 +945,8 @@ _mouse_move_raw(patcher_t *priv, Evas_Object *obj, int sx, int sy)
 		if( (ax != -1) && (ay != -1) ) // hover over matrix node
 		{
 			priv->matrix[ax][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
+			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
 
 			for(int i=ax+1; i<priv->ncols; i++)
 				priv->matrix[i][ay] |= HORIZONTAL;
@@ -965,11 +956,14 @@ _mouse_move_raw(patcher_t *priv, Evas_Object *obj, int sx, int sy)
 		}
 		else if( (ax != -1) && (ay == -1) ) // hover over matrix source
 		{
+			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
+
 			for(int j=0; j<priv->nrows; j++)
 			{
 				if(priv->matrix[ax][j] & CONNECTED)
 				{
 					priv->matrix[ax][j] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+					edje_object_signal_emit(priv->rows[j], "on", PATCHER_UI);
 
 					for(int i=ax+1; i<priv->ncols; i++)
 						priv->matrix[i][j] |= HORIZONTAL;
@@ -981,11 +975,14 @@ _mouse_move_raw(patcher_t *priv, Evas_Object *obj, int sx, int sy)
 		}
 		else if( (ax == -1) && (ay != -1) ) // hover over matrix sink
 		{
+			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
+
 			for(int i=0; i<priv->ncols; i++)
 			{
 				if(priv->matrix[i][ay] & CONNECTED)
 				{
 					priv->matrix[i][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+					edje_object_signal_emit(priv->cols[i], "on", PATCHER_UI);
 
 					for(int j=i+1; j<priv->ncols; j++)
 						priv->matrix[j][ay] |= HORIZONTAL;
@@ -1267,7 +1264,7 @@ patcher_object_source_color_set(Evas_Object *o, int src_idx, int col)
 
 	char msg [7];
 	sprintf(msg, "col,%02i", col);
-	elm_layout_signal_emit(priv->cols[src_idx], msg, PATCHER_UI);
+	edje_object_signal_emit(priv->cols[src_idx], msg, PATCHER_UI);
 }
 
 void
@@ -1278,7 +1275,7 @@ patcher_object_sink_color_set(Evas_Object *o, int snk_idx, int col)
 
 	char msg [7];
 	sprintf(msg, "col,%02i", col);
-	elm_layout_signal_emit(priv->rows[snk_idx], msg, PATCHER_UI);
+	edje_object_signal_emit(priv->rows[snk_idx], msg, PATCHER_UI);
 }
 
 void
@@ -1287,7 +1284,7 @@ patcher_object_source_label_set(Evas_Object *o, int src_idx, const char *label)
 	debugf("patcher_object_source_label_set\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
-	elm_object_part_text_set(priv->cols[src_idx], "default", label);
+	edje_object_part_text_set(priv->cols[src_idx], "text.port", label);
 }
 
 void
@@ -1296,7 +1293,7 @@ patcher_object_sink_label_set(Evas_Object *o, int snk_idx, const char *label)
 	debugf("patcher_object_sink_label_set\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
-	elm_object_part_text_set(priv->rows[snk_idx], "default", label);
+	edje_object_part_text_set(priv->rows[snk_idx], "text.port", label);
 }
 
 void
@@ -1305,7 +1302,7 @@ patcher_object_source_group_set(Evas_Object *o, int src_idx, const char *group)
 	debugf("patcher_object_source_group_set\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
-	//FIXME
+	edje_object_part_text_set(priv->cols[src_idx], "text.client", group);
 }
 
 void
@@ -1314,7 +1311,7 @@ patcher_object_sink_group_set(Evas_Object *o, int snk_idx, const char *group)
 	debugf("patcher_object_sink_group_set\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
-	//FIXME
+	edje_object_part_text_set(priv->rows[snk_idx], "text.client", group);
 }
 
 void
