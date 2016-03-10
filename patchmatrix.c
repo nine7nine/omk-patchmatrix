@@ -2256,7 +2256,26 @@ _ui_init(app_t *app)
 			evas_object_size_hint_align_set(hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
 			evas_object_show(hbox);
 
-			elm_object_part_content_set(pane, "right", hbox);
+			elm_object_part_content_set(pane, "left", hbox);
+
+			app->patcher = patcher_object_add(pane);
+			if(app->patcher)
+			{
+				evas_object_data_set(app->patcher, "app", app);
+				evas_object_smart_callback_add(app->patcher, "connect,request",
+					_ui_connect_request, app);
+				evas_object_smart_callback_add(app->patcher, "disconnect,request",
+					_ui_disconnect_request, app);
+				evas_object_smart_callback_add(app->patcher, "realize,request",
+					_ui_realize_request, app);
+				evas_object_size_hint_weight_set(app->patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+				evas_object_size_hint_align_set(app->patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
+				evas_object_show(app->patcher);
+
+				elm_box_pack_end(hbox, app->patcher);
+
+				_ui_refresh(app);
+			} // app->patcher
 
 			app->tools = elm_toolbar_add(hbox);
 			if(app->tools)
@@ -2289,50 +2308,31 @@ _ui_init(app_t *app)
 
 				elm_box_pack_end(hbox, app->tools);
 			} // app->tools
-
-			app->list = elm_genlist_add(hbox);
-			if(app->list)
-			{
-				elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
-				evas_object_smart_callback_add(app->list, "activated",
-					_ui_list_activated, app);
-				evas_object_smart_callback_add(app->list, "expand,request",
-					_ui_list_expand_request, app);
-				evas_object_smart_callback_add(app->list, "contract,request",
-					_ui_list_contract_request, app);
-				evas_object_smart_callback_add(app->list, "expanded",
-					_ui_list_expanded, app);
-				evas_object_smart_callback_add(app->list, "contracted",
-					_ui_list_contracted, app);
-				evas_object_smart_callback_add(app->list, "moved",
-					_ui_list_moved, app);
-				evas_object_data_set(app->list, "app", app);
-				evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-				evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
-				evas_object_show(app->list);
-
-				elm_box_pack_end(hbox, app->list);
-			} // app->list
 		} // hbox
 
-		app->patcher = patcher_object_add(pane);
-		if(app->patcher)
+		app->list = elm_genlist_add(hbox);
+		if(app->list)
 		{
-			evas_object_data_set(app->patcher, "app", app);
-			evas_object_smart_callback_add(app->patcher, "connect,request",
-				_ui_connect_request, app);
-			evas_object_smart_callback_add(app->patcher, "disconnect,request",
-				_ui_disconnect_request, app);
-			evas_object_smart_callback_add(app->patcher, "realize,request",
-				_ui_realize_request, app);
-			evas_object_size_hint_weight_set(app->patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(app->patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(app->patcher);
+			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
+			evas_object_smart_callback_add(app->list, "activated",
+				_ui_list_activated, app);
+			evas_object_smart_callback_add(app->list, "expand,request",
+				_ui_list_expand_request, app);
+			evas_object_smart_callback_add(app->list, "contract,request",
+				_ui_list_contract_request, app);
+			evas_object_smart_callback_add(app->list, "expanded",
+				_ui_list_expanded, app);
+			evas_object_smart_callback_add(app->list, "contracted",
+				_ui_list_contracted, app);
+			evas_object_smart_callback_add(app->list, "moved",
+				_ui_list_moved, app);
+			evas_object_data_set(app->list, "app", app);
+			evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
+			evas_object_show(app->list);
 
-			elm_object_part_content_set(pane, "left", app->patcher);
-
-			_ui_refresh(app);
-		} // app->patcher
+			elm_object_part_content_set(pane, "right", app->list);
+		} // app->list
 	} // pane
 
 	return 0;
