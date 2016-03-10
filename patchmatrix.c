@@ -192,7 +192,8 @@ _db_init(app_t *app)
 			"selected BOOL,"
 			"uuid UNSIGNED BIG INT,"
 			"terminal BOOL,"
-			"physical BOOL);"
+			"physical BOOL,"
+			"position INTEGER);"
 			""
 		"CREATE TABLE Connections ("
 			"id INTEGER PRIMARY KEY,"
@@ -267,7 +268,7 @@ _db_init(app_t *app)
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)",
+		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, position, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)",
 		-1, &app->query_port_add, NULL);
 	(void)ret;
 
@@ -335,11 +336,11 @@ _db_init(app_t *app)
 			"AND Clients.selected=1 "
 			"AND Types.id=$1 "
 			"AND Directions.id=$2 "
-			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.short_name",
+			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.position, Ports.short_name",
 		-1, &app->query_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY type_id, short_name",
+		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY position, type_id, short_name",
 		-1, &app->query_client_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
@@ -685,6 +686,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	int direction_id = flags & JackPortIsInput ? 1 : 0;
 	int terminal_id = flags & JackPortIsTerminal ? 1 : 0;
 	int physical_id = flags & JackPortIsPhysical ? 1 : 0;
+	int position = 0;
 
 	char *value = NULL;
 	char *type = NULL;
@@ -718,6 +720,16 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 
 		value = NULL;
 		type = NULL;
+
+		jack_get_property(uuid, "http://jackaudio.org/metadata/order", &value, &type);
+		if(value)
+		{
+			position = atoi(value);
+			free(value);
+		}
+		if(type)
+				free(type);
+
 		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
 	}
 #endif
@@ -745,6 +757,8 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_bind_int(stmt, 8, terminal_id);
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 9, physical_id);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 10, position);
 	(void)ret;
 
 	ret = sqlite3_step(stmt);
