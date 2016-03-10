@@ -903,11 +903,12 @@ static void
 _mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 {
 	debugf("_mouse_down\n");
+	Evas_Event_Mouse_Down *ev = event_info;
 	patcher_t *priv = data;
 
 	if( (priv->ax != -1) && (priv->ay != -1) )
 	{
-		patcher_event_t ev [2] = {
+		const patcher_event_t evi [2] = {
 			{
 				.index = priv->ax,
 				.id = priv->data.cols[priv->ax]
@@ -919,24 +920,78 @@ _mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 		};
 
 		if(priv->matrix[priv->ax][priv->ay] & CONNECTED) // is on currently
-			evas_object_smart_callback_call(priv->self, PATCHER_DISCONNECT_REQUEST, (void *)ev);
+			evas_object_smart_callback_call(priv->self, PATCHER_DISCONNECT_REQUEST, (void *)evi);
 		else // is off currently
-			evas_object_smart_callback_call(priv->self, PATCHER_CONNECT_REQUEST, (void *)ev);
+			evas_object_smart_callback_call(priv->self, PATCHER_CONNECT_REQUEST, (void *)evi);
+	}
+	else if( (priv->ax != -1) && (priv->ay == -1) )
+	{
+		bool has_connections = false;
+		for(int j=0; j<priv->nrows; j++)
+		{
+			if(priv->matrix[priv->ax][j] & CONNECTED)
+			{
+				has_connections = true;
+				break;
+			}
+		}
+
+		for(int j=0; j<priv->nrows; j++)
+		{
+			const patcher_event_t evi [2] = {
+				{
+					.index = priv->ax,
+					.id = priv->data.cols[priv->ax]
+				},
+				{
+					.index = j,
+					.id = priv->data.rows[j]
+				}
+			};
+
+			if(has_connections && (priv->matrix[priv->ax][j] & CONNECTED) ) // is on currently
+				evas_object_smart_callback_call(priv->self, PATCHER_DISCONNECT_REQUEST, (void *)evi);
+			else if(!has_connections && !(priv->matrix[priv->ax][j] & CONNECTED) )
+				evas_object_smart_callback_call(priv->self, PATCHER_CONNECT_REQUEST, (void *)evi);
+		}
+	}
+	else if( (priv->ax == -1) && (priv->ay != -1) )
+	{
+		bool has_connections = false;
+		for(int i=0; i<priv->ncols; i++)
+		{
+			if(priv->matrix[i][priv->ay] & CONNECTED)
+			{
+				has_connections = true;
+				break;
+			}
+		}
+
+		for(int i=0; i<priv->ncols; i++)
+		{
+			const patcher_event_t evi [2] = {
+				{
+					.index = i,
+					.id = priv->data.cols[i]
+				},
+				{
+					.index = priv->ay,
+					.id = priv->data.rows[priv->ay]
+				}
+			};
+
+			if(has_connections && (priv->matrix[i][priv->ay] & CONNECTED) ) // is on currently
+				evas_object_smart_callback_call(priv->self, PATCHER_DISCONNECT_REQUEST, (void *)evi);
+			else if(!has_connections && !(priv->matrix[i][priv->ay] & CONNECTED) )
+				evas_object_smart_callback_call(priv->self, PATCHER_CONNECT_REQUEST, (void *)evi);
+		}
 	}
 }
 
 static Eina_Bool
-_mouse_move_raw(patcher_t *priv, Evas_Object *obj, int sx, int sy)
+_mouse_move_raw2(patcher_t *priv, int ax, int ay)
 {
-	debugf("_mouse_move_raw\n");
-	float fx, fy;
-	int ax, ay;
-
-	sx -= priv->x;
-	sy -= priv->y;
-
-	_screen_to_abs(priv, sx, sy, &fx, &fy);
-	_abs_to_rel(priv, fx, fy, &ax, &ay);
+	debugf("_mouse_move_raw2\n");
 
 	if( (ax != priv->ax) || (ay != priv->ay) )
 	{
@@ -1002,6 +1057,22 @@ _mouse_move_raw(patcher_t *priv, Evas_Object *obj, int sx, int sy)
 	return EINA_FALSE;
 }
 
+static Eina_Bool
+_mouse_move_raw(patcher_t *priv, int sx, int sy)
+{
+	debugf("_mouse_move_raw\n");
+	float fx, fy;
+	int ax, ay;
+
+	sx -= priv->x;
+	sy -= priv->y;
+
+	_screen_to_abs(priv, sx, sy, &fx, &fy);
+	_abs_to_rel(priv, fx, fy, &ax, &ay);
+
+	return _mouse_move_raw2(priv, ax, ay);
+}
+
 static void
 _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 {
@@ -1009,7 +1080,7 @@ _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	patcher_t *priv = data;
 	Evas_Event_Mouse_Move *ev = event_info;
 
-	if(_mouse_move_raw(priv, obj, ev->cur.output.x, ev->cur.output.y))
+	if(_mouse_move_raw(priv, ev->cur.output.x, ev->cur.output.y))
 		elm_glview_changed_set(obj); // refresh
 }
 
@@ -1027,9 +1098,9 @@ _mouse_wheel(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	if(!priv->active)
 		return;
 
-	_mouse_move_raw(priv, obj, 0, 0);
+	_mouse_move_raw(priv, 0, 0);
 	priv->needs_predraw = true;
-	_mouse_move_raw(priv, obj, ev->output.x, ev->output.y);
+	_mouse_move_raw(priv, ev->output.x, ev->output.y);
 	elm_glview_changed_set(obj); // refresh
 	_patcher_labels_move_resize(priv);
 }
@@ -1234,6 +1305,12 @@ patcher_object_connected_set(Evas_Object *o, intptr_t src_id,
 		
 	_patcher_object_connected_idx_set(o, src_idx, snk_idx, state);
 	_patcher_object_indirected_idx_set(o, src_idx, snk_idx, indirect);
+
+	int ax = priv->ax;
+	int ay = priv->ay;
+	_mouse_move_raw2(priv, -1, -1);
+	_mouse_move_raw2(priv, ax, ay);
+	elm_glview_changed_set(priv->glview); // refresh
 }
 
 void
@@ -1324,7 +1401,7 @@ patcher_object_realize(Evas_Object *o)
 	{
 		for(int snk_idx=0; snk_idx<priv->nrows; snk_idx++)
 		{
-			patcher_event_t ev [2] = {
+			patcher_event_t evi [2] = {
 				{
 					.index = src_idx,
 					.id = priv->data.cols[src_idx]
@@ -1335,7 +1412,7 @@ patcher_object_realize(Evas_Object *o)
 				}
 			};
 
-			evas_object_smart_callback_call(o, PATCHER_REALIZE_REQUEST, (void *)ev);
+			evas_object_smart_callback_call(o, PATCHER_REALIZE_REQUEST, (void *)evi);
 		}
 	}
 }
