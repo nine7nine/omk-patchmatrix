@@ -108,7 +108,6 @@ struct _app_t {
 	Elm_Object_Item *tool_osc;
 	Elm_Object_Item *tool_cv;
 #endif
-	Elm_Object_Item *tool_about;
 
 	// JACK
 	jack_client_t *client;
@@ -2102,21 +2101,49 @@ _toolbar_selected(void *data, Evas_Object *obj, void *event_info)
 		_ui_refresh(app);
 	}
 #endif
-	else if(itm == app->tool_about)
-	{
-		evas_object_show(app->popup);
-	}
 }
 
 static void
-_toolbar_unselected(void *data, Evas_Object *obj, void *event_info)
+_menu_close(void *data, Evas_Object *obj, void *event_info)
+{
+	elm_exit();
+}
+
+static void
+_menu_about(void *data, Evas_Object *obj, void *event_info)
 {
 	app_t *app = data;
-	Elm_Object_Item *itm = event_info;
 
-	if(itm == app->tool_about)
-	{
+	if(evas_object_visible_get(app->popup))
 		evas_object_hide(app->popup);
+	else
+		evas_object_show(app->popup);
+}
+
+static void
+_key_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
+{
+	app_t *app = data;
+	const Evas_Event_Key_Down *ev = event_info;
+
+	const Eina_Bool cntrl = evas_key_modifier_is_set(ev->modifiers, "Control");
+	
+	if(cntrl)
+	{
+		if(!strcmp(ev->key, "q"))
+			_menu_close(app, NULL, NULL);
+		else if(!strcmp(ev->key, "h"))
+			_menu_about(app, NULL, NULL);
+		else if(!strcmp(ev->key, "a"))
+			elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
+		else if(!strcmp(ev->key, "m"))
+			elm_toolbar_item_selected_set(app->tool_midi, EINA_TRUE);
+#ifdef JACK_HAS_METADATA_API
+		else if(!strcmp(ev->key, "o"))
+			elm_toolbar_item_selected_set(app->tool_osc, EINA_TRUE);
+		else if(!strcmp(ev->key, "c"))
+			elm_toolbar_item_selected_set(app->tool_cv, EINA_TRUE);
+#endif
 	}
 }
 
@@ -2187,6 +2214,40 @@ _ui_init(app_t *app)
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
 
+	evas_object_event_callback_add(app->win, EVAS_CALLBACK_KEY_DOWN, _key_down, app);
+
+	const Eina_Bool exclusive = EINA_FALSE;
+	const Evas_Modifier_Mask ctrl_mask = evas_key_modifier_mask_get(
+		evas_object_evas_get(app->win), "Control");
+	if(!evas_object_key_grab(app->win, "q", ctrl_mask, 0, exclusive)) // quit
+		fprintf(stderr, "could not grab 'q' key\n");
+	if(!evas_object_key_grab(app->win, "h", ctrl_mask, 0, exclusive)) // about
+		fprintf(stderr, "could not grab 'h' key\n");
+	if(!evas_object_key_grab(app->win, "a", ctrl_mask, 0, exclusive)) // AUDIO
+		fprintf(stderr, "could not grab 'a' key\n");
+	if(!evas_object_key_grab(app->win, "m", ctrl_mask, 0, exclusive)) // MIDI
+		fprintf(stderr, "could not grab 'm' key\n");
+#ifdef JACK_HAS_METADATA_API
+	if(!evas_object_key_grab(app->win, "o", ctrl_mask, 0, exclusive)) // OSC
+		fprintf(stderr, "could not grab 'o' key\n");
+	if(!evas_object_key_grab(app->win, "c", ctrl_mask, 0, exclusive)) // CV
+		fprintf(stderr, "could not grab 'c' key\n");
+#endif
+
+	Evas_Object *mainmenu = elm_win_main_menu_get(app->win);
+	if(mainmenu)
+	{
+		evas_object_show(mainmenu);
+
+		Elm_Object_Item *elmnt;
+
+		elmnt = elm_menu_item_add(mainmenu, NULL, "application-exit", "Quit", _menu_close, app);
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl+Q");
+
+		elmnt = elm_menu_item_add(mainmenu, NULL, "help-about", "About", _menu_about, app);
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl+H");
+	}
+
 	app->popup = elm_popup_add(app->win);
 	if(app->popup)
 	{
@@ -2218,7 +2279,7 @@ _ui_init(app_t *app)
 			{
 				elm_object_text_set(label2,
 					"<color=#b00 shadow_color=#fff font_size=20>"
-					"PatchMatrix - JACK Matrix Patchbay"
+					"PatchMatrix - a JACK Patchbay"
 					"</color></br><align=left>"
 					"Version "PATCHMATRIX_VERSION"</br></br>"
 					"Copyright (c) 2015 Hanspeter Portner</br></br>"
@@ -2286,8 +2347,6 @@ _ui_init(app_t *app)
 				elm_toolbar_select_mode_set(app->tools, ELM_OBJECT_SELECT_MODE_ALWAYS);
 				evas_object_smart_callback_add(app->tools, "selected",
 					_toolbar_selected, app);
-				evas_object_smart_callback_add(app->tools, "unselected",
-					_toolbar_unselected, app);
 				evas_object_size_hint_weight_set(app->tools, 0.f, EVAS_HINT_EXPAND);
 				evas_object_size_hint_align_set(app->tools, 0.f, EVAS_HINT_FILL);
 				evas_object_show(app->tools);
@@ -2295,16 +2354,21 @@ _ui_init(app_t *app)
 				app->tool_audio = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
 				elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
+				elm_object_item_tooltip_text_set(app->tool_audio, "Ctrl+A");
+
 				app->tool_midi = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
+				elm_object_item_tooltip_text_set(app->tool_midi, "Ctrl+M");
+
 #ifdef JACK_HAS_METADATA_API
 				app->tool_osc = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
+				elm_object_item_tooltip_text_set(app->tool_osc, "Ctrl+O");
+
 				app->tool_cv = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
+				elm_object_item_tooltip_text_set(app->tool_cv, "Ctrl+C");
 #endif
-				app->tool_about = elm_toolbar_item_append(app->tools,
-					"help-about", "About", NULL, NULL);
 
 				elm_box_pack_end(hbox, app->tools);
 			} // app->tools

@@ -110,20 +110,17 @@ struct _patcher_t {
 	int w, h;
 	int W, H;
 	float scale;
-	int ncols;
-	int nrows;
-	float span;
-	float span1;
-	float span2;
-	float x0;
-	float y0;
-	int ax;
-	int ay;
+	int ncols, nrows;
+	float span, span1, span2;
+	float x0, y0;
+	int ax, ay;
+	int sx, sy;
 
 	uint8_t **matrix;
 	Evas_Object **cols;
 	Evas_Object **rows;
 	bool needs_predraw;
+	bool realizing;
 };
 
 static Evas_Object *parent = NULL;
@@ -978,6 +975,9 @@ _mouse_in(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	patcher_t *priv = data;
 	Evas_Event_Mouse_In *ev = event_info;
 
+	priv->sx = ev->output.x;
+	priv->sy = ev->output.y;
+
 	if(_mouse_move_raw(priv, ev->output.x, ev->output.y))
 		elm_glview_changed_set(obj); // refresh
 }
@@ -990,6 +990,8 @@ _mouse_out(void *data, Evas *e, Evas_Object *obj, void *event_info)
 
 	priv->ax = -1;
 	priv->ay = -1;
+	priv->sx = 0;
+	priv->sy = 0;
 
 	_clear_lines(priv);
 	elm_glview_changed_set(obj); // refresh
@@ -1091,7 +1093,10 @@ _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	patcher_t *priv = data;
 	Evas_Event_Mouse_Move *ev = event_info;
 
-	if(_mouse_move_raw(priv, ev->cur.output.x, ev->cur.output.y))
+	priv->sx = ev->cur.output.x;
+	priv->sy = ev->cur.output.y;
+
+	if(_mouse_move_raw(priv, priv->sx, priv->sy))
 		elm_glview_changed_set(obj); // refresh
 }
 
@@ -1136,6 +1141,8 @@ _patcher_smart_add(Evas_Object *o)
 	priv->rows = NULL;
 	priv->ax = -1;
 	priv->ay = -1;
+	priv->sx = 0;
+	priv->sy = 0;
 
 	// create a new glview object
 	priv->glview = priv->parent ? elm_glview_add(priv->parent) : NULL;
@@ -1318,11 +1325,14 @@ patcher_object_connected_set(Evas_Object *o, intptr_t src_id,
 	_patcher_object_connected_idx_set(o, src_idx, snk_idx, state);
 	_patcher_object_indirected_idx_set(o, src_idx, snk_idx, indirect);
 
-	int ax = priv->ax;
-	int ay = priv->ay;
-	_mouse_move_raw2(priv, -1, -1);
-	_mouse_move_raw2(priv, ax, ay);
-	elm_glview_changed_set(priv->glview); // refresh
+	if(!priv->realizing)
+	{
+		int ax = priv->ax;
+		int ay = priv->ay;
+		_mouse_move_raw2(priv, -1, -1);
+		_mouse_move_raw2(priv, ax, ay);
+		elm_glview_changed_set(priv->glview); // refresh
+	}
 }
 
 void
@@ -1409,6 +1419,8 @@ patcher_object_realize(Evas_Object *o)
 	debugf("patcher_object_realize\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
+	priv->realizing = true;
+
 	for(int src_idx=0; src_idx<priv->ncols; src_idx++)
 	{
 		for(int snk_idx=0; snk_idx<priv->nrows; snk_idx++)
@@ -1427,4 +1439,10 @@ patcher_object_realize(Evas_Object *o)
 			evas_object_smart_callback_call(o, PATCHER_REALIZE_REQUEST, (void *)evi);
 		}
 	}
+
+	priv->realizing = false;
+
+	_mouse_move_raw(priv, 0, 0);
+	_mouse_move_raw(priv, priv->sx, priv->sy);
+	elm_glview_changed_set(priv->glview); // refresh
 }
