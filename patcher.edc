@@ -110,9 +110,8 @@ group {
 			scale: 1;
 			description {
 				state: "default" 0.0;
-				rel1.to: "col";
-				rel1.relative: 1.0 0;
-				rel1.offset: 5 0;
+				rel1.relative: 0.0 0;
+				rel1.offset: 29 0;
 				rel2.relative: 0.5 1;
 				text {
 					font: "default";
@@ -124,10 +123,9 @@ group {
 			}
 			description {
 				state: "default" 1.0;
-				rel1.relative: 0.0 0;
-				rel2.to: "col";
-				rel2.relative: 0.0 1;
-				rel2.offset: -5 0;
+				rel1.relative: 0.5 0;
+				rel2.relative: 1.0 1;
+				rel2.offset: -29 0;
 				text {
 					font: "default";
 					size: 10;

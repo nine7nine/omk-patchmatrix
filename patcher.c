@@ -318,7 +318,7 @@ _patcher_labels_move_resize(patcher_t *priv)
 	sspan = sy;
 	_rel_to_abs(priv, 0, 0, &fx, &fy);
 	_abs_to_screen(priv, fx, fy, &sx, &sy);
-	sspan -= sy;
+	sspan -= sy + 1;
 
 	for(int i=0; i<priv->ncols; i++)
 	{
