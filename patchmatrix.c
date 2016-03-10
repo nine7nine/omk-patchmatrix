@@ -2436,6 +2436,11 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
+	if(app->patcher)
+		evas_object_del(app->patcher);
+	if(app->win)
+		evas_object_del(app->win);
+
 	if(app->clientitc)
 		elm_genlist_item_class_free(app->clientitc);
 	if(app->sourceitc)
@@ -2446,9 +2451,6 @@ _ui_deinit(app_t *app)
 		elm_genlist_item_class_free(app->sepitc);
 	if(app->portitc)
 		elm_genlist_item_class_free(app->portitc);
-
-	if(app->win)
-		evas_object_del(app->win);
 }
 
 static void

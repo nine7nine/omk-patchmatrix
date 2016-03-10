@@ -32,7 +32,7 @@
 #define NUM_VERTS 2
 
 #if 0
-# define debugf printf
+# define debugf(...) fprintf(stderr, __VA_ARGS__)
 #else
 # define debugf(...) {}
 #endif
@@ -487,7 +487,6 @@ _del_gl(Evas_Object *obj)
 	gl->glDeleteBuffers(1, &priv->vlines);
 	
 	evas_object_data_del(obj, "priv");
-	debugf("done\n");
 }
 
 // resize callback gets called every time object is resized
@@ -806,7 +805,7 @@ _patcher_smart_init(Evas_Object *o)
 }
 
 static void
-_patcher_smart_deinit(Evas_Object *o)
+_patcher_smart_deinit(Evas_Object *o, bool object_del)
 {
 	debugf("_patcher_smart_deinit\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
@@ -823,8 +822,11 @@ _patcher_smart_deinit(Evas_Object *o)
 		{
 			for(int i=0; i<priv->ncols; i++)
 			{
-				evas_object_smart_member_del(priv->cols[i]);
-				evas_object_del(priv->cols[i]);
+				if(object_del)
+				{
+					evas_object_smart_member_del(priv->cols[i]);
+					evas_object_del(priv->cols[i]);
+				}
 				priv->cols[i] = NULL;
 			}
 			free(priv->cols);
@@ -854,8 +856,11 @@ _patcher_smart_deinit(Evas_Object *o)
 		{
 			for(int j=0; j<priv->nrows; j++)
 			{
-				evas_object_smart_member_del(priv->rows[j]);
-				evas_object_del(priv->rows[j]);
+				if(object_del)
+				{
+					evas_object_smart_member_del(priv->rows[j]);
+					evas_object_del(priv->rows[j]);
+				}
 				priv->rows[j] = NULL;
 			}
 			free(priv->rows);
@@ -981,7 +986,7 @@ _mouse_in(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	priv->sy = ev->output.y;
 
 	if(_mouse_move_raw(priv, ev->output.x, ev->output.y))
-		elm_glview_changed_set(obj); // refresh
+		elm_glview_changed_set(priv->glview); // refresh
 }
 
 static void
@@ -996,7 +1001,7 @@ _mouse_out(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	priv->sy = 0;
 
 	_clear_lines(priv);
-	elm_glview_changed_set(obj); // refresh
+	elm_glview_changed_set(priv->glview); // refresh
 }
 
 static void
@@ -1099,7 +1104,7 @@ _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	priv->sy = ev->cur.output.y;
 
 	if(_mouse_move_raw(priv, priv->sx, priv->sy))
-		elm_glview_changed_set(obj); // refresh
+		elm_glview_changed_set(priv->glview); // refresh
 }
 
 static void
@@ -1183,11 +1188,11 @@ _patcher_smart_add(Evas_Object *o)
 		evas_object_size_hint_align_set(priv->glview, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		evas_object_size_hint_weight_set(priv->glview, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 
-		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_IN, _mouse_in, priv);
-		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_OUT, _mouse_out, priv);
-		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_DOWN, _mouse_down, priv);
-		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_MOVE, _mouse_move, priv);
-		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_WHEEL, _mouse_wheel, priv);
+		evas_object_event_callback_add(o, EVAS_CALLBACK_MOUSE_IN, _mouse_in, priv);
+		evas_object_event_callback_add(o, EVAS_CALLBACK_MOUSE_OUT, _mouse_out, priv);
+		evas_object_event_callback_add(o, EVAS_CALLBACK_MOUSE_DOWN, _mouse_down, priv);
+		evas_object_event_callback_add(o, EVAS_CALLBACK_MOUSE_MOVE, _mouse_move, priv);
+		evas_object_event_callback_add(o, EVAS_CALLBACK_MOUSE_WHEEL, _mouse_wheel, priv);
 
 		evas_object_data_set(priv->glview, "priv", priv);
 		elm_glview_mode_set(priv->glview, ELM_GLVIEW_DIRECT);
@@ -1212,14 +1217,13 @@ _patcher_smart_del(Evas_Object *o)
 	debugf("_patcher_smart_del\n");
 	patcher_t *priv = evas_object_smart_data_get(o);
 
-	_patcher_smart_deinit(o);
+	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_IN, _mouse_in);
+	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_OUT, _mouse_out );
+	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_DOWN, _mouse_down);
+	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_MOVE, _mouse_move);
+	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_WHEEL, _mouse_wheel);
 
-	if(priv->glview)
-	{
-		evas_object_smart_member_del(priv->glview);
-		evas_object_del(priv->glview);
-		priv->glview = NULL;
-	}
+	_patcher_smart_deinit(o, false);
 
 	_patcher_parent_sc->del(o);
 }
@@ -1293,7 +1297,7 @@ patcher_object_dimension_set(Evas_Object *o, int sources, int sinks)
 	if( (priv->ncols == sources) && (priv->nrows == sinks) )
 		return;
 
-	_patcher_smart_deinit(o);
+	_patcher_smart_deinit(o, true);
 
 	priv->ncols = sources;
 	priv->nrows = sinks;
