@@ -2104,6 +2104,22 @@ _toolbar_selected(void *data, Evas_Object *obj, void *event_info)
 }
 
 static void
+_menu_zoom_in(void *data, Evas_Object *obj, void *event_info)
+{
+	app_t *app = data;
+
+	patcher_object_zoom_in(app->patcher);
+}
+
+static void
+_menu_zoom_out(void *data, Evas_Object *obj, void *event_info)
+{
+	app_t *app = data;
+
+	patcher_object_zoom_out(app->patcher);
+}
+
+static void
 _menu_close(void *data, Evas_Object *obj, void *event_info)
 {
 	elm_exit();
@@ -2130,7 +2146,11 @@ _key_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	
 	if(cntrl)
 	{
-		if(!strcmp(ev->key, "q"))
+		if(!strcmp(ev->key, "KP_Add"))
+			_menu_zoom_in(app, NULL, NULL);
+		else if(!strcmp(ev->key, "KP_Subtract"))
+			_menu_zoom_out(app, NULL, NULL);
+		else if(!strcmp(ev->key, "q"))
 			_menu_close(app, NULL, NULL);
 		else if(!strcmp(ev->key, "h"))
 			_menu_about(app, NULL, NULL);
@@ -2219,6 +2239,10 @@ _ui_init(app_t *app)
 	const Eina_Bool exclusive = EINA_FALSE;
 	const Evas_Modifier_Mask ctrl_mask = evas_key_modifier_mask_get(
 		evas_object_evas_get(app->win), "Control");
+	if(!evas_object_key_grab(app->win, "KP_Add", 0, ctrl_mask, exclusive)) // zoom in
+		fprintf(stderr, "could not grab '+' key\n");
+	if(!evas_object_key_grab(app->win, "KP_Subtract", 0, ctrl_mask, exclusive)) // zoom out
+		fprintf(stderr, "could not grab '-' key\n");
 	if(!evas_object_key_grab(app->win, "q", ctrl_mask, 0, exclusive)) // quit
 		fprintf(stderr, "could not grab 'q' key\n");
 	if(!evas_object_key_grab(app->win, "h", ctrl_mask, 0, exclusive)) // about
@@ -2241,11 +2265,17 @@ _ui_init(app_t *app)
 
 		Elm_Object_Item *elmnt;
 
+		elmnt = elm_menu_item_add(mainmenu, NULL, "zoom-in", "Zoom In", _menu_zoom_in, app);
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl + '+'");
+
+		elmnt = elm_menu_item_add(mainmenu, NULL, "zoom-out", "Zoom Out", _menu_zoom_out, app);
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl + '-'");
+
 		elmnt = elm_menu_item_add(mainmenu, NULL, "application-exit", "Quit", _menu_close, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl+Q");
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl + 'Q'");
 
 		elmnt = elm_menu_item_add(mainmenu, NULL, "help-about", "About", _menu_about, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl+H");
+		elm_object_item_tooltip_text_set(elmnt, "Ctrl + 'H'");
 	}
 
 	app->popup = elm_popup_add(app->win);
@@ -2354,20 +2384,20 @@ _ui_init(app_t *app)
 				app->tool_audio = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
 				elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
-				elm_object_item_tooltip_text_set(app->tool_audio, "Ctrl+A");
+				elm_object_item_tooltip_text_set(app->tool_audio, "Ctrl + 'A'");
 
 				app->tool_midi = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_midi, "Ctrl+M");
+				elm_object_item_tooltip_text_set(app->tool_midi, "Ctrl + 'M'");
 
 #ifdef JACK_HAS_METADATA_API
 				app->tool_osc = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_osc, "Ctrl+O");
+				elm_object_item_tooltip_text_set(app->tool_osc, "Ctrl + 'O'");
 
 				app->tool_cv = elm_toolbar_item_append(app->tools,
 					PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_cv, "Ctrl+C");
+				elm_object_item_tooltip_text_set(app->tool_cv, "Ctrl + 'C'");
 #endif
 
 				elm_box_pack_end(hbox, app->tools);

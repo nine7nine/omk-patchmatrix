@@ -1101,24 +1101,51 @@ _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 }
 
 static void
+_zoom(patcher_t *priv)
+{
+	if(!priv->active)
+		return;
+
+	_mouse_move_raw(priv, 0, 0);
+	priv->needs_predraw = true;
+	_mouse_move_raw(priv, priv->sx, priv->sy);
+	elm_glview_changed_set(priv->glview); // refresh
+	_patcher_labels_move_resize(priv);
+}
+
+static void
+_zoom_in(patcher_t *priv)
+{
+	priv->scale += 0.05;
+
+	_zoom(priv);
+}
+
+static void
+_zoom_out(patcher_t *priv)
+{
+	priv->scale -= 0.05;
+
+	if(priv->scale < 0.05)
+		priv->scale = 0.05;
+
+	_zoom(priv);
+}
+
+static void
 _mouse_wheel(void *data, Evas *e, Evas_Object *obj, void *event_info)
 {
 	debugf("_mouse_wheel\n");
 	patcher_t *priv = data;
 	Evas_Event_Mouse_Wheel *ev = event_info;
 
-	priv->scale -= ev->z > 0 ? 0.05 : -0.05;
-	if(priv->scale < 0.1)
-		priv->scale = 0.1;
+	priv->sx = ev->output.x;
+	priv->sy = ev->output.y;
 
-	if(!priv->active)
-		return;
-
-	_mouse_move_raw(priv, 0, 0);
-	priv->needs_predraw = true;
-	_mouse_move_raw(priv, ev->output.x, ev->output.y);
-	elm_glview_changed_set(obj); // refresh
-	_patcher_labels_move_resize(priv);
+	if(ev->z < 0)
+		_zoom_in(priv);
+	else
+		_zoom_out(priv);
 }
 
 static void
@@ -1445,4 +1472,22 @@ patcher_object_realize(Evas_Object *o)
 	_mouse_move_raw(priv, 0, 0);
 	_mouse_move_raw(priv, priv->sx, priv->sy);
 	elm_glview_changed_set(priv->glview); // refresh
+}
+
+void
+patcher_object_zoom_in(Evas_Object *o)
+{
+	debugf("patcher_object_zoom_in\n");
+	patcher_t *priv = evas_object_smart_data_get(o);
+
+	_zoom_in(priv);
+}
+
+void
+patcher_object_zoom_out(Evas_Object *o)
+{
+	debugf("patcher_object_zoom_out\n");
+	patcher_t *priv = evas_object_smart_data_get(o);
+
+	_zoom_out(priv);
 }

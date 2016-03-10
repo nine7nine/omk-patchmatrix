@@ -66,4 +66,10 @@ patcher_object_sink_group_set(Evas_Object *o, int sink, const char *group);
 void
 patcher_object_realize(Evas_Object *o);
 
+void
+patcher_object_zoom_in(Evas_Object *o);
+
+void
+patcher_object_zoom_out(Evas_Object *o);
+
 #endif // _SYNTHPOD_PATCHER_H
