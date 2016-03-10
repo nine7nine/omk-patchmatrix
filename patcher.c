@@ -776,7 +776,7 @@ _patcher_smart_init(Evas_Object *o)
 				edje_object_signal_emit(lbl, "source", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
-				//evas_object_smart_member_add(lbl, o);
+				evas_object_smart_member_add(lbl, priv->glview);
 			}
 		}
 	}
@@ -795,7 +795,7 @@ _patcher_smart_init(Evas_Object *o)
 				edje_object_signal_emit(lbl, "sink", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
-				//evas_object_smart_member_add(lbl, o);
+				evas_object_smart_member_add(lbl, priv->glview);
 			}
 		}
 	}
@@ -825,6 +825,7 @@ _patcher_smart_deinit(Evas_Object *o)
 			{
 				evas_object_smart_member_del(priv->cols[i]);
 				evas_object_del(priv->cols[i]);
+				priv->cols[i] = NULL;
 			}
 			free(priv->cols);
 			priv->cols = NULL;
@@ -855,6 +856,7 @@ _patcher_smart_deinit(Evas_Object *o)
 			{
 				evas_object_smart_member_del(priv->rows[j]);
 				evas_object_del(priv->rows[j]);
+				priv->rows[j] = NULL;
 			}
 			free(priv->rows);
 			priv->rows = NULL;
@@ -1216,6 +1218,7 @@ _patcher_smart_del(Evas_Object *o)
 	{
 		evas_object_smart_member_del(priv->glview);
 		evas_object_del(priv->glview);
+		priv->glview = NULL;
 	}
 
 	_patcher_parent_sc->del(o);

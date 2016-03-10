@@ -2278,55 +2278,6 @@ _ui_init(app_t *app)
 		elm_object_item_tooltip_text_set(elmnt, "Ctrl + 'H'");
 	}
 
-	app->popup = elm_popup_add(app->win);
-	if(app->popup)
-	{
-		elm_popup_allow_events_set(app->popup, EINA_TRUE);
-		elm_popup_timeout_set(app->popup, 0.f);
-
-		Evas_Object *hbox = elm_box_add(app->popup);
-		if(hbox)
-		{
-			elm_box_horizontal_set(hbox, EINA_TRUE);
-			elm_box_homogeneous_set(hbox, EINA_FALSE);
-			elm_box_padding_set(hbox, 10, 10);
-			evas_object_show(hbox);
-			elm_object_content_set(app->popup, hbox);
-
-			Evas_Object *icon = elm_icon_add(hbox);
-			if(icon)
-			{
-				elm_image_file_set(icon, PATCHMATRIX_DATA_DIR"/omk_logo_256x256.png", NULL);
-				evas_object_size_hint_min_set(icon, 128, 128);
-				evas_object_size_hint_max_set(icon, 256, 256);
-				evas_object_size_hint_aspect_set(icon, EVAS_ASPECT_CONTROL_BOTH, 1, 1);
-				evas_object_show(icon);
-				elm_box_pack_end(hbox, icon);
-			}
-
-			Evas_Object *label2 = elm_label_add(hbox);
-			if(label2)
-			{
-				elm_object_text_set(label2,
-					"<color=#b00 shadow_color=#fff font_size=20>"
-					"PatchMatrix - a JACK Patchbay"
-					"</color></br><align=left>"
-					"Version "PATCHMATRIX_VERSION"</br></br>"
-					"Copyright (c) 2015 Hanspeter Portner</br></br>"
-					"This is free and libre software</br>"
-					"Released under Artistic License 2.0</br>"
-					"By Open Music Kontrollers</br></br>"
-					"<color=#bbb>"
-					"https://github.com/OpenMusicKontrollers/patchmatrix</br>"
-					"dev@open-music-kontrollers.ch"
-					"</color></align>");
-
-				evas_object_show(label2);
-				elm_box_pack_end(hbox, label2);
-			}
-		}
-	}
-
 	Evas_Object *pane = elm_panes_add(app->win);
 	if(pane)
 	{
@@ -2428,6 +2379,56 @@ _ui_init(app_t *app)
 			elm_object_part_content_set(pane, "right", app->list);
 		} // app->list
 	} // pane
+
+	app->popup = elm_popup_add(app->win);
+	if(app->popup)
+	{
+		elm_popup_allow_events_set(app->popup, EINA_TRUE);
+		elm_popup_timeout_set(app->popup, 0.f);
+
+		Evas_Object *hbox = elm_box_add(app->popup);
+		if(hbox)
+		{
+			elm_box_horizontal_set(hbox, EINA_TRUE);
+			elm_box_homogeneous_set(hbox, EINA_FALSE);
+			elm_box_padding_set(hbox, 10, 10);
+			evas_object_show(hbox);
+			elm_object_content_set(app->popup, hbox);
+
+			Evas_Object *icon = elm_icon_add(hbox);
+			if(icon)
+			{
+				elm_image_file_set(icon, PATCHMATRIX_DATA_DIR"/omk_logo_256x256.png", NULL);
+				evas_object_size_hint_min_set(icon, 128, 128);
+				evas_object_size_hint_max_set(icon, 256, 256);
+				evas_object_size_hint_aspect_set(icon, EVAS_ASPECT_CONTROL_BOTH, 1, 1);
+				evas_object_show(icon);
+				elm_box_pack_end(hbox, icon);
+			}
+
+			Evas_Object *label2 = elm_label_add(hbox);
+			if(label2)
+			{
+				elm_object_text_set(label2,
+					"<color=#b00 shadow_color=#fff font_size=20>"
+					"PatchMatrix - a JACK Patchbay"
+					"</color></br><align=left>"
+					"Version "PATCHMATRIX_VERSION"</br></br>"
+					"Copyright (c) 2015 Hanspeter Portner</br></br>"
+					"This is free and libre software</br>"
+					"Released under Artistic License 2.0</br>"
+					"By Open Music Kontrollers</br></br>"
+					"<color=#bbb>"
+					"https://github.com/OpenMusicKontrollers/patchmatrix</br>"
+					"dev@open-music-kontrollers.ch"
+					"</color></align>");
+
+				evas_object_show(label2);
+				elm_box_pack_end(hbox, label2);
+			}
+		}
+	}
+
 
 	return 0;
 }
