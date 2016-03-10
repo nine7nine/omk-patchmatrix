@@ -886,6 +886,102 @@ _clear_lines(patcher_t *priv)
 		edje_object_signal_emit(priv->rows[j], "off", PATCHER_UI);
 }
 
+static Eina_Bool
+_mouse_move_raw2(patcher_t *priv, int ax, int ay)
+{
+	debugf("_mouse_move_raw2\n");
+
+	if( (ax != priv->ax) || (ay != priv->ay) )
+	{
+		_clear_lines(priv);
+
+		if( (ax != -1) && (ay != -1) ) // hover over matrix node
+		{
+			priv->matrix[ax][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
+			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
+
+			for(int i=ax+1; i<priv->ncols; i++)
+				priv->matrix[i][ay] |= HORIZONTAL;
+
+			for(int j=ay+1; j<priv->nrows; j++)
+				priv->matrix[ax][j] |= VERTICAL;
+		}
+		else if( (ax != -1) && (ay == -1) ) // hover over matrix source
+		{
+			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
+
+			for(int j=0; j<priv->nrows; j++)
+			{
+				if(priv->matrix[ax][j] & CONNECTED)
+				{
+					priv->matrix[ax][j] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+					edje_object_signal_emit(priv->rows[j], "on", PATCHER_UI);
+
+					for(int i=ax+1; i<priv->ncols; i++)
+						priv->matrix[i][j] |= HORIZONTAL;
+
+					for(int i=j+1; i<priv->nrows; i++)
+						priv->matrix[ax][i] |= VERTICAL;
+				}
+			}
+		}
+		else if( (ax == -1) && (ay != -1) ) // hover over matrix sink
+		{
+			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
+
+			for(int i=0; i<priv->ncols; i++)
+			{
+				if(priv->matrix[i][ay] & CONNECTED)
+				{
+					priv->matrix[i][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
+					edje_object_signal_emit(priv->cols[i], "on", PATCHER_UI);
+
+					for(int j=i+1; j<priv->ncols; j++)
+						priv->matrix[j][ay] |= HORIZONTAL;
+
+					for(int j=ay+1; j<priv->nrows; j++)
+						priv->matrix[i][j] |= VERTICAL;
+				}
+			}
+		}
+
+		priv->ax = ax;
+		priv->ay = ay;
+
+		return EINA_TRUE;
+	}
+
+	return EINA_FALSE;
+}
+
+static Eina_Bool
+_mouse_move_raw(patcher_t *priv, int sx, int sy)
+{
+	debugf("_mouse_move_raw\n");
+	float fx, fy;
+	int ax, ay;
+
+	sx -= priv->x;
+	sy -= priv->y;
+
+	_screen_to_abs(priv, sx, sy, &fx, &fy);
+	_abs_to_rel(priv, fx, fy, &ax, &ay);
+
+	return _mouse_move_raw2(priv, ax, ay);
+}
+
+static void
+_mouse_in(void *data, Evas *e, Evas_Object *obj, void *event_info)
+{
+	debugf("_mouse_in\n");
+	patcher_t *priv = data;
+	Evas_Event_Mouse_In *ev = event_info;
+
+	if(_mouse_move_raw(priv, ev->output.x, ev->output.y))
+		elm_glview_changed_set(obj); // refresh
+}
+
 static void
 _mouse_out(void *data, Evas *e, Evas_Object *obj, void *event_info)
 {
@@ -988,91 +1084,6 @@ _mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	}
 }
 
-static Eina_Bool
-_mouse_move_raw2(patcher_t *priv, int ax, int ay)
-{
-	debugf("_mouse_move_raw2\n");
-
-	if( (ax != priv->ax) || (ay != priv->ay) )
-	{
-		_clear_lines(priv);
-
-		if( (ax != -1) && (ay != -1) ) // hover over matrix node
-		{
-			priv->matrix[ax][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
-			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
-			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
-
-			for(int i=ax+1; i<priv->ncols; i++)
-				priv->matrix[i][ay] |= HORIZONTAL;
-
-			for(int j=ay+1; j<priv->nrows; j++)
-				priv->matrix[ax][j] |= VERTICAL;
-		}
-		else if( (ax != -1) && (ay == -1) ) // hover over matrix source
-		{
-			edje_object_signal_emit(priv->cols[ax], "on", PATCHER_UI);
-
-			for(int j=0; j<priv->nrows; j++)
-			{
-				if(priv->matrix[ax][j] & CONNECTED)
-				{
-					priv->matrix[ax][j] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
-					edje_object_signal_emit(priv->rows[j], "on", PATCHER_UI);
-
-					for(int i=ax+1; i<priv->ncols; i++)
-						priv->matrix[i][j] |= HORIZONTAL;
-
-					for(int i=j+1; i<priv->nrows; i++)
-						priv->matrix[ax][i] |= VERTICAL;
-				}
-			}
-		}
-		else if( (ax == -1) && (ay != -1) ) // hover over matrix sink
-		{
-			edje_object_signal_emit(priv->rows[ay], "on", PATCHER_UI);
-
-			for(int i=0; i<priv->ncols; i++)
-			{
-				if(priv->matrix[i][ay] & CONNECTED)
-				{
-					priv->matrix[i][ay] |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOX;
-					edje_object_signal_emit(priv->cols[i], "on", PATCHER_UI);
-
-					for(int j=i+1; j<priv->ncols; j++)
-						priv->matrix[j][ay] |= HORIZONTAL;
-
-					for(int j=ay+1; j<priv->nrows; j++)
-						priv->matrix[i][j] |= VERTICAL;
-				}
-			}
-		}
-
-		priv->ax = ax;
-		priv->ay = ay;
-
-		return EINA_TRUE;
-	}
-
-	return EINA_FALSE;
-}
-
-static Eina_Bool
-_mouse_move_raw(patcher_t *priv, int sx, int sy)
-{
-	debugf("_mouse_move_raw\n");
-	float fx, fy;
-	int ax, ay;
-
-	sx -= priv->x;
-	sy -= priv->y;
-
-	_screen_to_abs(priv, sx, sy, &fx, &fy);
-	_abs_to_rel(priv, fx, fy, &ax, &ay);
-
-	return _mouse_move_raw2(priv, ax, ay);
-}
-
 static void
 _mouse_move(void *data, Evas *e, Evas_Object *obj, void *event_info)
 {
@@ -1136,6 +1147,7 @@ _patcher_smart_add(Evas_Object *o)
 		evas_object_size_hint_align_set(priv->glview, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		evas_object_size_hint_weight_set(priv->glview, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 
+		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_IN, _mouse_in, priv);
 		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_OUT, _mouse_out, priv);
 		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_DOWN, _mouse_down, priv);
 		evas_object_event_callback_add(priv->glview, EVAS_CALLBACK_MOUSE_MOVE, _mouse_move, priv);
