@@ -20,7 +20,7 @@
 
 #include <Evas.h>
 
-#define PATCHER_UI "/patchmatrix/patcher/ui"
+#define PATCHER_UI "/patcher/ui"
 
 typedef struct _patcher_event_t patcher_event_t;
 

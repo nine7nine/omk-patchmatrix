@@ -768,7 +768,7 @@ _patcher_smart_init(Evas_Object *o)
 				priv->cols[i] = lbl;
 
 				edje_object_file_set(lbl, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-					"/patchmatrix/patcher/port");
+					"/patcher/port");
 				edje_object_signal_emit(lbl, "source", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
@@ -787,7 +787,7 @@ _patcher_smart_init(Evas_Object *o)
 				priv->rows[j] = lbl;
 
 				edje_object_file_set(lbl, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-					"/patchmatrix/patcher/port");
+					"/patcher/port");
 				edje_object_signal_emit(lbl, "sink", PATCHER_UI);
 				evas_object_pass_events_set(lbl, EINA_TRUE);
 				evas_object_show(lbl);
