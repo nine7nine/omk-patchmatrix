@@ -2300,7 +2300,7 @@ _ui_init(app_t *app)
 
 			elm_object_part_content_set(pane, "left", hbox);
 
-			app->patcher = patcher_object_add(hbox);
+			app->patcher = patcher_object_add(app->win);
 			if(app->patcher)
 			{
 				evas_object_data_set(app->patcher, "app", app);

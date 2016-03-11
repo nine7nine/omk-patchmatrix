@@ -28,7 +28,6 @@
 #define PATCHER_DISCONNECT_REQUEST "disconnect,request"
 #define PATCHER_REALIZE_REQUEST "realize,request"
 
-#define LEN 8
 #define NUM_VERTS 2
 
 #if 0
@@ -477,7 +476,7 @@ _del_gl(Evas_Object *obj)
 	debugf("_del_gl\n");
 	patcher_t *priv = evas_object_data_get(obj, "priv");
 	Evas_GL_API *gl = priv->glapi;
-	
+
 	gl->glDeleteShader(priv->vtx_shader);
 	gl->glDeleteShader(priv->fgmt_shader);
 	gl->glDeleteProgram(priv->program);
@@ -485,8 +484,6 @@ _del_gl(Evas_Object *obj)
 	gl->glDeleteBuffers(1, &priv->vtriangs);
 	gl->glDeleteBuffers(1, &priv->vconns);
 	gl->glDeleteBuffers(1, &priv->vlines);
-	
-	evas_object_data_del(obj, "priv");
 }
 
 // resize callback gets called every time object is resized
@@ -1160,10 +1157,10 @@ _patcher_smart_add(Evas_Object *o)
 {
 	debugf("_patcher_smart_add\n");
 	EVAS_SMART_DATA_ALLOC(o, patcher_t);
-	memset(priv, 0x0, sizeof(patcher_t));
 
 	_patcher_parent_sc->add(o);
 
+	memset(priv, 0x0, sizeof(patcher_t));
 	priv->self = o;
 	priv->parent = parent;
 	priv->scale = 0.5;
@@ -1215,7 +1212,6 @@ static void
 _patcher_smart_del(Evas_Object *o)
 {
 	debugf("_patcher_smart_del\n");
-	patcher_t *priv = evas_object_smart_data_get(o);
 
 	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_IN, _mouse_in);
 	evas_object_event_callback_del(o, EVAS_CALLBACK_MOUSE_OUT, _mouse_out );

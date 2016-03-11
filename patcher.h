@@ -30,7 +30,7 @@ struct _patcher_event_t {
 };
 
 Evas_Object *
-patcher_object_add(Evas *e);
+patcher_object_add(Evas_Object *parent);
 
 void
 patcher_object_dimension_set(Evas_Object *o, int sources, int sinks);
