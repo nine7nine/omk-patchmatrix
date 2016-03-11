@@ -300,7 +300,7 @@ _db_init(app_t *app)
 		-1, &app->query_port_get_selected, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT type_id, direction_id, client_id FROM Ports WHERE id=$1",
+		"SELECT type_id, direction_id, client_id, terminal, physical FROM Ports WHERE id=$1",
 		-1, &app->query_port_info, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
@@ -920,7 +920,8 @@ _db_port_set_selected(app_t *app, int id, int selected)
 }
 
 static void
-_db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
+_db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id,
+	bool *terminal, bool *physical)
 {
 	int ret;
 
@@ -939,6 +940,10 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 			*direction = sqlite3_column_int(stmt, 1);
 		if(client_id)
 			*client_id = sqlite3_column_int(stmt, 2);
+		if(terminal)
+			*terminal = sqlite3_column_int(stmt, 3) ? true : false;
+		if(physical)
+			*physical = sqlite3_column_int(stmt, 4) ? true : false;
 	}
 	else
 	{
@@ -948,6 +953,10 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id)
 			*direction = -1;
 		if(client_id)
 			*client_id = -1;
+		if(terminal)
+			*terminal = false;
+		if(physical)
+			*physical = false;
 	}
 
 	ret = sqlite3_reset(stmt);
@@ -1668,11 +1677,27 @@ _ui_realize_request(void *data, Evas_Object *obj, void *event_info)
 	if(!source_name || !sink_name)
 		return;
 
-	int connected = _db_connection_get(app, source_name, sink_name);
+	int type;
+	int direction;
+	int source_client_id, sink_client_id;
+	bool source_terminal, source_physical;
+	bool sink_terminal, sink_physical;
+	_db_port_get_info(app, source_id, &type, &direction, &source_client_id,
+		&source_terminal, &source_physical);
+	_db_port_get_info(app, sink_id, &type, &direction, &sink_client_id,
+		&sink_terminal, &sink_physical);
+
+	const int connected = _db_connection_get(app, source_name, sink_name);
 
 	//printf("realize_request: %s %s %i\n", source_name, sink_name, connected);
 
-	patcher_object_connected_set(obj, source_id, sink_id, connected, 0);
+	int indirect = 0;
+	if(   (source_client_id == sink_client_id) // connection to self?
+		&& !(source_terminal && sink_terminal) ) // system ports
+	{
+		indirect = -1;
+	}
+	patcher_object_connected_set(obj, source_id, sink_id, connected, indirect);
 
 	free(source_name);
 	free(sink_name);
@@ -1843,7 +1868,7 @@ _ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
 	int type;
 	int direction;
 	int client_id;
-	_db_port_get_info(app, *id, &type, &direction, &client_id);
+	_db_port_get_info(app, *id, &type, &direction, &client_id, NULL, NULL);
 	int selected = _db_port_get_selected(app, *id);
 
 	if(!strcmp(part, "elm.swallow.content"))

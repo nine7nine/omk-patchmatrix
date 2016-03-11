@@ -27,8 +27,10 @@
 #define PATCHER_CONNECT_REQUEST "connect,request"
 #define PATCHER_DISCONNECT_REQUEST "disconnect,request"
 #define PATCHER_REALIZE_REQUEST "realize,request"
+#define PATCHER_ZOOM_CHANGED "zoom,changed"
 
 #define NUM_VERTS 2
+#define ZOOM_MIN 0.05
 
 #if 0
 # define debugf(...) fprintf(stderr, __VA_ARGS__)
@@ -128,6 +130,7 @@ static const Evas_Smart_Cb_Description _smart_callbacks [] = {
 	{PATCHER_CONNECT_REQUEST, "(ii)(ii)"},
 	{PATCHER_DISCONNECT_REQUEST, "(ii)(ii)"},
 	{PATCHER_REALIZE_REQUEST, "(ii)(ii)"},
+	{PATCHER_ZOOM_CHANGED, "f"},
 	{NULL, NULL}
 };
 
@@ -558,12 +561,47 @@ _draw_gl(Evas_Object *obj)
 		gl->glUseProgram(priv->program);
 		gl->glEnableVertexAttribArray(0);
 
+		rectangle_t vconns;
+		gl->glLineWidth(0.f);
+		gl->glVertexAttrib4f(1, 1.f, 1.f, 1.f, 1.f);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vconns);
+		for(int i=0; i<priv->ncols; i++)
+		{
+			uint8_t *col = priv->matrix[i];
+			for(int j=0; j<priv->nrows; j++)
+			{
+				if(col[j] & FEEDBACK)
+				{
+					gl->glVertexAttrib4f(1, 0.2, 0.2, 0.2, 1.f);
+					_rel_to_abs(priv, i+0, j+0, &vconns.p0.x, &vconns.p0.y);
+					_rel_to_abs(priv, i+0, j+1, &vconns.p1.x, &vconns.p1.y);
+					_rel_to_abs(priv, i+1, j+1, &vconns.p2.x, &vconns.p2.y);
+					_rel_to_abs(priv, i+1, j+0, &vconns.p3.x, &vconns.p3.y);
+
+					gl->glBufferData(GL_ARRAY_BUFFER, sizeof(rectangle_t), &vconns, GL_DYNAMIC_DRAW);
+					gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, 0);
+					gl->glDrawArrays(GL_TRIANGLE_FAN, 0, priv->nconns);
+				}
+				else if(col[j] & INDIRECT)
+				{
+					gl->glVertexAttrib4f(1, 0.15, 0.15, 0.15, 1.f);
+					_rel_to_abs(priv, i+0, j+0, &vconns.p0.x, &vconns.p0.y);
+					_rel_to_abs(priv, i+0, j+1, &vconns.p1.x, &vconns.p1.y);
+					_rel_to_abs(priv, i+1, j+1, &vconns.p2.x, &vconns.p2.y);
+					_rel_to_abs(priv, i+1, j+0, &vconns.p3.x, &vconns.p3.y);
+
+					gl->glBufferData(GL_ARRAY_BUFFER, sizeof(rectangle_t), &vconns, GL_DYNAMIC_DRAW);
+					gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, 0);
+					gl->glDrawArrays(GL_TRIANGLE_FAN, 0, priv->nconns);
+				}
+			}
+		}
+
 		// draw lines
+		gl->glVertexAttrib4f(1, 0.5, 0.5, 0.5, 1.f);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vlines);
 		for(int i=0; i<priv->nlines; i+=3)
 		{
-			gl->glVertexAttrib4f(1, 0.5, 0.5, 0.5, 1.0);
-			gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vlines);
-
 			gl->glLineWidth(2.f);
 			gl->glVertexAttribPointer(0, NUM_VERTS, GL_FLOAT, GL_FALSE, 0, (const void *)(i*sizeof(point_t)));
 			gl->glDrawArrays(GL_LINES, 0, 2);
@@ -573,9 +611,8 @@ _draw_gl(Evas_Object *obj)
 			gl->glDrawArrays(GL_LINES, 0, 2);
 		}
 
-		rectangle_t vconns;
 		gl->glLineWidth(0.f);
-		gl->glVertexAttrib4f(1, 1.f, 1.f, 1.f, 0.8);
+		gl->glVertexAttrib4f(1, 1.f, 1.f, 1.f, 1.f);
 		gl->glBindBuffer(GL_ARRAY_BUFFER, priv->vconns);
 		for(int i=0; i<priv->ncols; i++)
 		{
@@ -1110,6 +1147,9 @@ _zoom(patcher_t *priv)
 	if(!priv->active)
 		return;
 
+	const float zoom = priv->scale;
+	evas_object_smart_callback_call(priv->self, PATCHER_ZOOM_CHANGED, (void *)&zoom);
+
 	_mouse_move_raw(priv, 0, 0);
 	priv->needs_predraw = true;
 	_mouse_move_raw(priv, priv->sx, priv->sy);
@@ -1120,7 +1160,7 @@ _zoom(patcher_t *priv)
 static void
 _zoom_in(patcher_t *priv)
 {
-	priv->scale += 0.05;
+	priv->scale += ZOOM_MIN;
 
 	_zoom(priv);
 }
@@ -1128,10 +1168,10 @@ _zoom_in(patcher_t *priv)
 static void
 _zoom_out(patcher_t *priv)
 {
-	priv->scale -= 0.05;
+	priv->scale -= ZOOM_MIN;
 
-	if(priv->scale < 0.05)
-		priv->scale = 0.05;
+	if(priv->scale < ZOOM_MIN)
+		priv->scale = ZOOM_MIN;
 
 	_zoom(priv);
 }
@@ -1493,4 +1533,17 @@ patcher_object_zoom_out(Evas_Object *o)
 	patcher_t *priv = evas_object_smart_data_get(o);
 
 	_zoom_out(priv);
+}
+
+void
+patcher_object_zoom_set(Evas_Object *o, float zoom)
+{
+	debugf("patcher_object_zoom_get\n");
+	patcher_t *priv = evas_object_smart_data_get(o);
+
+	if(zoom < ZOOM_MIN)
+		zoom = ZOOM_MIN;
+
+	priv->scale = zoom;
+	_zoom(priv);
 }
