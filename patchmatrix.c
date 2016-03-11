@@ -2300,7 +2300,7 @@ _ui_init(app_t *app)
 
 			elm_object_part_content_set(pane, "left", hbox);
 
-			app->patcher = patcher_object_add(pane);
+			app->patcher = patcher_object_add(hbox);
 			if(app->patcher)
 			{
 				evas_object_data_set(app->patcher, "app", app);
@@ -2355,7 +2355,7 @@ _ui_init(app_t *app)
 			} // app->tools
 		} // hbox
 
-		app->list = elm_genlist_add(hbox);
+		app->list = elm_genlist_add(pane);
 		if(app->list)
 		{
 			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
@@ -2436,8 +2436,6 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
-	if(app->patcher)
-		evas_object_del(app->patcher);
 	if(app->win)
 		evas_object_del(app->win);
 
