@@ -25,7 +25,6 @@ images {
 	image: "midi.png" COMP;
 	image: "cv.png" COMP;
 	image: "osc.png" COMP;
-	image: "icon_arrow_right.png" COMP;
 }
 
 group {
@@ -135,7 +134,7 @@ group {
 					size: 10;
 					align: 0.0 0.5;
 				};
-				color: 255 255 255 255;
+				color: 224 224 224 255;
 			}
 		}
 	}
@@ -226,7 +225,6 @@ group {
 		part {
 			name: "elm.text";
 			type: TEXT;
-			effect: SHADOW;
 			mouse_events: 0;
 			scale: 1;
 			description {
@@ -239,8 +237,7 @@ group {
 					size: 10;
 					align: 0.0 0.5;
 				};
-				color: 255 255 255 255;
-				color3: 0 0 0 128;
+				color: 224 224 224 255;
 			}
 		}
 	}
@@ -275,27 +272,6 @@ group {
 
 	parts {
 		part {
-			name: "sink";
-			type: IMAGE;
-			mouse_events: 0;
-			description {
-				state: "default" 0.0;
-				fixed: 1 1;
-				align: 0.0 0.5;
-				aspect: 1.0 1.0;
-				rel1.relative: 0 0;
-				rel2.relative: 0 1;
-				min: 16 16;
-				image.normal: "icon_arrow_right.png";
-				color: 255 255 255 0;
-			}
-			description {
-				state: "default" 1.0;
-				inherit: "default" 0.0;
-				color: 255 255 255 255;
-			}
-		}
-		part {
 			name: "link";
 			type: IMAGE;
 			mouse_events: 1;
@@ -304,10 +280,8 @@ group {
 				fixed: 1 1;
 				align: 0.0 0.5;
 				aspect: 1.0 1.0;
-				rel1.to_x: "sink";
-				rel1.relative: 1 0;
-				rel2.to_x: "sink";
-				rel2.relative: 1 1;
+				rel1.relative: 0 0;
+				rel2.relative: 0 1;
 				min: 16 16;
 				image.normal: "link_off.png";
 			}
@@ -336,6 +310,7 @@ group {
 					size: 10;
 					align: 0.0 0.5;
 				};
+				color: 224 224 224 255;
 			}
 		}
 		part {

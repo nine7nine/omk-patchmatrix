@@ -2307,7 +2307,7 @@ _ui_init(app_t *app)
 	if(pane)
 	{
 		elm_panes_horizontal_set(pane, EINA_FALSE);
-		elm_panes_content_left_size_set(pane, 0.7);
+		elm_panes_content_left_size_set(pane, 0.75);
 		evas_object_size_hint_weight_set(pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 		evas_object_size_hint_align_set(pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
 		elm_win_resize_object_add(app->win, pane);
