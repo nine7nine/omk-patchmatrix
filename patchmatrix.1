@@ -1,0 +1,50 @@
+.TH PATCHMATRIX "1" "March 03, 2016"
+
+.SH NAME
+patchmatrix \- a JACK Patchbay
+
+.SH SYNOPSIS
+.B patchmatrix
+[\fIoptions\fR]
+
+.SH DESCRIPTION
+\fBpatchmatrix\fP is a JACK patchbay.
+.PP
+It shows JACK input and output ports in a matrix configuration for convenient
+one-click connecting and disconnecting.
+.PP
+Clients and ports can manually be shown and hidden to reduce complexity in
+view.
+.PP
+Additionally, the patchbay shows AUDIO, MIDI, CV and OSC ports separately,
+to reduce complexity, too.
+
+.SH OPTIONS
+.HP
+\fB\-v\fR
+.IP
+Print version and license information
+
+.HP
+\fB\-h\fR
+.IP
+Print usage information
+
+.HP
+\fB\-n\fR server-name
+.IP
+Connect to named JACK daemon
+
+.HP
+\fB\-u\fR client-uuid
+.IP
+Client UUID for JACK session management
+
+.SH LICENSE
+Artistic License 2.0.
+
+.SH AUTHOR
+Hanspeter Portner (dev@open-music-kontrollers.ch).
+
+.SH SEE ALSO
+jackd(1)

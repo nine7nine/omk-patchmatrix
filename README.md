@@ -1,6 +1,6 @@
-# Patch Matrix
+# PatchMatrix
 
-## JACK Matrix Patchbay
+## a JACK Patchbay
 
 ### Build status
 

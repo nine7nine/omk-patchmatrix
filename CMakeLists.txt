@@ -63,6 +63,18 @@ install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.desktop DESTINATION ${PATCHMATRI
 # icon
 install(FILES patchmatrix.png DESTINATION ${PATCHMATRIX_ICON_DIR})
 
+# man page 
+include(FindUnixCommands)
+add_custom_command(
+	OUTPUT ${PROJECT_BINARY_DIR}/patchmatrix.1.gz
+	COMMAND ${GZIP} ARGS
+	"-c9" ${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.1
+		">" ${PROJECT_BINARY_DIR}/patchmatrix.1.gz
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.1)
+add_custom_target(PATCHMATRIX_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.1.gz)
+install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.1.gz DESTINATION share/man/man1)
+
 # theme
 find_program(EDJE_CC NAMES edje_cc)
 if(EDJE_CC_NOTFOUND)
