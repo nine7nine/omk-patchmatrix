@@ -154,6 +154,8 @@ struct _app_t {
 	sqlite3_stmt *query_client_port_count;
 
 	bool populating;
+	const char *server_name;
+	const char *session_id;
 };
 
 static void _ui_refresh_single(app_t *app, int i);
@@ -1520,9 +1522,16 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 static int
 _jack_init(app_t *app)
 {
-	jack_status_t status;
+	jack_options_t opts = JackNullOption | JackNoStartServer;
+	if(app->server_name)
+		opts |= JackServerName;
+	if(app->session_id)
+		opts |= JackSessionID;
 
-	app->client = jack_client_open("patchmatrix", JackNullOption, &status);
+	jack_status_t status;
+	app->client = jack_client_open("patchmatrix", opts, &status,
+		app->server_name ? app->server_name : app->session_id,
+		app->server_name ? app->session_id : NULL);
 	if(!app->client)
 		return -1;
 
@@ -1537,7 +1546,7 @@ _jack_init(app_t *app)
 	if(!jack_uuid_empty(app->uuid))
 	{
 		jack_set_property(app->client, app->uuid,
-			JACK_METADATA_PRETTY_NAME, "Pathmatrix", "text/plain");
+			JACK_METADATA_PRETTY_NAME, "PatchMatrix", "text/plain");
 	}
 #endif
 
@@ -2698,6 +2707,67 @@ static int
 elm_main(int argc, char **argv)
 {
 	static app_t app;
+
+	app.server_name = NULL;
+	app.session_id = NULL;
+
+	fprintf(stderr,
+		"PatchMatrix "PATCHMATRIX_VERSION"\n"
+		"Copyright (c) 2016 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
+		"Released under Artistic License 2.0 by Open Music Kontrollers\n");
+	
+	int c;
+	while((c = getopt(argc, argv, "vhn:u:")) != -1)
+	{
+		switch(c)
+		{
+			case 'v':
+				fprintf(stderr,
+					"--------------------------------------------------------------------\n"
+					"This is free software: you can redistribute it and/or modify\n"
+					"it under the terms of the Artistic License 2.0 as published by\n"
+					"The Perl Foundation.\n"
+					"\n"
+					"This source is distributed in the hope that it will be useful,\n"
+					"but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+					"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n"
+					"Artistic License 2.0 for more details.\n"
+					"\n"
+					"You should have received a copy of the Artistic License 2.0\n"
+					"along the source as a COPYING file. If not, obtain it from\n"
+					"http://www.perlfoundation.org/artistic_license_2_0.\n\n");
+				return 0;
+			case 'h':
+				fprintf(stderr,
+					"--------------------------------------------------------------------\n"
+					"USAGE\n"
+					"   %s [OPTIONS]\n"
+					"\n"
+					"OPTIONS\n"
+					"   [-v]                 print version and full license information\n"
+					"   [-h]                 print usage information\n"
+					"   [-n] server-name     connect to named JACK daemon\n"
+					"   [-u] client-uuid     client UUID for JACK session management\n\n"
+					, argv[0]);
+				return 0;
+			case 'n':
+				app.server_name = optarg;
+				break;
+			case 'u':
+				app.session_id = optarg;
+				break;
+			case '?':
+				if( (optopt == 'n') || (optopt == 'u') )
+					fprintf(stderr, "Option `-%c' requires an argument.\n", optopt);
+				else if(isprint(optopt))
+					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+				else
+					fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+				return -1;
+			default:
+				return -1;
+		}
+	}
 
 	elm_config_accel_preference_set("gl");
 	elm_policy_set(ELM_POLICY_QUIT, ELM_POLICY_QUIT_LAST_WINDOW_CLOSED);
