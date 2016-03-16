@@ -40,9 +40,13 @@ if(${JACK_HAS_METADATA_API})
 endif()
 
 # elementary
-pkg_search_module(ELEMENTARY REQUIRED elementary>=1.8)
-include_directories(${ELEMENTARY_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${ELEMENTARY_LDFLAGS})
+pkg_search_module(ELM REQUIRED elementary>=1.8)
+include_directories(${ELM_INCLUDE_DIRS})
+set(LIBS ${LIBS} ${ELM_LDFLAGS})
+
+if((${ELM_VERSION} VERSION_EQUAL "1.10.0") OR (${ELM_VERSION} VERSION_GREATER "1.10.0"))
+	add_definitions("-DELM_1_10")
+endif()
 
 # sqlite3
 pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.0)

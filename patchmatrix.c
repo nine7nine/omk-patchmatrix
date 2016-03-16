@@ -2816,7 +2816,9 @@ elm_main(int argc, char **argv)
 		}
 	}
 
+#ifdef ELM_1_10
 	elm_config_accel_preference_set("gl");
+#endif
 	elm_policy_set(ELM_POLICY_QUIT, ELM_POLICY_QUIT_LAST_WINDOW_CLOSED);
 
 	if(_jack_init(&app))
