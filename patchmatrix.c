@@ -22,6 +22,7 @@
 #include <sqlite3.h>
 
 #include <jack/jack.h>
+#include <jack/session.h>
 #ifdef JACK_HAS_METADATA_API
 #	include <jack/uuid.h>
 #	include <jack/metadata.h>
@@ -38,7 +39,8 @@ enum {
 	EVENT_PORT_CONNECT,
 	EVENT_PROPERTY_CHANGE,
 	EVENT_ON_INFO_SHUTDOWN,
-	EVENT_GRAPH_ORDER
+	EVENT_GRAPH_ORDER,
+	EVENT_SESSION
 };
 
 enum {
@@ -84,6 +86,10 @@ struct _event_t {
 			jack_status_t code;
 			char *reason;
 		} on_info_shutdown;
+
+		struct {
+			jack_session_event_t *event;
+		} session;
 	};
 };
 
@@ -1117,9 +1123,9 @@ _jack_timer_cb(void *data)
 {
 	app_t *app = data;
 
-	int refresh = 0;
-	int realize = 0;
-	int done = 0;
+	bool refresh = false;
+	bool realize = false;
+	bool done = false;
 
 	event_t *ev;
 	EINA_LIST_FREE(app->events, ev)
@@ -1141,7 +1147,7 @@ _jack_timer_cb(void *data)
 				if(ev->client_register.name)
 					free(ev->client_register.name); // strdup
 
-				refresh = 1;
+				refresh = true;
 
 				break;
 			}
@@ -1165,7 +1171,7 @@ _jack_timer_cb(void *data)
 					free(client_name); // strdup
 				}
 
-				refresh = 1;
+				refresh = true;
 
 				break;
 			}
@@ -1184,7 +1190,7 @@ _jack_timer_cb(void *data)
 				else
 					_db_connection_del(app, name_source, name_sink);
 
-				realize = 1;
+				realize = true;
 
 				break;
 			}
@@ -1333,7 +1339,7 @@ _jack_timer_cb(void *data)
 				if(ev->property_change.key)
 					free(ev->property_change.key); // strdup
 
-				refresh = 1;
+				refresh = true;
 
 				break;
 			}
@@ -1341,7 +1347,7 @@ _jack_timer_cb(void *data)
 			case EVENT_ON_INFO_SHUTDOWN:
 			{
 				app->client = NULL; // JACK has shut down, hasn't it?
-				done = 1;
+				done = true;
 
 				break;
 			}
@@ -1350,6 +1356,32 @@ _jack_timer_cb(void *data)
 				//FIXME
 
 				break;
+			}
+			case EVENT_SESSION:
+			{
+				jack_session_event_t *jev = ev->session.event;
+				
+				printf("_session_async: %s %s %s\n",
+					jev->session_dir, jev->client_uuid, jev->command_line);
+
+				ecore_file_mkpath(jev->session_dir); // path may not exist yet
+
+				asprintf(&jev->command_line, "patchmatrix -u %s ${SESSION_DIR}",
+					jev->client_uuid);
+
+				switch(jev->type)
+				{
+					case JackSessionSaveAndQuit:
+						done = true;
+						break;
+					case JackSessionSave:
+						break;
+					case JackSessionSaveTemplate:
+						break;
+				}
+
+				jack_session_reply(app->client, jev);
+				jack_session_event_free(jev);
 			}
 		};
 
@@ -1519,6 +1551,20 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 }
 #endif
 
+// non-rt
+static void
+_jack_session_cb(jack_session_event_t *jev, void *arg)
+{
+	app_t *app = arg;
+
+	event_t *ev = malloc(sizeof(event_t));
+	ev->app = app;
+	ev->type = EVENT_SESSION;
+	ev->session.event = jev;
+
+	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+}
+
 static int
 _jack_init(app_t *app)
 {
@@ -1565,6 +1611,7 @@ _jack_init(app_t *app)
 #ifdef JACK_HAS_METADATA_API
 	jack_set_property_change_callback(app->client, _jack_property_change_cb, app);
 #endif
+	jack_set_session_callback(app->client, _jack_session_cb, app);
 
 	jack_activate(app->client);
 
