@@ -108,7 +108,7 @@ main(int argc, char **argv)
 
 	pthread_t producer;
 	pthread_t consumer;
-	varchunk_t *varchunk = varchunk_new(8192);
+	varchunk_t *varchunk = varchunk_new(8192, true);
 	if(!varchunk)
 		return -1; // TEST FAILED
 
