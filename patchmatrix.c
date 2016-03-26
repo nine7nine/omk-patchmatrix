@@ -26,6 +26,7 @@
 #ifdef JACK_HAS_METADATA_API
 #	include <jack/uuid.h>
 #	include <jack/metadata.h>
+#	include <jackey.h>
 #endif
 
 #include <patcher.h>
@@ -704,7 +705,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	{
 		if(type_id == 0) // signal-type
 		{
-			jack_get_property(uuid, "http://jackaudio.org/metadata/signal-type", &value, &type);
+			jack_get_property(uuid, JACKEY_SIGNAL_TYPE, &value, &type);
 			if(value && !strcmp(value, "CV"))
 			{
 				type_id = TYPE_CV;
@@ -715,7 +716,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		}
 		else if(type_id == 1) // event-type
 		{
-			jack_get_property(uuid, "http://jackaudio.org/metadata/event-types", &value, &type);
+			jack_get_property(uuid, JACKEY_EVENT_TYPES, &value, &type);
 			if(value && strstr(value, "OSC"))
 			{
 				type_id = TYPE_OSC;
@@ -728,7 +729,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		value = NULL;
 		type = NULL;
 
-		jack_get_property(uuid, "http://jackaudio.org/metadata/order", &value, &type);
+		jack_get_property(uuid, JACKEY_ORDER, &value, &type);
 		if(value)
 		{
 			position = atoi(value);
@@ -1225,14 +1226,14 @@ _jack_timer_cb(void *data)
 									else if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_pretty(app, id, value);
 								}
-								else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types"))
+								else if(!strcmp(ev->property_change.key, JACKEY_EVENT_TYPES))
 								{
 									int id;
 									int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
 									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_type(app, id, type_id);
 								}
-								else if(!strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type"))
+								else if(!strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE))
 								{
 									int id;
 									int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
@@ -1268,8 +1269,8 @@ _jack_timer_cb(void *data)
 								int needs_pretty_update = 0;
 
 								if(  ev->property_change.key
-									&& ( !strcmp(ev->property_change.key, "http://jackaudio.org/metadata/signal-type")
-										|| !strcmp(ev->property_change.key, "http://jackaudio.org/metadata/event-types") ) )
+									&& ( !strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE)
+										|| !strcmp(ev->property_change.key, JACKEY_EVENT_TYPES) ) )
 								{
 									needs_port_update = 1;
 								}
