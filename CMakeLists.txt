@@ -28,6 +28,10 @@ add_definitions("-DPATCHMATRIX_VERSION=\"${PATCHMATRIX_VERSION}\"")
 # pkg-config
 find_package(PkgConfig) # ${PKG_CONFIG_FOUND}
 
+# LV2
+pkg_search_module(LV2 REQUIRED lv2)
+include_directories(${LV2_INCLUDE_DIRS})
+
 # jack
 pkg_search_module(JACK REQUIRED jack)
 include_directories(${JACK_INCLUDE_DIRS})

@@ -1,4 +1,4 @@
-/*
+ /*
  * Copyright (c) 2016 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
@@ -29,6 +29,8 @@
 #	include <jackey.h>
 #endif
 
+#include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
+
 #include <patcher.h>
 
 typedef struct _app_t app_t;
@@ -52,6 +54,24 @@ enum {
 	TYPE_CV			= 3,
 #endif
 	TYPE_MAX
+};
+
+enum {
+	DESIGNATION_NONE	= 0,
+	DESIGNATION_LEFT,
+	DESIGNATION_RIGHT,
+	DESIGNATION_CENTER,
+	DESIGNATION_SIDE,
+	DESIGNATION_CENTER_LEFT,
+	DESIGNATION_CENTER_RIGHT,
+	DESIGNATION_SIDE_LEFT,
+	DESIGNATION_SIDE_RIGHT,
+	DESIGNATION_REAR_LEFT,
+	DESIGNATION_REAR_RIGHT,
+	DESIGNATION_REAR_CENTER,
+	DESIGNATION_LOW_FREQUENCY_EFFECTS,
+
+	DESIGNATION_MAX
 };
 
 struct _event_t {
@@ -99,6 +119,7 @@ struct _app_t {
 	int w;
 	int h;
 	int type;
+	int designation;
 	Evas_Object *win;
 	Evas_Object *patcher;
 	Evas_Object *popup;
@@ -151,6 +172,8 @@ struct _app_t {
 	sqlite3_stmt *query_port_info;
 	sqlite3_stmt *query_port_set_pretty;
 	sqlite3_stmt *query_port_set_type;
+	sqlite3_stmt *query_port_set_position;
+	sqlite3_stmt *query_port_set_designation;
 
 	sqlite3_stmt *query_connection_add;
 	sqlite3_stmt *query_connection_del;
@@ -165,9 +188,35 @@ struct _app_t {
 	const char *session_id;
 };
 
-static void _ui_refresh_single(app_t *app, int i);
+static void _ui_refresh_single(app_t *app, int type, int designation);
 static void _ui_refresh(app_t *app);
 static void _ui_realize(app_t *app);
+
+static const char *designations [DESIGNATION_MAX] = {
+	[DESIGNATION_NONE] = NULL,
+	[DESIGNATION_LEFT] = LV2_PORT_GROUPS__left,
+	[DESIGNATION_RIGHT] = LV2_PORT_GROUPS__right,
+	[DESIGNATION_CENTER] = LV2_PORT_GROUPS__center,
+	[DESIGNATION_SIDE] = LV2_PORT_GROUPS__side,
+	[DESIGNATION_CENTER_LEFT] = LV2_PORT_GROUPS__centerLeft,
+	[DESIGNATION_CENTER_RIGHT] = LV2_PORT_GROUPS__centerRight,
+	[DESIGNATION_SIDE_LEFT] = LV2_PORT_GROUPS__sideLeft,
+	[DESIGNATION_SIDE_RIGHT] = LV2_PORT_GROUPS__sideRight,
+	[DESIGNATION_REAR_LEFT] = LV2_PORT_GROUPS__rearLeft,
+	[DESIGNATION_REAR_RIGHT] = LV2_PORT_GROUPS__rearRight,
+	[DESIGNATION_REAR_CENTER] = LV2_PORT_GROUPS__rearCenter,
+	[DESIGNATION_LOW_FREQUENCY_EFFECTS] = LV2_PORT_GROUPS__lowFrequencyEffects
+};
+
+static inline int
+_designation_get(const char *uri)
+{
+	for(int i=1; i<DESIGNATION_MAX; i++)
+		if(!strcmp(uri, designations[i]))
+			return i; // found a match
+
+	return DESIGNATION_NONE; // found no match
+}
 
 static int
 _db_init(app_t *app)
@@ -201,7 +250,8 @@ _db_init(app_t *app)
 			"uuid UNSIGNED BIG INT,"
 			"terminal BOOL,"
 			"physical BOOL,"
-			"position INTEGER);"
+			"position INTEGER,"
+			"designation INTEGER);"
 			""
 		"CREATE TABLE Connections ("
 			"id INTEGER PRIMARY KEY,"
@@ -210,17 +260,34 @@ _db_init(app_t *app)
 			""
 		"CREATE TABLE Types ("
 			"id INTEGER PRIMARY KEY,"
-			"name TEXT,"
-			"selected BOOL);"
+			"name TEXT);"
+			""
+		"CREATE TABLE Designations ("
+			"id INTEGER PRIMARY KEY,"
+			"name TEXT);"
 			""
 		"CREATE TABLE Directions ("
 			"id INTEGER PRIMARY KEY,"
 			"name TEXT);"
 			""
-		"INSERT INTO Types (id, name, selected) VALUES (0, 'AUDIO', 1);"
-		"INSERT INTO Types (id, name, selected) VALUES (1, 'MIDI', 1);"
-		"INSERT INTO Types (id, name, selected) VALUES (2, 'OSC', 1);"
-		"INSERT INTO Types (id, name, selected) VALUES (3, 'CV', 1);"
+		"INSERT INTO Types (id, name) VALUES (0, 'AUDIO');"
+		"INSERT INTO Types (id, name) VALUES (1, 'MIDI');"
+		"INSERT INTO Types (id, name) VALUES (2, 'OSC');"
+		"INSERT INTO Types (id, name) VALUES (3, 'CV');"
+			""
+		"INSERT INTO Designations (id, name) VALUES (0, 'none');"
+		"INSERT INTO Designations (id, name) VALUES (1, 'Left');"
+		"INSERT INTO Designations (id, name) VALUES (2, 'Right');"
+		"INSERT INTO Designations (id, name) VALUES (3, 'Center');"
+		"INSERT INTO Designations (id, name) VALUES (4, 'Side');"
+		"INSERT INTO Designations (id, name) VALUES (5, 'Center Left');"
+		"INSERT INTO Designations (id, name) VALUES (6, 'Center Right');"
+		"INSERT INTO Designations (id, name) VALUES (7, 'Side Left');"
+		"INSERT INTO Designations (id, name) VALUES (8, 'Side Right');"
+		"INSERT INTO Designations (id, name) VALUES (9, 'Rear Left');"
+		"INSERT INTO Designations (id, name) VALUES (10, 'Rear Right');"
+		"INSERT INTO Designations (id, name) VALUES (11, 'Rear Center');"
+		"INSERT INTO Designations (id, name) VALUES (12, 'Low Frequency Effects');"
 			""
 		"INSERT INTO Directions (id, name) VALUES (0, 'SOURCE');"
 		"INSERT INTO Directions (id, name) VALUES (1, 'SINK');",
@@ -276,7 +343,7 @@ _db_init(app_t *app)
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, position, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)",
+		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, position, designation, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)",
 		-1, &app->query_port_add, NULL);
 	(void)ret;
 
@@ -320,6 +387,14 @@ _db_init(app_t *app)
 		"UPDATE Ports SET type_id=$1 WHERE id=$2",
 		-1, &app->query_port_set_type, NULL);
 	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Ports SET position=$1 WHERE id=$2",
+		-1, &app->query_port_set_position, NULL);
+	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Ports SET designation=$1 WHERE id=$2",
+		-1, &app->query_port_set_designation, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"INSERT INTO Connections (source_id, sink_id) VALUES ($1, $2)",
@@ -336,14 +411,16 @@ _db_init(app_t *app)
 
 	// port list
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT Ports.id, Ports.client_id FROM Ports INNER JOIN (Types, Directions, Clients) "
+		"SELECT Ports.id, Ports.client_id FROM Ports INNER JOIN (Types, Directions, Clients, Designations) "
 			"ON Ports.selected=1 "
 			"AND Ports.type_id=Types.id "
 			"AND Ports.direction_id=Directions.id "
 			"AND Ports.client_id=Clients.id "
+			"AND Ports.designation=Designations.id "
 			"AND Clients.selected=1 "
 			"AND Types.id=$1 "
 			"AND Directions.id=$2 "
+			"AND ($3=0 OR Designations.id=$3) " // NOTE designation=0 matches all designations
 			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.position, Ports.short_name",
 		-1, &app->query_port_list, NULL);
 	(void)ret;
@@ -409,6 +486,10 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_port_set_pretty);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_set_type);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_port_set_position);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_port_set_designation);
 	(void)ret;
 
 	ret = sqlite3_finalize(app->query_connection_add);
@@ -695,6 +776,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	int terminal_id = flags & JackPortIsTerminal ? 1 : 0;
 	int physical_id = flags & JackPortIsPhysical ? 1 : 0;
 	int position = 0;
+	int designation = DESIGNATION_NONE;
 
 	char *value = NULL;
 	char *type = NULL;
@@ -736,7 +818,16 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 			free(value);
 		}
 		if(type)
-				free(type);
+			free(type);
+
+		jack_get_property(uuid, JACKEY_DESIGNATION, &value, &type);
+		if(value)
+		{
+			designation = _designation_get(value);
+			free(value);
+		}
+		if(type)
+			free(type);
 
 		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
 	}
@@ -767,6 +858,8 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 	ret = sqlite3_bind_int(stmt, 9, physical_id);
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 10, position);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 11, designation);
 	(void)ret;
 
 	ret = sqlite3_step(stmt);
@@ -1011,6 +1104,44 @@ _db_port_set_type(app_t *app, int id, int type_id)
 }
 
 static void
+_db_port_set_position(app_t *app, int id, int position)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_set_position;
+
+	ret = sqlite3_bind_int(stmt, 1, position);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+}
+
+static void
+_db_port_set_designation(app_t *app, int id, int designation)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_set_designation;
+
+	ret = sqlite3_bind_int(stmt, 1, designation);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 2, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+}
+
+static void
 _db_port_del(app_t *app, const char *client_name, const char *name,
 	const char *short_name)
 {
@@ -1240,6 +1371,20 @@ _jack_timer_cb(void *data)
 									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_type(app, id, type_id);
 								}
+								else if(!strcmp(ev->property_change.key, JACKEY_ORDER))
+								{
+									int id;
+									int position = atoi(value);
+									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_port_set_position(app, id, position);
+								}
+								else if(!strcmp(ev->property_change.key, JACKEY_DESIGNATION))
+								{
+									int id;
+									int designation = _designation_get(value);
+									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+										_db_port_set_designation(app, id, designation);
+								}
 
 								free(value);
 							}
@@ -1265,24 +1410,38 @@ _jack_timer_cb(void *data)
 									midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
 								int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
 
-								int needs_port_update = 0;
-								int needs_pretty_update = 0;
+								bool needs_port_update = false;
+								bool needs_pretty_update = false;
+								bool needs_position_update = false;
+								bool needs_designation_update = false;
 
 								if(  ev->property_change.key
 									&& ( !strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE)
 										|| !strcmp(ev->property_change.key, JACKEY_EVENT_TYPES) ) )
 								{
-									needs_port_update = 1;
+									needs_port_update = true;
+								}
+								else if(ev->property_change.key
+									&& !strcmp(ev->property_change.key, JACKEY_ORDER))
+								{
+									needs_position_update = true;
+								}
+								else if(ev->property_change.key
+									&& !strcmp(ev->property_change.key, JACKEY_DESIGNATION))
+								{
+									needs_designation_update = true;
 								}
 								else if(ev->property_change.key
 									&& !strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
 								{
-									needs_pretty_update = 1;
+									needs_pretty_update = true;
 								}
 								else // all keys removed
 								{
-									needs_port_update = 1;
-									needs_pretty_update = 1;
+									needs_port_update = true;
+									needs_pretty_update = true;
+									needs_position_update = true;
+									needs_designation_update = true;
 								}
 
 								if(needs_port_update)
@@ -1300,21 +1459,31 @@ _jack_timer_cb(void *data)
 										free(short_name);
 									}
 								}
+
+								if(needs_position_update)
+								{
+									_db_port_set_position(app, id, 0); //TODO or rather use id?
+								}
+
+								if(needs_designation_update)
+								{
+									_db_port_set_designation(app, id, DESIGNATION_NONE);
+								}
 							}
 							else if ((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
 								//printf("property_delete client: %i %s\n", id, ev->property_change.key);
 								
-								int needs_pretty_update = 0;
+								bool needs_pretty_update = false;
 
 								if(ev->property_change.key
 									&& !strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
 								{
-									needs_pretty_update = 1;
+									needs_pretty_update = true;
 								}
 								else // all keys removed
 								{
-									needs_pretty_update = 1;
+									needs_pretty_update = true;
 								}
 
 								if(needs_pretty_update)
@@ -2164,22 +2333,26 @@ _toolbar_selected(void *data, Evas_Object *obj, void *event_info)
 	if(itm == app->tool_audio)
 	{
 		app->type = TYPE_AUDIO;
+		app->designation = DESIGNATION_NONE;
 		_ui_refresh(app);
 	}
 	else if(itm == app->tool_midi)
 	{
 		app->type = TYPE_MIDI;
+		app->designation = DESIGNATION_NONE;
 		_ui_refresh(app);
 	}
 #ifdef JACK_HAS_METADATA_API
 	else if(itm == app->tool_osc)
 	{
 		app->type = TYPE_OSC;
+		app->designation = DESIGNATION_NONE;
 		_ui_refresh(app);
 	}
 	else if(itm == app->tool_cv)
 	{
 		app->type = TYPE_CV;
+		app->designation = DESIGNATION_NONE;
 		_ui_refresh(app);
 	}
 #endif
@@ -2256,6 +2429,7 @@ _ui_init(app_t *app)
 	app->w = 1024;
 	app->h = 420;
 	app->type = TYPE_AUDIO;
+	app->designation = DESIGNATION_NONE;
 
 	app->clientitc = elm_genlist_item_class_new();
 	if(app->clientitc)
@@ -2620,7 +2794,7 @@ _ui_populate(app_t *app)
 
 // update single grid and connections
 static void
-_ui_refresh_single(app_t *app, int i)
+_ui_refresh_single(app_t *app, int type, int designation)
 {
 	int ret;
 
@@ -2629,9 +2803,11 @@ _ui_refresh_single(app_t *app, int i)
 	if(!app->patcher)
 		return;
 
-	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 3, designation);
 	(void)ret;
 	int num_sources = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
@@ -2641,9 +2817,11 @@ _ui_refresh_single(app_t *app, int i)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 3, designation);
 	(void)ret;
 	int num_sinks = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
@@ -2655,9 +2833,11 @@ _ui_refresh_single(app_t *app, int i)
 
 	patcher_object_dimension_set(app->patcher, num_sources, num_sinks);
 
-	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 3, designation);
 	(void)ret;
 	int last_client_id = -1;
 	for(int source=0; source<num_sources; source++)
@@ -2694,9 +2874,11 @@ _ui_refresh_single(app_t *app, int i)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	ret = sqlite3_bind_int(stmt, 1, i); // type
+	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 3, designation);
 	(void)ret;
 	last_client_id = -1;
 	for(int sink=0; sink<num_sinks; sink++)
@@ -2740,7 +2922,7 @@ _ui_refresh_single(app_t *app, int i)
 static void
 _ui_refresh(app_t *app)
 {
-	_ui_refresh_single(app, app->type);
+	_ui_refresh_single(app, app->type, app->designation);
 }
 
 // update connections
