@@ -808,9 +808,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 				free(type);
 		}
 
-		value = NULL;
-		type = NULL;
-
+		value = type = NULL;
 		jack_get_property(uuid, JACKEY_ORDER, &value, &type);
 		if(value)
 		{
@@ -820,6 +818,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		if(type)
 			free(type);
 
+		value = type = NULL;
 		jack_get_property(uuid, JACKEY_DESIGNATION, &value, &type);
 		if(value)
 		{
@@ -829,6 +828,7 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		if(type)
 			free(type);
 
+		value = type = NULL;
 		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
 	}
 #endif
