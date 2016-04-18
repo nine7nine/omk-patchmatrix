@@ -31,6 +31,7 @@
 
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
 
+#include <varchunk.h>
 #include <patcher.h>
 
 typedef struct _app_t app_t;
@@ -75,7 +76,6 @@ enum {
 };
 
 struct _event_t {
-	app_t *app;
 	int type;
 
 	union {
@@ -136,14 +136,16 @@ struct _app_t {
 	Elm_Object_Item *tool_osc;
 	Elm_Object_Item *tool_cv;
 #endif
+	Ecore_Animator *anim;
 
 	// JACK
 	jack_client_t *client;
-	Eina_List *events;
-	Ecore_Timer *timer;
 #ifdef JACK_HAS_METADATA_API
 	jack_uuid_t uuid;
 #endif
+
+	// varchunk
+	varchunk_t *from_jack;
 
 	// SQLite3
 	sqlite3 *db;
@@ -1251,7 +1253,7 @@ _db_connection_get(app_t *app, const char *name_source, const char *name_sink)
 }
 
 static Eina_Bool
-_jack_timer_cb(void *data)
+_jack_anim(void *data)
 {
 	app_t *app = data;
 
@@ -1259,8 +1261,9 @@ _jack_timer_cb(void *data)
 	bool realize = false;
 	bool done = false;
 
-	event_t *ev;
-	EINA_LIST_FREE(app->events, ev)
+	const event_t *ev;
+	size_t len;
+	while((ev = varchunk_read_request(app->from_jack, &len)))
 	{
 		//printf("_jack_timer_cb: %i\n", ev->type);
 
@@ -1286,21 +1289,24 @@ _jack_timer_cb(void *data)
 			case EVENT_PORT_REGISTER:
 			{
 				const jack_port_t *port = jack_port_by_id(app->client, ev->port_register.id);
-				const char *name = jack_port_name(port);
-				char *sep = strchr(name, ':');
-				char *client_name = strndup(name, sep - name);
-				const char *short_name = sep + 1;
-
-				//printf("port_register: %s %i\n", name, ev->port_register.state);
-
-				if(client_name)
+				if(port)
 				{
-					if(ev->port_register.state)
-						_db_port_add(app, client_name, name, short_name);
-					else
-						_db_port_del(app, client_name, name, short_name);
+					const char *name = jack_port_name(port);
+					char *sep = strchr(name, ':');
+					char *client_name = strndup(name, sep - name);
+					const char *short_name = sep + 1;
 
-					free(client_name); // strdup
+					//printf("port_register: %s %i\n", name, ev->port_register.state);
+
+					if(client_name)
+					{
+						if(ev->port_register.state)
+							_db_port_add(app, client_name, name, short_name);
+						else
+							_db_port_del(app, client_name, name, short_name);
+
+						free(client_name); // strdup
+					}
 				}
 
 				refresh = true;
@@ -1311,16 +1317,19 @@ _jack_timer_cb(void *data)
 			{
 				const jack_port_t *port_source = jack_port_by_id(app->client, ev->port_connect.id_source);
 				const jack_port_t *port_sink = jack_port_by_id(app->client, ev->port_connect.id_sink);
-				const char *name_source = jack_port_name(port_source);
-				const char *name_sink = jack_port_name(port_sink);
+				if(port_source && port_sink)
+				{
+					const char *name_source = jack_port_name(port_source);
+					const char *name_sink = jack_port_name(port_sink);
 
-				//printf("port_connect: %s %s %i\n", name_source, name_sink,
-				//	ev->port_connect.state);
+					//printf("port_connect: %s %s %i\n", name_source, name_sink,
+					//	ev->port_connect.state);
 
-				if(ev->port_connect.state)
-					_db_connection_add(app, name_source, name_sink);
-				else
-					_db_connection_del(app, name_source, name_sink);
+					if(ev->port_connect.state)
+						_db_connection_add(app, name_source, name_sink);
+					else
+						_db_connection_del(app, name_source, name_sink);
+				}
 
 				realize = true;
 
@@ -1555,7 +1564,7 @@ _jack_timer_cb(void *data)
 			}
 		};
 
-		free(ev);
+		varchunk_read_advance(app->from_jack);
 	}
 
 	if(refresh)
@@ -1566,23 +1575,7 @@ _jack_timer_cb(void *data)
 	if(done)
 		elm_exit();
 
-	app->timer = NULL;
-
-	return ECORE_CALLBACK_CANCEL;
-}
-
-static void
-_jack_async(void *data)
-{
-	event_t *ev = data;
-	app_t *app = ev->app;
-
-	app->events = eina_list_append(app->events, ev);
-
-	if(app->timer)
-		ecore_timer_reset(app->timer);
-	else
-		app->timer = ecore_timer_loop_add(0.1, _jack_timer_cb, app);
+	return ECORE_CALLBACK_RENEW;
 }
 
 static void
@@ -1590,13 +1583,15 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_ON_INFO_SHUTDOWN;
-	ev->on_info_shutdown.code = code;
-	ev->on_info_shutdown.reason = strdup(reason);
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_ON_INFO_SHUTDOWN;
+		ev->on_info_shutdown.code = code;
+		ev->on_info_shutdown.reason = strdup(reason);
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 
 static void
@@ -1632,13 +1627,15 @@ _jack_client_registration_cb(const char *name, int state, void *arg)
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_CLIENT_REGISTER;
-	ev->client_register.name = strdup(name);
-	ev->client_register.state = state;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_CLIENT_REGISTER;
+		ev->client_register.name = strdup(name);
+		ev->client_register.state = state;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 
 static void
@@ -1646,13 +1643,15 @@ _jack_port_registration_cb(jack_port_id_t id, int state, void *arg)
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_PORT_REGISTER;
-	ev->port_register.id = id;
-	ev->port_register.state = state;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_PORT_REGISTER;
+		ev->port_register.id = id;
+		ev->port_register.state = state;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 
 static void
@@ -1668,14 +1667,16 @@ _jack_port_connect_cb(jack_port_id_t id_source, jack_port_id_t id_sink, int stat
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_PORT_CONNECT;
-	ev->port_connect.id_source = id_source;
-	ev->port_connect.id_sink = id_sink;
-	ev->port_connect.state = state;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_PORT_CONNECT;
+		ev->port_connect.id_source = id_source;
+		ev->port_connect.id_sink = id_sink;
+		ev->port_connect.state = state;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 
 static int
@@ -1693,11 +1694,13 @@ _jack_graph_order_cb(void *arg)
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_GRAPH_ORDER;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_GRAPH_ORDER;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 
 	return 0;
 }
@@ -1710,14 +1713,16 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 
 	//printf("_jack_property_change_cb: %lu %s %i\n", uuid, key, state);
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_PROPERTY_CHANGE;
-	ev->property_change.uuid = uuid;
-	ev->property_change.key = key ? strdup(key) : NULL;
-	ev->property_change.state = state;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_PROPERTY_CHANGE;
+		ev->property_change.uuid = uuid;
+		ev->property_change.key = key ? strdup(key) : NULL;
+		ev->property_change.state = state;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 #endif
 
@@ -1727,12 +1732,14 @@ _jack_session_cb(jack_session_event_t *jev, void *arg)
 {
 	app_t *app = arg;
 
-	event_t *ev = malloc(sizeof(event_t));
-	ev->app = app;
-	ev->type = EVENT_SESSION;
-	ev->session.event = jev;
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_SESSION;
+		ev->session.event = jev;
 
-	ecore_main_loop_thread_safe_call_async(_jack_async, ev);
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+	}
 }
 
 static int
@@ -1791,9 +1798,6 @@ _jack_init(app_t *app)
 static void
 _jack_deinit(app_t *app)
 {
-	if(app->timer)
-		ecore_timer_del(app->timer);
-
 	if(!app->client)
 		return;
 
@@ -2313,17 +2317,6 @@ _ui_list_moved(void *data, Evas_Object *obj, void *event_info)
 	}
 }
 
-static Eina_Bool
-_config_changed(void *data, int ev_type, void *ev)
-{
-	app_t *app = data;
-
-	//FIXME
-	//elm_gengrid_item_size_set(app->grid, ELM_SCALE_SIZE(384), ELM_SCALE_SIZE(384));
-
-	return ECORE_CALLBACK_PASS_ON;
-}
-
 static void
 _toolbar_selected(void *data, Evas_Object *obj, void *event_info)
 {
@@ -2486,7 +2479,6 @@ _ui_init(app_t *app)
 		return -1;
 
 	evas_object_smart_callback_add(app->win, "delete,request", _ui_delete_request, app);
-	ecore_event_handler_add(ELM_EVENT_CONFIG_ALL_CHANGED, _config_changed, app);
 	evas_object_resize(app->win, app->w, app->h);
 	evas_object_show(app->win);
 
@@ -2685,6 +2677,7 @@ _ui_init(app_t *app)
 		}
 	}
 
+	app->anim = ecore_animator_add(_jack_anim, app);
 
 	return 0;
 }
@@ -2692,6 +2685,8 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
+	if(app->anim)
+		ecore_animator_del(app->anim);
 	if(app->win)
 		evas_object_del(app->win);
 
@@ -3004,6 +2999,9 @@ elm_main(int argc, char **argv)
 #endif
 	elm_policy_set(ELM_POLICY_QUIT, ELM_POLICY_QUIT_LAST_WINDOW_CLOSED);
 
+	if(!(app.from_jack = varchunk_new(0x10000, true)))
+		goto cleanup;
+
 	if(_jack_init(&app))
 		goto cleanup;
 
@@ -3022,6 +3020,8 @@ cleanup:
 	_ui_deinit(&app);
 	_db_deinit(&app);
 	_jack_deinit(&app);
+	if(app.from_jack)
+		varchunk_free(app.from_jack);
 
 	return 0;
 }

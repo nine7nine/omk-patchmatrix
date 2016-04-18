@@ -10,6 +10,7 @@ set(LIBS "")
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/libosc)
 include_directories(${PROJECT_SOURCE_DIR}/jackey)
+include_directories(${PROJECT_SOURCE_DIR}/varchunk)
 
 # paths
 set(PATCHMATRIX_BIN_DIR "bin")
