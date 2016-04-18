@@ -6,7 +6,6 @@ os:
  - linux
 compiler:
  - gcc
-   # - clang
 before_install:
  - wget http://lv2plug.in/spec/lv2-1.12.0.tar.bz2
  - tar xjf lv2-1.12.0.tar.bz2 
@@ -15,11 +14,10 @@ before_install:
  - sudo apt-get -q update
 install:
  - pushd lv2-1.12.0 && ./waf configure --no-plugins --prefix=/usr && ./waf build && sudo ./waf install && popd
- - if [ "$CC" = "clang" ]; then sudo apt-get install -y libstdc++-4.8-dev; fi
- - if [ "$CC" = "gcc" ]; then sudo apt-get install -y gcc-4.8 g++-4.8; fi
+ - sudo apt-get install -y gcc-5 g++-5
  - sudo apt-get install -y libjack-dev libefl-dev libsqlite3-dev cmake
 before_script:
- - if [ "$CC" = "gcc" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
+ - export CXX="g++-5" CC="gcc-5"
  - mkdir build && pushd build
  - cmake -DCMAKE_BUILD_TYPE=Release ..
  - popd
