@@ -2607,6 +2607,7 @@ _ui_init(app_t *app)
 		if(app->list)
 		{
 			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
+			elm_genlist_select_mode_set(app->list, ELM_OBJECT_SELECT_MODE_NONE);
 			evas_object_smart_callback_add(app->list, "activated",
 				_ui_list_activated, app);
 			evas_object_smart_callback_add(app->list, "expand,request",

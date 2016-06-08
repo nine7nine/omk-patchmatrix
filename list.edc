@@ -19,8 +19,8 @@
 
 images {
 	image: "client_border.png" COMP;
-	image: "link_on.png" COMP;
-	image: "link_off.png" COMP;
+	image: "favourite-button-of-circular-shape.png" COMP;
+	image: "favourite-button-of-circular-shape_filled.png" COMP;
 	image: "audio.png" COMP;
 	image: "midi.png" COMP;
 	image: "cv.png" COMP;
@@ -108,13 +108,14 @@ group {
 				rel1.relative: 0 0;
 				rel2.relative: 0 1;
 				min: 16 16;
-				image.normal: "link_off.png";
+				image.normal: "favourite-button-of-circular-shape.png";
+				color: 255 255 255 64;
 			}
 			description {
 				state: "default" 1.0;
 				inherit: "default" 0.0;
+				image.normal: "favourite-button-of-circular-shape_filled.png";
 				color: 255 255 255 255;
-				image.normal: "link_on.png";
 			}
 		}
 		part {
@@ -283,12 +284,13 @@ group {
 				rel1.relative: 0 0;
 				rel2.relative: 0 1;
 				min: 16 16;
-				image.normal: "link_off.png";
+				image.normal: "favourite-button-of-circular-shape.png";
+				color: 255 255 255 64;
 			}
 			description {
 				state: "default" 1.0;
 				inherit: "default" 0.0;
-				image.normal: "link_on.png";
+				image.normal: "favourite-button-of-circular-shape_filled.png";
 				color: 255 255 255 255;
 			}
 		}
