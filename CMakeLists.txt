@@ -2,15 +2,16 @@ cmake_minimum_required(VERSION 2.8)
 
 project(patchmatrix)
 
+set(CMAKE_C_FLAGS "-fdata-sections -ffunction-sections ${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS "-std=gnu11 -Wextra -Wno-unused-parameter -ffast-math -fvisibility=hidden ${CMAKE_C_FLAGS}")
-set(CMAKE_C_FLAGS "-Wshadow -Wimplicit-function-declaration -Wmissing-prototypes -Wstrict-prototypes ${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS "-Wshadow -Wimplicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes ${CMAKE_C_FLAGS}")
 add_definitions("-D_GNU_SOURCE=1") # asprintf
 
 set(LIBS "")
 include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/libosc)
 include_directories(${PROJECT_SOURCE_DIR}/jackey)
 include_directories(${PROJECT_SOURCE_DIR}/varchunk)
+include_directories(${PROJECT_SOURCE_DIR}/pugl)
 
 # paths
 set(PATCHMATRIX_BIN_DIR "bin")
@@ -46,24 +47,70 @@ if(${JACK_HAS_METADATA_API})
 	add_definitions("-DJACK_HAS_METADATA_API")
 endif()
 
-# elementary
-pkg_search_module(ELM REQUIRED elementary>=1.8)
-include_directories(${ELM_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${ELM_LDFLAGS})
-
-if((${ELM_VERSION} VERSION_EQUAL "1.10.0") OR (${ELM_VERSION} VERSION_GREATER "1.10.0"))
-	add_definitions("-DELM_1_10")
-endif()
-
 # sqlite3
 pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.0)
 include_directories(${SQLITE3_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${SQLITE3_LDFLAGS})
 
+set(LIBS ${LIBS} m)
+add_definitions("-DPUGL_HAVE_GL")
+
+find_package(OpenGL)
+if(${OPENGL_FOUND})
+	set(LIBS ${LIBS} ${OPENGL_LIBRARIES})
+else() # try pkg-config
+	pkg_search_module(GL REQUIRED gl)
+	if(${GL_FOUND})
+		set(LIBS ${LIBS} ${GL_LDFLAGS})
+	else()
+		message(FATAL_ERROR "OpenGL not found")
+	endif()
+endif()
+add_definitions("-DPUGL_HAVE_GL")
+
+if(WIN32)
+	find_library(GDI32_LIBRARY NAMES gdi32)
+	if(GDI32_LIBRARY)
+		set(LIBS ${LIBS} ${GDI32_LIBRARY})
+	else()
+		message(FATAL_ERROR "gdi32 library not found")
+	endif()
+
+	find_library(USER32_LIBRARY NAMES user32)
+	if(USER32_LIBRARY)
+		set(LIBS ${LIBS} ${USER32_LIBRARY})
+	else()
+		message(FATAL_ERROR "user32 library not found")
+	endif()
+
+	set(TAR_UI ${TAR_UI} pugl/pugl/pugl_win.cpp)
+
+elseif(APPLE)
+	find_library(COCOA_LIBRARY NAMES Cocoa)
+	if(COCOA_LIBRARY)
+		set(LIBS ${LIBS} ${COCOA_LIBRARY})
+	else()
+		message(FATAL_ERROR "Cocoa framework not found")
+	endif()
+
+	set(TAR_UI ${TAR_UI} pugl/pugl/pugl_osx.m)
+
+else() # GNU/Linux
+	pkg_search_module(X11 REQUIRED x11>=1.6)
+	include_directories(${X11_INCLUDE_DIRS})
+	set(LIBS ${LIBS} ${X11_LDFLAGS})
+
+	pkg_search_module(XEXT REQUIRED xext>=1.3)
+	include_directories(${XEXT_INCLUDE_DIRS})
+	set(LIBS ${LIBS} ${XEXT_LDFLAGS})
+
+	set(TAR_UI ${TAR_UI} pugl/pugl/pugl_x11.c)
+endif()
+
 # binary
 add_executable(patchmatrix
 	patchmatrix.c
-	patcher.c)
+	pugl/pugl/pugl_x11.c)
 target_link_libraries(patchmatrix ${LIBS})
 install(TARGETS patchmatrix DESTINATION ${PATCHMATRIX_BIN_DIR})
 
@@ -71,8 +118,8 @@ install(TARGETS patchmatrix DESTINATION ${PATCHMATRIX_BIN_DIR})
 configure_file(${PROJECT_SOURCE_DIR}/patchmatrix.desktop.in ${PROJECT_BINARY_DIR}/patchmatrix.desktop @ONLY)
 install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.desktop DESTINATION ${PATCHMATRIX_DESKTOP_DIR})
 
-# icon
-install(FILES patchmatrix.png DESTINATION ${PATCHMATRIX_ICON_DIR})
+# logo
+install(FILES pix/patchmatrix.png DESTINATION ${PATCHMATRIX_ICON_DIR})
 
 # man page 
 include(FindUnixCommands)
@@ -86,30 +133,11 @@ add_custom_command(
 add_custom_target(PATCHMATRIX_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.1.gz)
 install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.1.gz DESTINATION share/man/man1)
 
-# theme
-find_program(EDJE_CC NAMES edje_cc)
-if(EDJE_CC_NOTFOUND)
-	message(SEND_ERROR "edje_cc not found")
-else(EDJE_CC_NOTFOUND)
-	message(STATUS "edje_cc found: " ${EDJE_CC})
-endif(EDJE_CC_NOTFOUND)
-
-add_custom_command(
-	OUTPUT ${PROJECT_BINARY_DIR}/patchmatrix.edj
-	COMMAND ${EDJE_CC} ARGS
-		"-fd" ${CMAKE_CURRENT_SOURCE_DIR}/font
-		"-id" ${CMAKE_CURRENT_SOURCE_DIR}/pix
-		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.edc
-		${PROJECT_BINARY_DIR}/patchmatrix.edj
-	DEPENDS
-		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.edc
-		${CMAKE_CURRENT_SOURCE_DIR}/patcher.edc
-		${CMAKE_CURRENT_SOURCE_DIR}/list.edc)
-add_custom_target(THEME ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.edj)
-install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.edj DESTINATION ${PATCHMATRIX_DATA_DIR})
-
+# icons
 install(FILES ${PROJECT_SOURCE_DIR}/pix/audio.png DESTINATION ${PATCHMATRIX_DATA_DIR})
 install(FILES ${PROJECT_SOURCE_DIR}/pix/midi.png DESTINATION ${PATCHMATRIX_DATA_DIR})
 install(FILES ${PROJECT_SOURCE_DIR}/pix/osc.png DESTINATION ${PATCHMATRIX_DATA_DIR})
 install(FILES ${PROJECT_SOURCE_DIR}/pix/cv.png DESTINATION ${PATCHMATRIX_DATA_DIR})
-install(FILES ${PROJECT_SOURCE_DIR}/pix/omk_logo_256x256.png DESTINATION ${PATCHMATRIX_DATA_DIR})
+
+# font
+install(FILES ${PROJECT_SOURCE_DIR}/nuklear/extra_font/Cousine-Regular.ttf DESTINATION ${PATCHMATRIX_DATA_DIR})

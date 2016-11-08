@@ -16,8 +16,11 @@
  */
 
 #include <stdbool.h>
-
-#include <Elementary.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <math.h>
+#include <sys/stat.h> // mkdir
+#include <errno.h> // mkdir
 
 #include <sqlite3.h>
 
@@ -32,7 +35,18 @@
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
 
 #include <varchunk.h>
-#include <patcher.h>
+
+#define NK_PUGL_IMPLEMENTATION
+#include <nk_pugl.h>
+
+#define NK_PATCHER_IMPLEMENTATION
+#include <nk_patcher.h>
+
+#if 0
+# define debugf(...) fprintf(stderr, __VA_ARGS__)
+#else
+# define debugf(...) {}
+#endif
 
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
@@ -116,27 +130,8 @@ struct _event_t {
 
 struct _app_t {
 	// UI
-	int w;
-	int h;
 	int type;
 	int designation;
-	Evas_Object *win;
-	Evas_Object *patcher;
-	Evas_Object *popup;
-	Evas_Object *tools;
-	Evas_Object *list;
-	Elm_Genlist_Item_Class *clientitc;
-	Elm_Genlist_Item_Class *sourceitc;
-	Elm_Genlist_Item_Class *sinkitc;
-	Elm_Genlist_Item_Class *sepitc;
-	Elm_Genlist_Item_Class *portitc;
-	Elm_Object_Item *tool_audio;
-	Elm_Object_Item *tool_midi;
-#ifdef JACK_HAS_METADATA_API
-	Elm_Object_Item *tool_osc;
-	Elm_Object_Item *tool_cv;
-#endif
-	Ecore_Animator *anim;
 
 	// JACK
 	jack_client_t *client;
@@ -157,6 +152,7 @@ struct _app_t {
 	sqlite3_stmt *query_client_find_by_uuid;
 #endif
 	sqlite3_stmt *query_client_find_by_id;
+	sqlite3_stmt *query_client_find_all_itr;
 	sqlite3_stmt *query_client_get_selected;
 	sqlite3_stmt *query_client_set_selected;
 	sqlite3_stmt *query_client_set_pretty;
@@ -169,6 +165,7 @@ struct _app_t {
 	sqlite3_stmt *query_port_find_by_uuid;
 #endif
 	sqlite3_stmt *query_port_find_by_id;
+	sqlite3_stmt *query_port_find_all_itr;
 	sqlite3_stmt *query_port_get_selected;
 	sqlite3_stmt *query_port_set_selected;
 	sqlite3_stmt *query_port_info;
@@ -188,6 +185,19 @@ struct _app_t {
 	bool populating;
 	const char *server_name;
 	const char *session_id;
+
+	bool done;
+
+	nk_pugl_window_t win;
+	nk_patcher_t patch;
+#ifdef JACK_HAS_METADATA_API
+	struct nk_image icons [4];
+#else
+	struct nk_image icons [2];
+#endif
+
+	int source_n;
+	int sink_n;
 };
 
 static void _ui_refresh_single(app_t *app, int type, int designation);
@@ -214,10 +224,42 @@ static inline int
 _designation_get(const char *uri)
 {
 	for(int i=1; i<DESIGNATION_MAX; i++)
+	{
 		if(!strcmp(uri, designations[i]))
 			return i; // found a match
+	}
 
 	return DESIGNATION_NONE; // found no match
+}
+
+#define COLOR_N 20
+static const struct nk_color colors [COLOR_N] = {
+	{ 255,  179,    0,  255 }, // Vivid Yellow
+	{ 128,   62,  117,  255 }, // Strong Purple
+	{ 255,  104,    0,  255 }, // Vivid Orange
+	{ 166,  189,  215,  255 }, // Very Light Blue
+	{ 193,    0,   32,  255 }, // Vivid Red
+	{ 206,  162,   98,  255 }, // Grayish Yellow
+	{ 129,  112,  102,  255 }, // Medium Gray
+	{   0,  125,   52,  255 }, // Vivid Green
+	{ 246,  118,  142,  255 }, // Strong Purplish Pink
+	{   0,   83,  138,  255 }, // Strong Blue
+	{ 255,  122,   92,  255 }, // Strong Yellowish Pink
+	{  83,   55,  122,  255 }, // Strong Violet
+	{ 255,  142,    0,  255 }, // Vivid Orange Yellow
+	{ 179,   40,   81,  255 }, // Strong Purplish Red
+	{ 244,  200,    0,  255 }, // Vivid Greenish Yellow
+	{ 127,   24,   13,  255 }, // Strong Reddish Brown
+	{ 147,  170,    0,  255 }, // Vivid Yellowish Green
+	{  89,   51,   21,  255 }, // Deep Yellowish Brown
+	{ 241,   58,   19,  255 }, // Vivid Reddish Orange
+	{  35,   44,   22,  255 }  // Dark Olive Green
+};
+
+static inline struct nk_color
+_color_get(int n)
+{
+	return colors[n % COLOR_N];
 }
 
 static int
@@ -325,6 +367,10 @@ _db_init(app_t *app)
 		"SELECT name, pretty_name FROM Clients WHERE id=$1",
 		-1, &app->query_client_find_by_id, NULL);
 	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
+		"SELECT id FROM Clients",
+		-1, &app->query_client_find_all_itr, NULL);
+	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT selected FROM Clients WHERE id=$1",
@@ -367,6 +413,10 @@ _db_init(app_t *app)
 	ret = sqlite3_prepare_v2(app->db,
 		"SELECT name, short_name, pretty_name FROM Ports WHERE id=$1",
 		-1, &app->query_port_find_by_id, NULL);
+	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
+		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2",
+		-1, &app->query_port_find_all_itr, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -431,7 +481,7 @@ _db_init(app_t *app)
 		-1, &app->query_client_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT COUNT(id) FROM Ports WHERE client_id=$1",
+		"SELECT COUNT(id) FROM Ports WHERE client_id=$1 AND direction_id=$2",
 		-1, &app->query_client_port_count, NULL);
 	(void)ret;
 
@@ -458,6 +508,8 @@ _db_deinit(app_t *app)
 #endif
 	ret = sqlite3_finalize(app->query_client_find_by_id);
 	(void)ret;
+	ret = sqlite3_finalize(app->query_client_find_all_itr);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_get_selected);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_client_set_selected);
@@ -478,6 +530,8 @@ _db_deinit(app_t *app)
 	(void)ret;
 #endif
 	ret = sqlite3_finalize(app->query_port_find_by_id);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_port_find_all_itr);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_get_selected);
 	(void)ret;
@@ -593,6 +647,28 @@ _db_client_find_by_id(app_t *app, int id, char **name, char **pretty_name)
 	(void)ret;
 }
 
+static int
+_db_client_find_all_itr(app_t *app)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_client_find_all_itr;
+
+	ret = sqlite3_step(stmt);
+
+	if(ret != SQLITE_DONE)
+	{
+		return sqlite3_column_int(stmt, 0);
+	}
+	else
+	{
+		ret = sqlite3_reset(stmt);
+		(void)ret;
+
+		return 0;
+	}
+}
+
 static void
 _db_client_add(app_t *app, const char *name)
 {
@@ -626,8 +702,6 @@ _db_client_add(app_t *app, const char *name)
 	ret = sqlite3_bind_int64(stmt, 3, 0);
 #endif
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 4, elm_genlist_items_count(app->list) - 1);
-	(void)ret;
 
 	ret = sqlite3_step(stmt);
 	(void)ret;
@@ -639,12 +713,6 @@ _db_client_add(app_t *app, const char *name)
 		free(value);
 	if(type)
 		free(type);
-
-	int *id = calloc(1, sizeof(int));
-	*id = _db_client_find_by_name(app, name);
-	Elm_Object_Item *elmnt = elm_genlist_item_append(app->list, app->clientitc, id, NULL,
-		ELM_GENLIST_ITEM_TREE, NULL, NULL);
-	elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
 }
 
 static void
@@ -664,22 +732,6 @@ _db_client_del(app_t *app, const char *name)
 
 	ret = sqlite3_reset(stmt);
 	(void)ret;
-
-	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
-		itm != NULL;
-		itm = elm_genlist_item_next_get(itm))
-	{
-		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-		if(itc != app->clientitc)
-			continue; // ignore port items
-
-		int *ref = elm_object_item_data_get(itm);
-		if(ref && (*ref == id) )
-		{
-			elm_object_item_del(itm);
-			break;
-		}
-	}
 }
 
 static int
@@ -874,25 +926,6 @@ _db_port_add(app_t *app, const char *client_name, const char *name,
 		free(value);
 	if(type)
 		free(type);
-
-	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
-		itm != NULL;
-		itm = elm_genlist_item_next_get(itm))
-	{
-		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-		if( (itc != app->sourceitc) && (itc != app->sinkitc) )
-			continue; // ignore port items
-
-		int *ref = elm_object_item_data_get(itm);
-		if(ref && (*ref == client_id) )
-		{
-			if(!app->populating && elm_genlist_item_expanded_get(itm))
-			{
-				elm_genlist_item_expanded_set(itm, EINA_FALSE);
-				elm_genlist_item_expanded_set(itm, EINA_TRUE);
-			}
-		}
-	}
 }
 
 static int
@@ -978,6 +1011,60 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 
 	ret = sqlite3_reset(stmt);
 	(void)ret;
+}
+
+static int
+_db_port_find_all_itr(app_t *app, int client_id, int direction)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_find_all_itr;
+
+	ret = sqlite3_bind_int(stmt, 1, client_id);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 2, direction);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+
+	if(ret != SQLITE_DONE)
+	{
+		return sqlite3_column_int(stmt, 0);
+	}
+	else
+	{
+		ret = sqlite3_reset(stmt);
+		(void)ret;
+
+		return 0;
+	}
+}
+
+static int
+_db_port_count(app_t *app, int client_id, int direction)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_client_port_count;
+
+	ret = sqlite3_bind_int(stmt, 1, client_id);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 2, direction);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+
+	int count = 0;
+
+	if(ret != SQLITE_DONE)
+	{
+		count = sqlite3_column_int(stmt, 0);
+	}
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+
+	return count;
 }
 
 static int
@@ -1161,22 +1248,6 @@ _db_port_del(app_t *app, const char *client_name, const char *name,
 
 	ret = sqlite3_reset(stmt);
 	(void)ret;
-
-	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
-		itm != NULL;
-		itm = elm_genlist_item_next_get(itm))
-	{
-		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-		if(itc != app->portitc)
-			continue; // ignore client items
-
-		int *ref = elm_object_item_data_get(itm);
-		if(ref && (*ref == id) )
-		{
-			elm_object_item_del(itm);
-			break;
-		}
-	}
 }
 
 static void
@@ -1252,11 +1323,40 @@ _db_connection_get(app_t *app, const char *name_source, const char *name_sink)
 	return connected;
 }
 
-static Eina_Bool
-_jack_anim(void *data)
+static int
+mkdirp(const char* path, mode_t mode)
 {
-	app_t *app = data;
+	int ret = 0;
 
+	// const cast for hack
+	char *p = strdup(path);
+	if(!p)
+		return -1;
+
+	char cwd [1024];
+	getcwd(cwd, 1024);
+
+	chdir("/");
+
+	const char *pattern = "/";
+	for(char *sub = strtok(p, pattern); sub; sub = strtok(NULL, pattern))
+	{
+		printf("-> %s\n", sub);
+
+		mkdir(sub, mode);
+		chdir(sub);
+	}
+
+	chdir(cwd);
+
+	free(p);
+
+	return ret;
+}
+
+static void
+_jack_anim(app_t *app)
+{
 	bool refresh = false;
 	bool realize = false;
 	bool done = false;
@@ -1265,7 +1365,7 @@ _jack_anim(void *data)
 	size_t len;
 	while((ev = varchunk_read_request(app->from_jack, &len)))
 	{
-		//printf("_jack_timer_cb: %i\n", ev->type);
+		//printf("_jack_anim: %i\n", ev->type);
 
 		switch(ev->type)
 		{
@@ -1540,10 +1640,11 @@ _jack_anim(void *data)
 			{
 				jack_session_event_t *jev = ev->session.event;
 				
-				printf("_session_async: %s %s %s\n",
+				printf("_session_signal: %s %s %s\n",
 					jev->session_dir, jev->client_uuid, jev->command_line);
 
-				ecore_file_mkpath(jev->session_dir); // path may not exist yet
+				// path may not exist yet
+				mkdirp(jev->session_dir, S_IRWXU | S_IRGRP |  S_IXGRP | S_IROTH | S_IXOTH);
 
 				asprintf(&jev->command_line, "patchmatrix -u %s ${SESSION_DIR}",
 					jev->client_uuid);
@@ -1572,10 +1673,7 @@ _jack_anim(void *data)
 	else if(realize)
 		_ui_realize(app);
 
-	if(done)
-		elm_exit();
-
-	return ECORE_CALLBACK_RENEW;
+	app->done = done;
 }
 
 static void
@@ -1591,6 +1689,9 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 		ev->on_info_shutdown.reason = strdup(reason);
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/* FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 
@@ -1635,6 +1736,9 @@ _jack_client_registration_cb(const char *name, int state, void *arg)
 		ev->client_register.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 
@@ -1651,6 +1755,9 @@ _jack_port_registration_cb(jack_port_id_t id, int state, void *arg)
 		ev->port_register.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 
@@ -1676,6 +1783,9 @@ _jack_port_connect_cb(jack_port_id_t id_source, jack_port_id_t id_sink, int stat
 		ev->port_connect.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 
@@ -1700,6 +1810,9 @@ _jack_graph_order_cb(void *arg)
 		ev->type = EVENT_GRAPH_ORDER;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 
 	return 0;
@@ -1722,6 +1835,9 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 		ev->property_change.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 #endif
@@ -1739,6 +1855,9 @@ _jack_session_cb(jack_session_event_t *jev, void *arg)
 		ev->session.event = jev;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
 	}
 }
 
@@ -1812,873 +1931,24 @@ _jack_deinit(app_t *app)
 	jack_client_close(app->client);
 }
 
-static void
-_ui_delete_request(void *data, Evas_Object *obj, void *event)
-{
-	app_t *app = data;
-
-	elm_exit();
-}
-
-static void
-_ui_connect_request(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-
-	patcher_event_t *ev = event_info;
-	if(!app || !ev)
-		return;
-
-	patcher_event_t *source = &ev[0];
-	patcher_event_t *sink = &ev[1];
-	if(!source || !sink)
-		return;
-
-	int source_id = source->id;
-	int sink_id = sink->id;
-
-	char *source_name = NULL;
-	char *sink_name = NULL;
-	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
-	_db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
-	if(!source_name || !sink_name)
-		return;
-
-	//printf("connect_request: %s %s\n", source_name, sink_name);
-
-	jack_connect(app->client, source_name, sink_name);
-
-	free(source_name);
-	free(sink_name);
-}
-
-static void
-_ui_disconnect_request(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-
-	patcher_event_t *ev = event_info;
-	if(!app || !ev)
-		return;
-
-	patcher_event_t *source = &ev[0];
-	patcher_event_t *sink = &ev[1];
-	if(!source || !sink)
-		return;
-
-	int source_id = source->id;
-	int sink_id = sink->id;
-
-	char *source_name = NULL;
-	char *sink_name = NULL;
-	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
-	_db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
-	if(!source_name || !sink_name)
-		return;
-
-	//printf("disconnect_request: %s %s\n", source_name, sink_name);
-
-	jack_disconnect(app->client, source_name, sink_name);
-
-	free(source_name);
-	free(sink_name);
-}
-
-static void
-_ui_realize_request(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-	patcher_event_t *ev = event_info;
-	if(!app || !ev)
-		return;
-
-	patcher_event_t *source = &ev[0];
-	patcher_event_t *sink = &ev[1];
-	if(!source || !sink)
-		return;
-
-	int source_id = source->id;
-	int sink_id = sink->id;
-
-	char *source_name = NULL;
-	char *sink_name = NULL;
-	 _db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
-	 _db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL);
-	if(!source_name || !sink_name)
-		return;
-
-	int type;
-	int direction;
-	int source_client_id, sink_client_id;
-	bool source_terminal, source_physical;
-	bool sink_terminal, sink_physical;
-	_db_port_get_info(app, source_id, &type, &direction, &source_client_id,
-		&source_terminal, &source_physical);
-	_db_port_get_info(app, sink_id, &type, &direction, &sink_client_id,
-		&sink_terminal, &sink_physical);
-
-	const int connected = _db_connection_get(app, source_name, sink_name);
-
-	//printf("realize_request: %s %s %i\n", source_name, sink_name, connected);
-
-	int indirect = 0;
-	if(   (source_client_id == sink_client_id) // connection to self?
-		&& !(source_terminal && sink_terminal) ) // system ports
-	{
-		indirect = -1;
-	}
-	patcher_object_connected_set(obj, source_id, sink_id, connected, indirect);
-
-	free(source_name);
-	free(sink_name);
-}
-
-static void
-_client_link_toggle(void *data, Evas_Object *lay, const char *emission, const char *source)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(lay, "app");
-
-	int selected = _db_client_get_selected(app, *id);
-	selected ^= 1; // toggle
-	elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
-
-	_db_client_set_selected(app, *id, selected);
-	_ui_refresh(app);
-}
-
-static Evas_Object *
-_ui_client_list_content_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	int selected = _db_client_get_selected(app, *id);
-
-	if(!strcmp(part, "elm.swallow.content"))
-	{
-		Evas_Object *lay = elm_layout_add(obj);
-		if(lay)
-		{
-			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/client");
-			evas_object_data_set(lay, "app", app);
-			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(lay);
-		
-			// color
-			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20);
-			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
-
-			// link
-			elm_layout_signal_callback_add(lay, "link,toggle", "", _client_link_toggle, id);
-			elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
-
-			// name/pretty_name
-			char *name = NULL;
-			char *pretty_name = NULL;;
-			_db_client_find_by_id(app, *id, &name, &pretty_name);
-
-			if(pretty_name)
-			{
-				elm_object_part_text_set(lay, "elm.text", pretty_name);
-				free(pretty_name);
-			}
-			if(name)
-			{
-				if(!pretty_name)
-					elm_object_part_text_set(lay, "elm.text", name);
-				free(name);
-			}
-
-			return lay;
-		}
-	}
-
-	return NULL;
-}
-
-static void
-_ui_client_list_del(void *data, Evas_Object *obj)
-{
-	int *id = data;
-
-	free(id);
-}
-
-static Evas_Object *
-_ui_source_list_content_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.swallow.content"))
-	{
-		Evas_Object *lay = elm_layout_add(obj);
-		if(lay)
-		{
-			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/group");
-			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(lay);
-		
-			// color
-			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20);
-			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
-
-			// group
-			elm_object_part_text_set(lay, "elm.text", "Inputs");
-
-			return lay;
-		}
-	}
-
-	return NULL;
-}
-
-static Evas_Object *
-_ui_sink_list_content_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	if(!strcmp(part, "elm.swallow.content"))
-	{
-		Evas_Object *lay = elm_layout_add(obj);
-		if(lay)
-		{
-			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/group");
-			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(lay);
-		
-			// color
-			char msg [7];
-			sprintf(msg, "col,%02i", *id % 20);
-			elm_layout_signal_emit(lay, msg, "/patchmatrix/list/ui");
-
-			// group
-			elm_object_part_text_set(lay, "elm.text", "Outputs");
-
-			return lay;
-		}
-	}
-
-	return NULL;
-}
-
-static void
-_port_link_toggle(void *data, Evas_Object *lay, const char *emission, const char *source)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(lay, "app");
-
-	int selected = _db_port_get_selected(app, *id);
-	selected ^= 1; // toggle
-	elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
-
-	_db_port_set_selected(app, *id, selected);
-	_ui_refresh(app);
-}
-
-static Evas_Object *
-_ui_port_list_content_get(void *data, Evas_Object *obj, const char *part)
-{
-	int *id = data;
-	app_t *app = evas_object_data_get(obj, "app");
-
-	if(!id || !app)
-		return NULL;
-
-	int type;
-	int direction;
-	int client_id;
-	_db_port_get_info(app, *id, &type, &direction, &client_id, NULL, NULL);
-	int selected = _db_port_get_selected(app, *id);
-
-	if(!strcmp(part, "elm.swallow.content"))
-	{
-		Evas_Object *lay = elm_layout_add(obj);
-		if(lay)
-		{
-			elm_layout_file_set(lay, PATCHMATRIX_DATA_DIR"/patchmatrix.edj",
-				"/patchmatrix/list/port");
-			evas_object_data_set(lay, "app", app);
-			evas_object_size_hint_weight_set(lay, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(lay, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(lay);
-
-			// link
-			elm_layout_signal_callback_add(lay, "link,toggle", "", _port_link_toggle, id);
-			elm_layout_signal_emit(lay, selected ? "link,on" : "link,off", "");
-			
-			// type
-			switch(type)
-			{
-				case TYPE_AUDIO:
-					elm_layout_signal_emit(lay, "type,audio", "");
-					break;
-				case TYPE_MIDI:
-					elm_layout_signal_emit(lay, "type,midi", "");
-					break;
-#ifdef JACK_HAS_METADATA_API
-				case TYPE_OSC:
-					elm_layout_signal_emit(lay, "type,osc", "");
-					break;
-				case TYPE_CV:
-					elm_layout_signal_emit(lay, "type,cv", "");
-					break;
-#endif
-				default:
-					elm_layout_signal_emit(lay, "type,hide", "");
-					break;
-			}
-
-			// name/pretty_name
-			char *short_name = NULL;
-			char *pretty_name = NULL;;
-			_db_port_find_by_id(app, *id, NULL, &short_name, &pretty_name);
-
-			if(pretty_name)
-			{
-				elm_object_part_text_set(lay, "elm.text", pretty_name);
-				free(pretty_name);
-			}
-			if(short_name)
-			{
-				if(!pretty_name)
-					elm_object_part_text_set(lay, "elm.text", short_name);
-				free(short_name);
-			}
-
-			return lay;
-		}
-	}
-
-	return NULL;
-}
-
-static void
-_ui_port_list_del(void *data, Evas_Object *obj)
-{
-	int *id = data;
-
-	free(id);
-}
-
-static void
-_ui_list_activated(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	app_t *app = data;
-
-	if(!itm)
-		return;
-
-	int *id = elm_object_item_data_get(itm);
-	const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-	Evas_Object *lay = elm_object_item_part_content_get(itm, "elm.swallow.content");
-
-	if(!id || !itc || !lay)
-		return;
-
-	if(itc == app->clientitc)
-		_client_link_toggle(id, lay, NULL, NULL);
-	else if(itc == app->portitc)
-		_port_link_toggle(id, lay, NULL, NULL);
-}
-
-static void
-_ui_list_expand_request(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	app_t *app = data;
-
-	elm_genlist_item_expanded_set(itm, EINA_TRUE);
-}
-
-static void
-_ui_list_contract_request(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	app_t *app = data;
-
-	elm_genlist_item_expanded_set(itm, EINA_FALSE);
-}
-
-static void
-_ui_list_expanded(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-	app_t *app = data;
-
-	int *client_id = elm_object_item_data_get(itm);
-
-	if(itc == app->clientitc)
-	{
-		Elm_Object_Item *elmnt;
-
-		elmnt = elm_genlist_item_append(app->list, app->sourceitc,
-			client_id, itm, ELM_GENLIST_ITEM_TREE, NULL, NULL);
-		elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
-
-		elmnt = elm_genlist_item_append(app->list, app->sinkitc,
-			client_id, itm, ELM_GENLIST_ITEM_TREE, NULL, NULL);
-		elm_genlist_item_expanded_set(elmnt, EINA_TRUE);
-
-		elm_genlist_item_append(app->list, app->sepitc,
-			NULL, itm, ELM_GENLIST_ITEM_NONE, NULL, NULL);
-	}
-	else if(itc == app->sourceitc)
-	{
-		sqlite3_stmt *stmt = app->query_client_port_list;
-
-		sqlite3_bind_int(stmt, 1, *client_id); // client_id
-		sqlite3_bind_int(stmt, 2, 0); // sources
-
-		while(sqlite3_step(stmt) != SQLITE_DONE)
-		{
-			int id = sqlite3_column_int(stmt, 0);
-
-			int *ref = calloc(1, sizeof(int));
-			*ref = id;
-			elm_genlist_item_append(app->list, app->portitc,
-				ref, itm, ELM_GENLIST_ITEM_NONE, NULL, NULL);
-		}
-
-		sqlite3_reset(stmt);
-	}
-	else if(itc == app->sinkitc)
-	{
-		sqlite3_stmt *stmt = app->query_client_port_list;
-
-		sqlite3_bind_int(stmt, 1, *client_id); // client_id
-		sqlite3_bind_int(stmt, 2, 1); // sinks
-
-		while(sqlite3_step(stmt) != SQLITE_DONE)
-		{
-			int id = sqlite3_column_int(stmt, 0);
-
-			int *ref = calloc(1, sizeof(int));
-			*ref = id;
-			elm_genlist_item_append(app->list, app->portitc,
-				ref, itm, ELM_GENLIST_ITEM_NONE, NULL, NULL);
-		}
-
-		sqlite3_reset(stmt);
-	}
-}
-
-static void
-_ui_list_contracted(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	app_t *app = data;
-
-	elm_genlist_item_subitems_clear(itm);
-}
-
-static void
-_ui_list_moved(void *data, Evas_Object *obj, void *event_info)
-{
-	Elm_Object_Item *itm = event_info;
-	app_t *app = data;
-
-	const Elm_Genlist_Item_Class *class = elm_genlist_item_item_class_get(itm);
-	if(class == app->clientitc)
-	{
-		//printf("_ui_list_moved: client\n");
-
-		// update client positions
-		int pos = 0;
-		for(Elm_Object_Item *itm2 = elm_genlist_first_item_get(app->list);
-			itm2 != NULL;
-			itm2 = elm_genlist_item_next_get(itm2))
-		{
-			const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm2);
-			if(itc != app->clientitc) // is not a client
-				continue; // skip 
-
-			int *id = elm_object_item_data_get(itm2);
-			_db_client_set_position(app, *id, pos++);
-		}
-
-		_ui_refresh(app);
-	}
-	else if(class == app->portitc)
-	{
-		//printf("_ui_list_moved: port\n");
-	}
-}
-
-static void
-_toolbar_selected(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-	Elm_Object_Item *itm = event_info;
-
-	if(itm == app->tool_audio)
-	{
-		app->type = TYPE_AUDIO;
-		app->designation = DESIGNATION_NONE;
-		_ui_refresh(app);
-	}
-	else if(itm == app->tool_midi)
-	{
-		app->type = TYPE_MIDI;
-		app->designation = DESIGNATION_NONE;
-		_ui_refresh(app);
-	}
-#ifdef JACK_HAS_METADATA_API
-	else if(itm == app->tool_osc)
-	{
-		app->type = TYPE_OSC;
-		app->designation = DESIGNATION_NONE;
-		_ui_refresh(app);
-	}
-	else if(itm == app->tool_cv)
-	{
-		app->type = TYPE_CV;
-		app->designation = DESIGNATION_NONE;
-		_ui_refresh(app);
-	}
-#endif
-}
-
-static void
-_menu_zoom_in(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-
-	patcher_object_zoom_in(app->patcher);
-}
-
-static void
-_menu_zoom_out(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-
-	patcher_object_zoom_out(app->patcher);
-}
-
-static void
-_menu_close(void *data, Evas_Object *obj, void *event_info)
-{
-	elm_exit();
-}
-
-static void
-_menu_about(void *data, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-
-	if(evas_object_visible_get(app->popup))
-		evas_object_hide(app->popup);
-	else
-		evas_object_show(app->popup);
-}
-
-static void
-_key_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
-{
-	app_t *app = data;
-	const Evas_Event_Key_Down *ev = event_info;
-
-	const Eina_Bool cntrl = evas_key_modifier_is_set(ev->modifiers, "Control");
-	
-	if(cntrl)
-	{
-		if(!strcmp(ev->key, "KP_Add"))
-			_menu_zoom_in(app, NULL, NULL);
-		else if(!strcmp(ev->key, "KP_Subtract"))
-			_menu_zoom_out(app, NULL, NULL);
-		else if(!strcmp(ev->key, "q"))
-			_menu_close(app, NULL, NULL);
-		else if(!strcmp(ev->key, "h"))
-			_menu_about(app, NULL, NULL);
-		else if(!strcmp(ev->key, "a"))
-			elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
-		else if(!strcmp(ev->key, "m"))
-			elm_toolbar_item_selected_set(app->tool_midi, EINA_TRUE);
-#ifdef JACK_HAS_METADATA_API
-		else if(!strcmp(ev->key, "o"))
-			elm_toolbar_item_selected_set(app->tool_osc, EINA_TRUE);
-		else if(!strcmp(ev->key, "c"))
-			elm_toolbar_item_selected_set(app->tool_cv, EINA_TRUE);
-#endif
-	}
-}
-
 static int
 _ui_init(app_t *app)
 {
+	nk_patcher_init(&app->patch, 0, 0);
+
 	// UI
-	app->w = 1024;
-	app->h = 420;
 	app->type = TYPE_AUDIO;
 	app->designation = DESIGNATION_NONE;
 
-	app->clientitc = elm_genlist_item_class_new();
-	if(app->clientitc)
-	{
-		app->clientitc->item_style = "full";
-		app->clientitc->func.text_get = NULL;
-		app->clientitc->func.content_get = _ui_client_list_content_get;
-		app->clientitc->func.state_get = NULL;
-		app->clientitc->func.del = _ui_client_list_del;
-	}
+	nk_pugl_init(&app->win);
+	nk_pugl_show(&app->win);
 
-	app->sourceitc = elm_genlist_item_class_new();
-	if(app->sourceitc)
-	{
-		app->sourceitc->item_style = "full";
-		app->sourceitc->func.text_get = NULL;
-		app->sourceitc->func.content_get = _ui_source_list_content_get;
-		app->sourceitc->func.state_get = NULL;
-		app->sourceitc->func.del = NULL;
-	}
-
-	app->sinkitc = elm_genlist_item_class_new();
-	if(app->sinkitc)
-	{
-		app->sinkitc->item_style = "full";
-		app->sinkitc->func.text_get = NULL;
-		app->sinkitc->func.content_get = _ui_sink_list_content_get;
-		app->sinkitc->func.state_get = NULL;
-		app->sinkitc->func.del = NULL;
-	}
-
-	app->sepitc = elm_genlist_item_class_new();
-	if(app->sepitc)
-	{
-		app->sepitc->item_style = "default";
-		app->sepitc->func.text_get = NULL;
-		app->sepitc->func.content_get = NULL;
-		app->sepitc->func.state_get = NULL;
-		app->sepitc->func.del = NULL;
-	}
-
-	app->portitc = elm_genlist_item_class_new();
-	if(app->portitc)
-	{
-		app->portitc->item_style = "full";
-		app->portitc->func.text_get = NULL;
-		app->portitc->func.content_get = _ui_port_list_content_get;
-		app->portitc->func.state_get = NULL;
-		app->portitc->func.del = _ui_port_list_del;
-	}
-
-	app->win = elm_win_util_standard_add("PatchMatrix", "PatchMarix");
-	if(!app->win)
-		return -1;
-
-	evas_object_smart_callback_add(app->win, "delete,request", _ui_delete_request, app);
-	evas_object_resize(app->win, app->w, app->h);
-	evas_object_show(app->win);
-
-	evas_object_event_callback_add(app->win, EVAS_CALLBACK_KEY_DOWN, _key_down, app);
-
-	const Eina_Bool exclusive = EINA_FALSE;
-	const Evas_Modifier_Mask ctrl_mask = evas_key_modifier_mask_get(
-		evas_object_evas_get(app->win), "Control");
-	if(!evas_object_key_grab(app->win, "KP_Add", 0, ctrl_mask, exclusive)) // zoom in
-		fprintf(stderr, "could not grab '+' key\n");
-	if(!evas_object_key_grab(app->win, "KP_Subtract", 0, ctrl_mask, exclusive)) // zoom out
-		fprintf(stderr, "could not grab '-' key\n");
-	if(!evas_object_key_grab(app->win, "q", ctrl_mask, 0, exclusive)) // quit
-		fprintf(stderr, "could not grab 'q' key\n");
-	if(!evas_object_key_grab(app->win, "h", ctrl_mask, 0, exclusive)) // about
-		fprintf(stderr, "could not grab 'h' key\n");
-	if(!evas_object_key_grab(app->win, "a", ctrl_mask, 0, exclusive)) // AUDIO
-		fprintf(stderr, "could not grab 'a' key\n");
-	if(!evas_object_key_grab(app->win, "m", ctrl_mask, 0, exclusive)) // MIDI
-		fprintf(stderr, "could not grab 'm' key\n");
+	app->icons[0] = nk_pugl_icon_load(&app->win, PATCHMATRIX_DATA_DIR"/audio.png");
+	app->icons[1] = nk_pugl_icon_load(&app->win, PATCHMATRIX_DATA_DIR"/midi.png");
 #ifdef JACK_HAS_METADATA_API
-	if(!evas_object_key_grab(app->win, "o", ctrl_mask, 0, exclusive)) // OSC
-		fprintf(stderr, "could not grab 'o' key\n");
-	if(!evas_object_key_grab(app->win, "c", ctrl_mask, 0, exclusive)) // CV
-		fprintf(stderr, "could not grab 'c' key\n");
+	app->icons[2] = nk_pugl_icon_load(&app->win, PATCHMATRIX_DATA_DIR"/osc.png");
+	app->icons[3] = nk_pugl_icon_load(&app->win, PATCHMATRIX_DATA_DIR"/cv.png");
 #endif
-
-	Evas_Object *mainmenu = elm_win_main_menu_get(app->win);
-	if(mainmenu)
-	{
-		evas_object_show(mainmenu);
-
-		Elm_Object_Item *elmnt;
-
-		elmnt = elm_menu_item_add(mainmenu, NULL, "zoom-in", "Zoom In", _menu_zoom_in, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl + '+'");
-
-		elmnt = elm_menu_item_add(mainmenu, NULL, "zoom-out", "Zoom Out", _menu_zoom_out, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl + '-'");
-
-		elmnt = elm_menu_item_add(mainmenu, NULL, "application-exit", "Quit", _menu_close, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl + 'Q'");
-
-		elmnt = elm_menu_item_add(mainmenu, NULL, "help-about", "About", _menu_about, app);
-		elm_object_item_tooltip_text_set(elmnt, "Ctrl + 'H'");
-	}
-
-	Evas_Object *pane = elm_panes_add(app->win);
-	if(pane)
-	{
-		elm_panes_horizontal_set(pane, EINA_FALSE);
-		elm_panes_content_left_size_set(pane, 0.75);
-		evas_object_size_hint_weight_set(pane, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-		evas_object_size_hint_align_set(pane, EVAS_HINT_FILL, EVAS_HINT_FILL);
-		elm_win_resize_object_add(app->win, pane);
-		evas_object_show(pane);
-
-		Evas_Object *hbox = elm_box_add(pane);
-		if(hbox)
-		{
-			elm_box_horizontal_set(hbox, EINA_TRUE);
-			elm_box_homogeneous_set(hbox, EINA_FALSE);
-			elm_box_padding_set(hbox, 10, 0);
-			evas_object_size_hint_weight_set(hbox, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(hbox, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(hbox);
-
-			elm_object_part_content_set(pane, "left", hbox);
-
-			app->patcher = patcher_object_add(app->win);
-			if(app->patcher)
-			{
-				evas_object_data_set(app->patcher, "app", app);
-				evas_object_smart_callback_add(app->patcher, "connect,request",
-					_ui_connect_request, app);
-				evas_object_smart_callback_add(app->patcher, "disconnect,request",
-					_ui_disconnect_request, app);
-				evas_object_smart_callback_add(app->patcher, "realize,request",
-					_ui_realize_request, app);
-				evas_object_size_hint_weight_set(app->patcher, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-				evas_object_size_hint_align_set(app->patcher, EVAS_HINT_FILL, EVAS_HINT_FILL);
-				evas_object_show(app->patcher);
-
-				elm_box_pack_end(hbox, app->patcher);
-
-				_ui_refresh(app);
-			} // app->patcher
-
-			app->tools = elm_toolbar_add(hbox);
-			if(app->tools)
-			{
-				elm_toolbar_horizontal_set(app->tools, EINA_FALSE);
-				elm_toolbar_homogeneous_set(app->tools, EINA_TRUE);
-				elm_toolbar_align_set(app->tools, 0.f);
-				elm_toolbar_select_mode_set(app->tools, ELM_OBJECT_SELECT_MODE_ALWAYS);
-				evas_object_smart_callback_add(app->tools, "selected",
-					_toolbar_selected, app);
-				evas_object_size_hint_weight_set(app->tools, 0.f, EVAS_HINT_EXPAND);
-				evas_object_size_hint_align_set(app->tools, 0.f, EVAS_HINT_FILL);
-				evas_object_show(app->tools);
-
-				app->tool_audio = elm_toolbar_item_append(app->tools,
-					PATCHMATRIX_DATA_DIR"/audio.png", "AUDIO", NULL, NULL);
-				elm_toolbar_item_selected_set(app->tool_audio, EINA_TRUE);
-				elm_object_item_tooltip_text_set(app->tool_audio, "Ctrl + 'A'");
-
-				app->tool_midi = elm_toolbar_item_append(app->tools,
-					PATCHMATRIX_DATA_DIR"/midi.png", "MIDI", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_midi, "Ctrl + 'M'");
-
-#ifdef JACK_HAS_METADATA_API
-				app->tool_osc = elm_toolbar_item_append(app->tools,
-					PATCHMATRIX_DATA_DIR"/osc.png", "OSC", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_osc, "Ctrl + 'O'");
-
-				app->tool_cv = elm_toolbar_item_append(app->tools,
-					PATCHMATRIX_DATA_DIR"/cv.png", "CV", NULL, NULL);
-				elm_object_item_tooltip_text_set(app->tool_cv, "Ctrl + 'C'");
-#endif
-
-				elm_box_pack_end(hbox, app->tools);
-			} // app->tools
-		} // hbox
-
-		app->list = elm_genlist_add(pane);
-		if(app->list)
-		{
-			elm_genlist_reorder_mode_set(app->list, EINA_TRUE);
-			elm_genlist_select_mode_set(app->list, ELM_OBJECT_SELECT_MODE_NONE);
-			evas_object_smart_callback_add(app->list, "activated",
-				_ui_list_activated, app);
-			evas_object_smart_callback_add(app->list, "expand,request",
-				_ui_list_expand_request, app);
-			evas_object_smart_callback_add(app->list, "contract,request",
-				_ui_list_contract_request, app);
-			evas_object_smart_callback_add(app->list, "expanded",
-				_ui_list_expanded, app);
-			evas_object_smart_callback_add(app->list, "contracted",
-				_ui_list_contracted, app);
-			evas_object_smart_callback_add(app->list, "moved",
-				_ui_list_moved, app);
-			evas_object_data_set(app->list, "app", app);
-			evas_object_size_hint_weight_set(app->list, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-			evas_object_size_hint_align_set(app->list, EVAS_HINT_FILL, EVAS_HINT_FILL);
-			evas_object_show(app->list);
-
-			elm_object_part_content_set(pane, "right", app->list);
-		} // app->list
-	} // pane
-
-	app->popup = elm_popup_add(app->win);
-	if(app->popup)
-	{
-		elm_popup_allow_events_set(app->popup, EINA_TRUE);
-		elm_popup_timeout_set(app->popup, 0.f);
-
-		Evas_Object *hbox = elm_box_add(app->popup);
-		if(hbox)
-		{
-			elm_box_horizontal_set(hbox, EINA_TRUE);
-			elm_box_homogeneous_set(hbox, EINA_FALSE);
-			elm_box_padding_set(hbox, 10, 10);
-			evas_object_show(hbox);
-			elm_object_content_set(app->popup, hbox);
-
-			Evas_Object *icon = elm_icon_add(hbox);
-			if(icon)
-			{
-				elm_image_file_set(icon, PATCHMATRIX_DATA_DIR"/omk_logo_256x256.png", NULL);
-				evas_object_size_hint_min_set(icon, 128, 128);
-				evas_object_size_hint_max_set(icon, 256, 256);
-				evas_object_size_hint_aspect_set(icon, EVAS_ASPECT_CONTROL_BOTH, 1, 1);
-				evas_object_show(icon);
-				elm_box_pack_end(hbox, icon);
-			}
-
-			Evas_Object *label2 = elm_label_add(hbox);
-			if(label2)
-			{
-				elm_object_text_set(label2,
-					"<color=#b00 shadow_color=#fff font_size=20>"
-					"PatchMatrix - a JACK Patchbay"
-					"</color></br><align=left>"
-					"Version "PATCHMATRIX_VERSION"</br></br>"
-					"Copyright (c) 2016 Hanspeter Portner</br></br>"
-					"This is free and libre software</br>"
-					"Released under Artistic License 2.0</br>"
-					"By Open Music Kontrollers</br></br>"
-					"<color=#bbb>"
-					"https://github.com/OpenMusicKontrollers/patchmatrix</br>"
-					"dev@open-music-kontrollers.ch"
-					"</color></align>");
-
-				evas_object_show(label2);
-				elm_box_pack_end(hbox, label2);
-			}
-		}
-	}
-
-	app->anim = ecore_animator_add(_jack_anim, app);
 
 	return 0;
 }
@@ -2686,28 +1956,22 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
-	if(app->anim)
-		ecore_animator_del(app->anim);
-	if(app->win)
-		evas_object_del(app->win);
+	nk_pugl_icon_unload(&app->win, app->icons[0]);
+	nk_pugl_icon_unload(&app->win, app->icons[1]);
+#ifdef JACK_HAS_METADATA_API
+	nk_pugl_icon_unload(&app->win, app->icons[2]);
+	nk_pugl_icon_unload(&app->win, app->icons[3]);
+#endif
 
-	if(app->clientitc)
-		elm_genlist_item_class_free(app->clientitc);
-	if(app->sourceitc)
-		elm_genlist_item_class_free(app->sourceitc);
-	if(app->sinkitc)
-		elm_genlist_item_class_free(app->sinkitc);
-	if(app->sepitc)
-		elm_genlist_item_class_free(app->sepitc);
-	if(app->portitc)
-		elm_genlist_item_class_free(app->portitc);
+	nk_pugl_hide(&app->win);
+	nk_pugl_shutdown(&app->win);
+
+	nk_patcher_deinit(&app->patch);
 }
 
 static void
 _ui_populate(app_t *app)
 {
-	elm_genlist_clear(app->list);
-
 	const char **sources = jack_get_ports(app->client, NULL, NULL, JackPortIsOutput);
 	const char **sinks = jack_get_ports(app->client, NULL, NULL, JackPortIsInput);
 
@@ -2771,21 +2035,6 @@ _ui_populate(app_t *app)
 	}
 
 	app->populating = false;
-
-	for(Elm_Object_Item *itm = elm_genlist_first_item_get(app->list);
-		itm != NULL;
-		itm = elm_genlist_item_next_get(itm))
-	{
-		const Elm_Genlist_Item_Class *itc = elm_genlist_item_item_class_get(itm);
-		if(itc != app->clientitc)
-			continue; // ignore non-client items
-
-		if(elm_genlist_item_expanded_get(itm))
-		{
-			elm_genlist_item_expanded_set(itm, EINA_FALSE);
-			elm_genlist_item_expanded_set(itm, EINA_TRUE);
-		}
-	}
 }
 
 // update single grid and connections
@@ -2795,9 +2044,6 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_port_list;
-
-	if(!app->patcher)
-		return;
 
 	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
@@ -2827,7 +2073,8 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	patcher_object_dimension_set(app->patcher, num_sources, num_sinks);
+	nk_patcher_deinit(&app->patch);
+	nk_patcher_init(&app->patch, num_sources, num_sinks);
 
 	ret = sqlite3_bind_int(stmt, 1, type); // type
 	(void)ret;
@@ -2847,21 +2094,23 @@ _ui_refresh_single(app_t *app, int type, int designation)
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
 		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
-		patcher_object_source_id_set(app->patcher, source, id);
-		patcher_object_source_color_set(app->patcher, source, client_id % 20);
+		nk_patcher_source_id_set(&app->patch, source, id);
+		nk_patcher_source_color_set(&app->patch, source, _color_get(client_id));
 
 		if(port_pretty_name)
 		{
-			patcher_object_source_label_set(app->patcher, source, port_pretty_name);
+			nk_patcher_source_label_set(&app->patch, source, port_pretty_name);
 			free(port_pretty_name);
 		}
 
 		if(client_pretty_name)
 		{
+			/* FIXME
 			if( (last_client_id == -1) || (last_client_id != client_id) )
-				patcher_object_source_group_set(app->patcher, source, client_pretty_name);
+				nk_patch_source_group_set(&app->patch, source, client_pretty_name);
 			else
-				patcher_object_source_group_set(app->patcher, source, "");
+				nk_patch_source_group_set(&app->patch, source, "");
+			*/
 			free(client_pretty_name);
 		}
 
@@ -2888,21 +2137,23 @@ _ui_refresh_single(app_t *app, int type, int designation)
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
 		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
-		patcher_object_sink_id_set(app->patcher, sink, id);
-		patcher_object_sink_color_set(app->patcher, sink, client_id % 20);
+		nk_patcher_sink_id_set(&app->patch, sink, id);
+		nk_patcher_sink_color_set(&app->patch, sink, _color_get(client_id));
 
 		if(port_pretty_name)
 		{
-			patcher_object_sink_label_set(app->patcher, sink, port_pretty_name);
+			nk_patcher_sink_label_set(&app->patch, sink, port_pretty_name);
 			free(port_pretty_name);
 		}
 
 		if(client_pretty_name)
 		{
+			/* FIXME
 			if( (last_client_id == -1) || (last_client_id != client_id) )
-				patcher_object_sink_group_set(app->patcher, sink, client_pretty_name);
+				nk_patch_sink_group_set(&app->patch, sink, client_pretty_name);
 			else
-				patcher_object_sink_group_set(app->patcher, sink, "");
+				nk_patch_sink_group_set(&app->patch, sink, "");
+			*/
 			free(client_pretty_name);
 		}
 
@@ -2911,7 +2162,25 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	patcher_object_realize(app->patcher);
+	//FIXME
+	for(int source_idx=0; source_idx<app->patch.source_n; source_idx++)
+	{
+		const intptr_t source_id = app->patch.sources[source_idx].id;
+		char *source_name = NULL;
+		_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
+
+		for(int sink_idx=0; sink_idx<app->patch.sink_n; sink_idx++)
+		{
+			const intptr_t sink_id = app->patch.sinks[sink_idx].id;
+			char *sink_name = NULL;
+			_db_port_find_by_id(app, sink_id,  &sink_name, NULL, NULL);
+
+			const bool connected = _db_connection_get(app, source_name, sink_name);
+			nk_patcher_connected_set(&app->patch, source_id, sink_id, connected, NK_PATCHER_TYPE_DIRECT);
+		}
+	}
+
+	nk_pugl_post_redisplay(&app->win);
 }
 
 // update all grids and connections
@@ -2925,17 +2194,182 @@ _ui_refresh(app_t *app)
 static void
 _ui_realize(app_t *app)
 {
-	if(app->patcher)
-		patcher_object_realize(app->patcher);
+	nk_pugl_post_redisplay(&app->win);
 }
 
-static int
-elm_main(int argc, char **argv)
+static inline int
+_expose_direction(struct nk_context *ctx, app_t *app, int direction)
+{
+	const int dy = 25;
+	int count = 0;
+
+	struct nk_style *style = &ctx->style;
+	const struct nk_color tab_border_color = style->tab.border_color;
+
+	for(int client_id = _db_client_find_all_itr(app);
+		client_id;
+		client_id = _db_client_find_all_itr(app))
+	{
+		char *client_name = NULL;
+		char *client_pretty_name = NULL;
+		_db_client_find_by_id(app, client_id, &client_name, &client_pretty_name);
+
+		if(_db_port_count(app, client_id, direction) == 0)
+			continue; // ignore
+
+		style->tab.border_color = _color_get(client_id);
+
+		int client_sel = _db_client_get_selected(app, client_id);
+		nk_layout_row_dynamic(ctx, dy, 1);
+		if( (client_sel = nk_tree_push_id(ctx, NK_TREE_TAB, client_pretty_name, client_sel ? NK_MAXIMIZED : NK_MINIMIZED, client_id) == NK_MAXIMIZED) )
+		{
+			for(int port_id = _db_port_find_all_itr(app, client_id, direction);
+				port_id;
+				port_id = _db_port_find_all_itr(app, client_id, direction))
+			{
+				char *port_name = NULL;
+				char *port_short_name = NULL;
+				char *port_pretty_name = NULL;
+				_db_port_find_by_id(app, port_id, &port_name, &port_short_name, &port_pretty_name);
+
+				int port_sel = _db_port_get_selected(app, port_id);
+				int type = TYPE_AUDIO;
+				_db_port_get_info(app, port_id, &type, NULL, NULL, NULL, NULL);
+				port_sel = nk_select_image_label(ctx, app->icons[type], port_pretty_name, NK_TEXT_LEFT, port_sel);
+				_db_port_set_selected(app, port_id, port_sel);
+
+				count += 1;
+			}
+
+			nk_tree_pop(ctx);
+		}
+		_db_client_set_selected(app, client_id, client_sel);
+	}
+
+	style->tab.border_color = tab_border_color;
+	return count;
+}
+
+static inline void
+_expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
+{
+	app_t *app = data;
+
+	_ui_refresh(app); //FIXME
+
+	const struct nk_vec2 group_padding = nk_panel_get_padding(&ctx->style, NK_PANEL_GROUP);
+	const float dy = 25;
+
+	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
+	{
+		const struct nk_panel *base = nk_window_get_panel(ctx);
+		const struct nk_vec2 size = nk_window_get_size(ctx);
+		if( (size.x != wbounds.w) || (size.y != wbounds.h) )
+			nk_window_set_size(ctx, nk_vec2(wbounds.w, wbounds.h));
+
+		float base_h;
+		{
+			struct nk_rect bounds = base->bounds;
+			bounds.x += group_padding.x;
+			bounds.y += group_padding.y;
+			bounds.w -= 2*group_padding.x;
+			bounds.h -= 2*group_padding.y;
+
+			base_h = bounds.h;
+		}
+
+		nk_layout_row_begin(ctx, NK_DYNAMIC, base_h, 3);
+
+		nk_layout_row_push(ctx, 0.25);
+		if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
+		{
+			app->source_n = _expose_direction(ctx, app, 0);
+
+			nk_group_end(ctx);
+		}
+
+		nk_layout_row_push(ctx, 0.5);
+		if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
+		{
+			const struct nk_panel *center = nk_window_get_panel(ctx);
+#ifdef JACK_HAS_METADATA_API
+			nk_layout_row_dynamic(ctx, dy, 4);
+#else
+			nk_layout_row_dynamic(ctx, dy, 2);
+#endif
+
+			app->type = nk_button_symbol_label(ctx,
+				app->type == TYPE_AUDIO ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "AUDIO", NK_TEXT_RIGHT)
+				? TYPE_AUDIO : app->type;
+			app->type = nk_button_symbol_label(ctx,
+				app->type == TYPE_MIDI ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "MIDI", NK_TEXT_RIGHT)
+				? TYPE_MIDI : app->type;
+#ifdef JACK_HAS_METADATA_API
+			app->type = nk_button_symbol_label(ctx,
+				app->type == TYPE_OSC ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "OSC", NK_TEXT_RIGHT)
+				? TYPE_OSC : app->type;
+			app->type = nk_button_symbol_label(ctx,
+				app->type == TYPE_CV ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "CV", NK_TEXT_RIGHT)
+				? TYPE_CV : app->type;
+#endif
+
+			struct nk_rect bounds = center->bounds;
+			bounds.x += group_padding.x;
+			bounds.y += group_padding.y;
+			bounds.w -= 4*group_padding.x;
+			bounds.h -= 4*group_padding.y + dy;
+
+			nk_layout_row_dynamic(ctx, bounds.h, 1);
+			const nk_patcher_event_t *ev = nk_patcher_render(&app->patch, ctx, bounds);
+			if(ev)
+			{
+				//printf("ev: %lu %lu %i\n", ev->source_id, ev->sink_id, ev->state);
+
+				char *source_name = NULL;
+				char *sink_name = NULL;
+				_db_port_find_by_id(app, ev->source_id, &source_name, NULL, NULL);
+				_db_port_find_by_id(app, ev->sink_id, &sink_name, NULL, NULL);
+				if(source_name && sink_name)
+				{
+					if(ev->state)
+						jack_connect(app->client, source_name, sink_name);
+					else
+						jack_disconnect(app->client, source_name, sink_name);
+				}
+			}
+
+			nk_group_end(ctx);
+		}
+
+		nk_layout_row_push(ctx, 0.25);
+		if(nk_group_begin(ctx, "Sinks", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
+		{
+			app->sink_n = _expose_direction(ctx, app, 1);
+
+			nk_group_end(ctx);
+		}
+
+		nk_layout_row_end(ctx);
+
+		nk_end(ctx);
+	}
+}
+
+int
+main(int argc, char **argv)
 {
 	static app_t app;
 
 	app.server_name = NULL;
 	app.session_id = NULL;
+
+	//FIXME
+	nk_patcher_priv_t *priv = &app.patch.priv;
+	priv->scale = 0.45;
+	priv->ax = -1;
+	priv->ay = -1;
+	priv->sx = 0;
+	priv->sy = 0;
 
 	fprintf(stderr,
 		"PatchMatrix "PATCHMATRIX_VERSION"\n"
@@ -2995,10 +2429,19 @@ elm_main(int argc, char **argv)
 		}
 	}
 
-#ifdef ELM_1_10
-	elm_config_accel_preference_set("gl");
-#endif
-	elm_policy_set(ELM_POLICY_QUIT, ELM_POLICY_QUIT_LAST_WINDOW_CLOSED);
+	nk_pugl_config_t *cfg = &app.win.cfg;
+	cfg->width = 1280;
+	cfg->height = 720;
+	cfg->resizable = true;
+	cfg->ignore = false;
+	cfg->class = "patchmatrix";
+	cfg->title = "PatchMatrix";
+	cfg->parent = 0;
+	cfg->data = &app;
+	cfg->expose = _expose;
+
+	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
+	cfg->font.size = 13;
 
 	if(!(app.from_jack = varchunk_new(0x10000, true)))
 		goto cleanup;
@@ -3015,7 +2458,15 @@ elm_main(int argc, char **argv)
 	_ui_populate(&app);
 	_ui_refresh(&app);
 
-	elm_run();
+	while(!app.done)
+	{
+		//FIXME
+		//nk_pugl_wait_for_event(&app.win);
+		_jack_anim(&app);
+		if(nk_pugl_process_events(&app.win))
+			app.done = true;
+		usleep(40000); //25FPS
+	}
 
 cleanup:
 	_ui_deinit(&app);
@@ -3026,5 +2477,3 @@ cleanup:
 
 	return 0;
 }
-
-ELM_MAIN()
