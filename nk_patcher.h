@@ -631,8 +631,8 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			p[5] = p[3];
 
 			float q [6];
-			_rel_to_abs(priv, col - 0, row, &q[0], &q[1]);
-			_rel_to_abs(priv, col - 1, row, &q[2], &q[3]);
+			_rel_to_abs(priv, col - 0.2, row, &q[0], &q[1]);
+			_rel_to_abs(priv, col - 0.8, row, &q[2], &q[3]);
 			q[4] = q[2];
 			q[5] = q[1];
 
@@ -677,8 +677,8 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			p[5] = p[3];
 
 			float q[6];
-			_rel_to_abs(priv, col, row - 0, &q[0], &q[1]);
-			_rel_to_abs(priv, col, row - 1, &q[2], &q[3]);
+			_rel_to_abs(priv, col, row - 0.2, &q[0], &q[1]);
+			_rel_to_abs(priv, col, row - 0.8, &q[2], &q[3]);
 			q[4] = q[2];
 			q[5] = q[1];
 
