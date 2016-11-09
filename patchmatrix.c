@@ -221,6 +221,7 @@ struct _app_t {
 	int sink_n;
 };
 
+static void _ui_signal(app_t *app);
 static void _ui_refresh_single(app_t *app, int type, int designation);
 static void _ui_refresh(app_t *app);
 static void _ui_realize(app_t *app);
@@ -441,7 +442,7 @@ _db_init(app_t *app)
 	(void)ret;
 #endif
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT name, short_name, pretty_name FROM Ports WHERE id=$1",
+		"SELECT name, short_name, pretty_name, client_id FROM Ports WHERE id=$1",
 		-1, &app->query_port_find_by_id, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
@@ -1009,7 +1010,8 @@ _db_port_find_by_uuid(app_t *app, jack_uuid_t uuid)
 #endif
 
 static void
-_db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **pretty_name)
+_db_port_find_by_id(app_t *app, int id, char **name, char **short_name,
+	char **pretty_name, int *client_id)
 {
 	int ret;
 
@@ -1028,6 +1030,8 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 			*short_name = strdup((const char *)sqlite3_column_text(stmt, 1));
 		if(pretty_name)
 			*pretty_name = strdup((const char *)sqlite3_column_text(stmt, 2));
+		if(client_id)
+			*client_id = sqlite3_column_int(stmt, 3);
 	}
 	else
 	{
@@ -1037,6 +1041,8 @@ _db_port_find_by_id(app_t *app, int id, char **name, char **short_name, char **p
 			*short_name = NULL;
 		if(pretty_name)
 			*pretty_name = NULL;
+		if(client_id)
+			*client_id = -1;
 	}
 
 	ret = sqlite3_reset(stmt);
@@ -1371,8 +1377,6 @@ mkdirp(const char* path, mode_t mode)
 	const char *pattern = "/";
 	for(char *sub = strtok(p, pattern); sub; sub = strtok(NULL, pattern))
 	{
-		printf("-> %s\n", sub);
-
 		mkdir(sub, mode);
 		chdir(sub);
 	}
@@ -1534,11 +1538,9 @@ _jack_anim(app_t *app)
 							int id;
 							if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
-								//printf("property_delete port: %i %s\n", id, ev->property_change.key);
-
 								jack_port_t *port = jack_port_by_id(app->client, id);
 								int midi = 0;
-								if(port) //FIXME
+								if(port)
 									midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
 								int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
 
@@ -1584,7 +1586,7 @@ _jack_anim(app_t *app)
 								if(needs_pretty_update)
 								{
 									char *short_name = NULL;
-									_db_port_find_by_id(app, id, NULL, &short_name, NULL);
+									_db_port_find_by_id(app, id, NULL, &short_name, NULL, NULL);
 									if(short_name)
 									{
 										_db_port_set_pretty(app, id, short_name);
@@ -1604,8 +1606,6 @@ _jack_anim(app_t *app)
 							}
 							else if ((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
-								//printf("property_delete client: %i %s\n", id, ev->property_change.key);
-								
 								bool needs_pretty_update = false;
 
 								if(ev->property_change.key
@@ -1746,9 +1746,7 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 		ev->on_info_shutdown.reason = strdup(reason);
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/* FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1764,9 +1762,7 @@ _jack_freewheel_cb(int starting, void *arg)
 		ev->freewheel.starting = starting;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/* FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1782,9 +1778,7 @@ _jack_buffer_size_cb(jack_nframes_t nframes, void *arg)
 		ev->buffer_size.nframes = nframes; 
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/* FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 
 	return 0;
@@ -1802,9 +1796,7 @@ _jack_sample_rate_cb(jack_nframes_t nframes, void *arg)
 		ev->sample_rate.nframes = nframes;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/* FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 
 	return 0;
@@ -1823,9 +1815,7 @@ _jack_client_registration_cb(const char *name, int state, void *arg)
 		ev->client_register.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1842,9 +1832,7 @@ _jack_port_registration_cb(jack_port_id_t id, int state, void *arg)
 		ev->port_register.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1861,9 +1849,7 @@ _jack_port_rename_cb(jack_port_id_t id, const char *old_name, const char *new_na
 		ev->port_rename.new_name = strdup(new_name);
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1881,9 +1867,7 @@ _jack_port_connect_cb(jack_port_id_t id_source, jack_port_id_t id_sink, int stat
 		ev->port_connect.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -1898,9 +1882,7 @@ _jack_xrun_cb(void *arg)
 		ev->type = EVENT_XRUN;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 
 	return 0;
@@ -1917,9 +1899,7 @@ _jack_graph_order_cb(void *arg)
 		ev->type = EVENT_GRAPH_ORDER;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 
 	return 0;
@@ -1940,9 +1920,7 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 		ev->property_change.state = state;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 #endif
@@ -1960,9 +1938,7 @@ _jack_session_cb(jack_session_event_t *jev, void *arg)
 		ev->session.event = jev;
 
 		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		/*FIXME
-		nk_pugl_signal_expose(&app->win);
-		*/
+		_ui_signal(app);
 	}
 }
 
@@ -2041,6 +2017,24 @@ _jack_deinit(app_t *app)
 	jack_client_close(app->client);
 }
 
+static void
+_ui_change(void *data, uintptr_t source_id, uintptr_t sink_id, bool state)
+{
+	app_t *app = data;
+
+	char *source_name = NULL;
+	char *sink_name = NULL;
+	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL, NULL);
+	_db_port_find_by_id(app, sink_id, &sink_name, NULL, NULL, NULL);
+	if(source_name && sink_name)
+	{
+		if(state)
+			jack_connect(app->client, source_name, sink_name);
+		else
+			jack_disconnect(app->client, source_name, sink_name);
+	}
+}
+
 static inline int
 _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 {
@@ -2072,7 +2066,7 @@ _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 				char *port_name = NULL;
 				char *port_short_name = NULL;
 				char *port_pretty_name = NULL;
-				_db_port_find_by_id(app, port_id, &port_name, &port_short_name, &port_pretty_name);
+				_db_port_find_by_id(app, port_id, &port_name, &port_short_name, &port_pretty_name, NULL);
 
 				int port_sel = _db_port_get_selected(app, port_id);
 				int type = TYPE_AUDIO;
@@ -2156,23 +2150,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				bounds.h -= 4*group_padding.y + dy;
 
 				nk_layout_row_dynamic(ctx, bounds.h, 1);
-				const nk_patcher_event_t *ev = nk_patcher_render(&app->patch, ctx, bounds);
-				if(ev)
-				{
-					//printf("ev: %lu %lu %i\n", ev->source_id, ev->sink_id, ev->state);
-
-					char *source_name = NULL;
-					char *sink_name = NULL;
-					_db_port_find_by_id(app, ev->source_id, &source_name, NULL, NULL);
-					_db_port_find_by_id(app, ev->sink_id, &sink_name, NULL, NULL);
-					if(source_name && sink_name)
-					{
-						if(ev->state)
-							jack_connect(app->client, source_name, sink_name);
-						else
-							jack_disconnect(app->client, source_name, sink_name);
-					}
-				}
+				nk_patcher_render(&app->patch, ctx, bounds, _ui_change, app);
 
 				nk_group_end(ctx);
 			}
@@ -2331,6 +2309,36 @@ _ui_populate(app_t *app)
 	app->populating = false;
 }
 
+static void
+_ui_signal(app_t *app)
+{
+	/* FIXME
+	nk_pugl_signal_expose(&app->win);
+	*/
+}
+
+static void
+_ui_fill(void *data, uintptr_t source_id, uintptr_t sink_id,
+	bool *state, nk_patcher_type_t *type)
+{
+	app_t *app = data;
+
+	char *source_name = NULL;
+	int source_client_id = 0;
+	_db_port_find_by_id(app, source_id, &source_name, NULL, NULL, &source_client_id);
+
+	char *sink_name = NULL;
+	int sink_client_id = 0;
+	_db_port_find_by_id(app, sink_id,  &sink_name, NULL, NULL, &sink_client_id);
+
+	const bool have_same_client = source_client_id == sink_client_id;
+
+	if(state)
+		*state = _db_connection_get(app, source_name, sink_name);
+	if(type)
+		*type = have_same_client ? NK_PATCHER_TYPE_FEEDBACK : NK_PATCHER_TYPE_DIRECT;
+}
+
 // update single grid and connections
 static void
 _ui_refresh_single(app_t *app, int type, int designation)
@@ -2383,7 +2391,7 @@ _ui_refresh_single(app_t *app, int type, int designation)
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *port_pretty_name;
-		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
+		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
 
 		nk_patcher_source_id_set(&app->patch, source, id);
 		nk_patcher_source_color_set(&app->patch, source, _color_get(client_id));
@@ -2410,7 +2418,7 @@ _ui_refresh_single(app_t *app, int type, int designation)
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *port_pretty_name;
-		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name);
+		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
 
 		nk_patcher_sink_id_set(&app->patch, sink, id);
 		nk_patcher_sink_color_set(&app->patch, sink, _color_get(client_id));
@@ -2424,23 +2432,7 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	//FIXME
-	for(int source_idx=0; source_idx<app->patch.source_n; source_idx++)
-	{
-		const intptr_t source_id = app->patch.sources[source_idx].id;
-		char *source_name = NULL;
-		_db_port_find_by_id(app, source_id, &source_name, NULL, NULL);
-
-		for(int sink_idx=0; sink_idx<app->patch.sink_n; sink_idx++)
-		{
-			const intptr_t sink_id = app->patch.sinks[sink_idx].id;
-			char *sink_name = NULL;
-			_db_port_find_by_id(app, sink_id,  &sink_name, NULL, NULL);
-
-			const bool connected = _db_connection_get(app, source_name, sink_name);
-			nk_patcher_connected_set(&app->patch, source_id, sink_id, connected, NK_PATCHER_TYPE_DIRECT);
-		}
-	}
+	nk_patcher_fill(&app->patch, _ui_fill, app);
 
 	nk_pugl_post_redisplay(&app->win);
 }

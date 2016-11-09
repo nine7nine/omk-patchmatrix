@@ -21,9 +21,12 @@
 typedef enum _nk_patcher_type_t nk_patcher_type_t;
 typedef struct _nk_patcher_port_t nk_patcher_port_t;
 typedef struct _nk_patcher_connection_t nk_patcher_connection_t;
-typedef struct _nk_patcher_event_t nk_patcher_event_t;
 typedef struct _nk_patcher_priv_t nk_patcher_priv_t;
 typedef struct _nk_patcher_t nk_patcher_t;
+typedef void (*nk_patcher_fill_t)(void *data, uintptr_t source_id, uintptr_t sink_id,
+	bool *state, nk_patcher_type_t *type);
+typedef void (nk_patcher_change_t)(void *data, uintptr_t source_id, uintptr_t sink_id,
+	bool state);
 
 enum _nk_patcher_type_t {
 	NK_PATCHER_TYPE_DIRECT,
@@ -42,12 +45,6 @@ struct _nk_patcher_connection_t {
 	bool state;
 	nk_patcher_type_t type;
 	int enm;
-};
-
-struct _nk_patcher_event_t {
-	uintptr_t source_id;
-	uintptr_t sink_id;
-	bool state;
 };
 
 struct _nk_patcher_priv_t {
@@ -76,7 +73,6 @@ struct _nk_patcher_t {
 	nk_patcher_connection_t **connections;
 
 	nk_patcher_priv_t priv;
-	nk_patcher_event_t event;
 };
 
 enum {
@@ -118,8 +114,12 @@ nk_patcher_source_label_set(nk_patcher_t *patch, int source_idx, const char *sou
 static int
 nk_patcher_sink_label_set(nk_patcher_t *patch, int sink_idx, const char *sink_label);
 
-static nk_patcher_event_t *
-nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds);
+static void
+nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds,
+	nk_patcher_change_t *change, void *data);
+
+static void
+nk_patcher_fill(nk_patcher_t *patch, nk_patcher_fill_t fill, void *data);
 
 #endif // _NK_PATCHER_H
 
@@ -424,11 +424,11 @@ _precalc(nk_patcher_priv_t *priv)
 	priv->span2 = 0.5 / priv->span;
 }
 
-static nk_patcher_event_t *
-nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds)
+static void
+nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds,
+	nk_patcher_change_t *change, void *data)
 {
 	nk_patcher_priv_t *priv = &patch->priv;
-	bool changed = false;
 
 	priv->ncols = patch->source_n;
 	priv->nrows = patch->sink_n;
@@ -472,18 +472,58 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			float my = ctx->input.mouse.pos.y;
 
 			_abs_to_rel(priv, mx, my, &COL, &ROW);
-			//printf("hover: %i %i\n", COL, ROW);
 
-			if( (COL != -1) && (ROW != -1) 
-				&& nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT))
+			// handle state toggling
+			if(change && nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT))
 			{
-				nk_patcher_port_t *source_port = &patch->sources[COL];
-				nk_patcher_port_t *sink_port = &patch->sinks[ROW];
-				nk_patcher_connection_t *conn = &patch->connections[COL][ROW];
-				patch->event.source_id = source_port->id;
-				patch->event.sink_id = sink_port->id;
-				patch->event.state = !conn->state;
-				changed = true;
+				if( (COL != -1) && (ROW != -1) )
+				{
+					nk_patcher_port_t *source_port = &patch->sources[COL];
+					nk_patcher_port_t *sink_port = &patch->sinks[ROW];
+					nk_patcher_connection_t *conn = &patch->connections[COL][ROW];
+
+					change(data, source_port->id, sink_port->id, !conn->state);
+				}
+				else if(COL != -1)
+				{
+					nk_patcher_port_t *source_port = &patch->sources[COL];
+					bool state = false;
+
+					for(int row = 0; row < priv->nrows; row++)
+					{
+						nk_patcher_port_t *sink_port = &patch->sinks[row];
+						nk_patcher_connection_t *conn = &patch->connections[COL][row];
+
+						state = state || conn->state;
+					}
+					for(int row = 0; row < priv->nrows; row++)
+					{
+						nk_patcher_port_t *sink_port = &patch->sinks[row];
+						nk_patcher_connection_t *conn = &patch->connections[COL][row];
+
+						change(data, source_port->id, sink_port->id, !state);
+					}
+				}
+				else if(ROW != -1)
+				{
+					nk_patcher_port_t *sink_port = &patch->sinks[ROW];
+					bool state = false;
+
+					for(int col = 0; col < priv->ncols; col++)
+					{
+						nk_patcher_port_t *source_port = &patch->sources[col];
+						nk_patcher_connection_t *conn = &patch->connections[col][ROW];
+
+						state = state || conn->state;
+					}
+					for(int col = 0; col < priv->ncols; col++)
+					{
+						nk_patcher_port_t *source_port = &patch->sources[col];
+						nk_patcher_connection_t *conn = &patch->connections[col][ROW];
+
+						change(data, source_port->id, sink_port->id, !state);
+					}
+				}
 			}
 		}
 
@@ -738,8 +778,26 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			nk_stroke_polygon(canvas, p, 4, 2.f, bright);
 		}
 	}
+}
 
-	return changed ? &patch->event : NULL;
+static void
+nk_patcher_fill(nk_patcher_t *patch, nk_patcher_fill_t fill, void *data)
+{
+	if(!fill)
+		return;
+
+	for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+	{
+		nk_patcher_port_t *source_port = &patch->sources[source_idx];
+
+		for(int sink_idx=0; sink_idx<patch->sink_n; sink_idx++)
+		{
+			nk_patcher_port_t *sink_port = &patch->sinks[sink_idx];
+			nk_patcher_connection_t *conn = &patch->connections[source_idx][sink_idx];
+
+			fill(data, source_port->id, sink_port->id, &conn->state, &conn->type);
+		}
+	}
 }
 
 #endif // NK_PATCHER_IMPLEMENTATION
