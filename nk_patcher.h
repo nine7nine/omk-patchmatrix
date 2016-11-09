@@ -647,7 +647,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				const char *name = source_port->label;
 				const size_t len = nk_strlen(name);
 				const struct nk_text text = {
-					.padding.x = 0,
+					.padding.x = 2,
 					.padding.y = 0,
 					.background = style->window.background,
 					.text = active ? source_port->color : style->text.color
@@ -693,7 +693,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				const char *name = sink_port->label;
 				const size_t len = nk_strlen(name);
 				const struct nk_text text = {
-					.padding.x = 0,
+					.padding.x = 2,
 					.padding.y = 0,
 					.background = style->window.background,
 					.text = active ? sink_port->color : style->text.color
