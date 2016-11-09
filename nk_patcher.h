@@ -81,9 +81,8 @@ enum {
 	HORIZONTAL			= (1 << 2),
 	VERTICAL_EDGE		= (1 << 3),
 	HORIZONTAL_EDGE	= (1 << 4),
-	BOX							= (1 << 5),
-	FEEDBACK				= (1 << 6),
-	INDIRECT				= (1 << 7)
+	FEEDBACK				= (1 << 5),
+	INDIRECT				= (1 << 6)
 };
 
 static void
@@ -528,8 +527,6 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 		}
 
 		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
-
-		//nk_stroke_rect(canvas, bounds, 0.f, 1.0, nk_yellow); //FIXME
 	
 		// reset patch fields
 		for(int col = 0; col < priv->ncols; col++)
@@ -539,6 +536,17 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				nk_patcher_connection_t *conn = &patch->connections[col][row];
 
 				conn->enm = 0;
+				switch(conn->type)
+				{
+					case NK_PATCHER_TYPE_DIRECT:
+						break;
+					case NK_PATCHER_TYPE_FEEDBACK:
+						conn->enm |= FEEDBACK;
+						break;
+					case NK_PATCHER_TYPE_INDIRECT:
+						conn->enm |= INDIRECT;
+						break;
+				}
 			}
 		}
 
@@ -602,6 +610,18 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			{
 				nk_patcher_connection_t *conn = &patch->connections[col][row];
 				float p [8];
+
+				// tile color
+				_rel_to_abs(priv, col+0.0, row+0.0, &p[6], &p[7]);
+				_rel_to_abs(priv, col+0.0, row+1.0, &p[4], &p[5]);
+				_rel_to_abs(priv, col+1.0, row+1.0, &p[2], &p[3]);
+				_rel_to_abs(priv, col+1.0, row+0.0, &p[0], &p[1]);
+				if(conn->enm & FEEDBACK)
+					nk_fill_polygon(canvas, p, 4, style->button.hover.data.color);
+				else if(conn->enm & INDIRECT)
+					nk_fill_polygon(canvas, p, 4, style->button.active.data.color);
+				else
+					nk_fill_polygon(canvas, p, 4, style->button.normal.data.color);
 
 				// HORIZONTAL
 				if(conn->enm & HORIZONTAL)
