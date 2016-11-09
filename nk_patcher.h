@@ -86,7 +86,10 @@ enum {
 };
 
 static void
-nk_patcher_init(nk_patcher_t *patch, int source_n, int sink_n);
+nk_patcher_init(nk_patcher_t *patch);
+
+static void
+nk_patcher_reinit(nk_patcher_t *patch, int source_n, int sink_n);
 
 static void
 nk_patcher_deinit(nk_patcher_t *patch);
@@ -126,8 +129,23 @@ nk_patcher_fill(nk_patcher_t *patch, nk_patcher_fill_t fill, void *data);
 static const struct nk_color bright = {.r = 0xee, .g = 0xee, .b = 0xee, .a = 0xff};
 
 static void
-nk_patcher_init(nk_patcher_t *patch, int source_n, int sink_n)
+nk_patcher_init(nk_patcher_t *patch)
 {
+	nk_patcher_reinit(patch, 0, 0);
+
+	nk_patcher_priv_t *priv = &patch->priv;
+	priv->scale = 0.45;
+	priv->ax = -1;
+	priv->ay = -1;
+	priv->sx = 0;
+	priv->sy = 0;
+}
+
+static void
+nk_patcher_reinit(nk_patcher_t *patch, int source_n, int sink_n)
+{
+	nk_patcher_deinit(patch);
+
 	patch->source_n = source_n;
 	patch->sink_n = sink_n;
 

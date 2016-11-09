@@ -2264,7 +2264,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 static int
 _ui_init(app_t *app)
 {
-	nk_patcher_init(&app->patch, 0, 0);
+	nk_patcher_init(&app->patch);
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
@@ -2446,8 +2446,7 @@ _ui_refresh(app_t *app)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	nk_patcher_deinit(&app->patch);
-	nk_patcher_init(&app->patch, num_sources, num_sinks);
+	nk_patcher_reinit(&app->patch, num_sources, num_sinks);
 
 	ret = sqlite3_bind_int(stmt, 1, app->type); // type
 	(void)ret;
@@ -2515,14 +2514,6 @@ main(int argc, char **argv)
 
 	app.server_name = NULL;
 	app.session_id = NULL;
-
-	//FIXME
-	nk_patcher_priv_t *priv = &app.patch.priv;
-	priv->scale = 0.45;
-	priv->ax = -1;
-	priv->ay = -1;
-	priv->sx = 0;
-	priv->sy = 0;
 
 	fprintf(stderr,
 		"PatchMatrix "PATCHMATRIX_VERSION"\n"
