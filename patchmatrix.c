@@ -212,6 +212,7 @@ struct _app_t {
 	const char *server_name;
 	const char *session_id;
 
+	bool needs_refresh;
 	bool done;
 
 	nk_pugl_window_t win;
@@ -227,9 +228,7 @@ struct _app_t {
 };
 
 static void _ui_signal(app_t *app);
-static void _ui_refresh_single(app_t *app, int type, int designation);
 static void _ui_refresh(app_t *app);
-static void _ui_realize(app_t *app);
 
 static const char *designations [DESIGNATION_MAX] = {
 	[DESIGNATION_NONE] = NULL,
@@ -1491,7 +1490,7 @@ _jack_anim(app_t *app)
 						_db_connection_del(app, name_source, name_sink);
 				}
 
-				realize = true;
+				refresh = true;
 				break;
 			}
 #ifdef JACK_HAS_METADATA_API
@@ -1735,6 +1734,13 @@ _jack_anim(app_t *app)
 				realize = true;
 				break;
 			}
+			case EVENT_XRUN:
+			{
+				app->xruns += 1;
+
+				realize = true;
+				break;
+			}
 #ifdef JACK_HAS_PORT_RENAME_CALLBACK
 			case EVENT_PORT_RENAME:
 			{
@@ -1760,26 +1766,19 @@ _jack_anim(app_t *app)
 				if(ev->port_rename.new_name)
 					free(ev->port_rename.new_name);
 
-				realize = true;
+				refresh = true;
 				break;
 			}
 #endif
-			case EVENT_XRUN:
-			{
-				app->xruns += 1;
-
-				realize = true;
-				break;
-			}
 		};
 
 		varchunk_read_advance(app->from_jack);
 	}
 
 	if(refresh)
-		_ui_refresh(app);
-	else if(realize)
-		_ui_realize(app);
+		app->needs_refresh = true;
+	if(realize)
+		nk_pugl_post_redisplay(&app->win);
 
 	app->done = done;
 }
@@ -2111,8 +2110,15 @@ _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 
 		style->tab.border_color = _color_get(client_id);
 
-		int client_sel = _db_client_get_selected(app, client_id);
-		if( (client_sel = nk_tree_push_id(ctx, NK_TREE_TAB, client_pretty_name, client_sel ? NK_MAXIMIZED : NK_MINIMIZED, client_id) == NK_MAXIMIZED) )
+		const int client_sel = _db_client_get_selected(app, client_id);
+		const int client_flag = client_sel ? NK_MAXIMIZED : NK_MINIMIZED;
+		const int client_sel_new = nk_tree_push_id(ctx, NK_TREE_TAB, client_pretty_name, client_flag, client_id);
+		if(client_sel_new != client_sel)
+		{
+			_db_client_set_selected(app, client_id, client_sel_new);
+			app->needs_refresh = true;
+		}
+		if(client_sel_new)
 		{
 			for(int port_id = _db_port_find_all_itr(app, client_id, direction);
 				port_id;
@@ -2123,18 +2129,21 @@ _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 				char *port_pretty_name = NULL;
 				_db_port_find_by_id(app, port_id, &port_name, &port_short_name, &port_pretty_name, NULL);
 
-				int port_sel = _db_port_get_selected(app, port_id);
+				const int port_sel = _db_port_get_selected(app, port_id);
 				int type = TYPE_AUDIO;
 				_db_port_get_info(app, port_id, &type, NULL, NULL, NULL, NULL);
-				port_sel = nk_select_image_label(ctx, app->icons[type], port_pretty_name, NK_TEXT_LEFT, port_sel);
-				_db_port_set_selected(app, port_id, port_sel);
+				const int port_sel_new = nk_select_image_label(ctx, app->icons[type], port_pretty_name, NK_TEXT_LEFT, port_sel);
+				if(port_sel_new != port_sel)
+				{
+					_db_port_set_selected(app, port_id, port_sel_new);
+					app->needs_refresh = true;
+				}
 
 				count += 1;
 			}
 
 			nk_tree_pop(ctx);
 		}
-		_db_client_set_selected(app, client_id, client_sel);
 
 		nk_layout_row_dynamic(ctx, dy, 1);
 	}
@@ -2148,7 +2157,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 {
 	app_t *app = data;
 
-	_ui_refresh(app); //FIXME
+	if(app->needs_refresh)
+	{
+		_ui_refresh(app);
+		app->needs_refresh = false;
+	}
 
 	struct nk_style *style = &ctx->style;
 	const struct nk_vec2 group_padding = nk_panel_get_padding(&ctx->style, NK_PANEL_GROUP);
@@ -2194,7 +2207,10 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					style->button.normal.data.color = app->type == i
 						? style->button.hover.data.color : button_normal;
 					if(nk_button_image_label(ctx, app->icons[i], labels[i], NK_TEXT_LEFT))
+					{
 						app->type = i;
+						app->needs_refresh = true;
+					}
 				}
 				style->button.normal.data.color = button_normal;
 
@@ -2394,19 +2410,19 @@ _ui_fill(void *data, uintptr_t source_id, uintptr_t sink_id,
 		*type = have_same_client ? NK_PATCHER_TYPE_FEEDBACK : NK_PATCHER_TYPE_DIRECT;
 }
 
-// update single grid and connections
+// update all grid and connections
 static void
-_ui_refresh_single(app_t *app, int type, int designation)
+_ui_refresh(app_t *app)
 {
 	int ret;
 
 	sqlite3_stmt *stmt = app->query_port_list;
 
-	ret = sqlite3_bind_int(stmt, 1, type); // type
+	ret = sqlite3_bind_int(stmt, 1, app->type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 3, designation);
+	ret = sqlite3_bind_int(stmt, 3, app->designation);
 	(void)ret;
 	int num_sources = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
@@ -2416,11 +2432,11 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	ret = sqlite3_bind_int(stmt, 1, type); // type
+	ret = sqlite3_bind_int(stmt, 1, app->type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 3, designation);
+	ret = sqlite3_bind_int(stmt, 3, app->designation);
 	(void)ret;
 	int num_sinks = 0;
 	while(sqlite3_step(stmt) != SQLITE_DONE)
@@ -2433,11 +2449,11 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	nk_patcher_deinit(&app->patch);
 	nk_patcher_init(&app->patch, num_sources, num_sinks);
 
-	ret = sqlite3_bind_int(stmt, 1, type); // type
+	ret = sqlite3_bind_int(stmt, 1, app->type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 0); // source
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 3, designation);
+	ret = sqlite3_bind_int(stmt, 3, app->designation);
 	(void)ret;
 	for(int source=0; source<num_sources; source++)
 	{
@@ -2460,11 +2476,11 @@ _ui_refresh_single(app_t *app, int type, int designation)
 	ret = sqlite3_reset(stmt);
 	(void)ret;
 
-	ret = sqlite3_bind_int(stmt, 1, type); // type
+	ret = sqlite3_bind_int(stmt, 1, app->type); // type
 	(void)ret;
 	ret = sqlite3_bind_int(stmt, 2, 1); // sink
 	(void)ret;
-	ret = sqlite3_bind_int(stmt, 3, designation);
+	ret = sqlite3_bind_int(stmt, 3, app->designation);
 	(void)ret;
 	for(int sink=0; sink<num_sinks; sink++)
 	{
@@ -2489,20 +2505,6 @@ _ui_refresh_single(app_t *app, int type, int designation)
 
 	nk_patcher_fill(&app->patch, _ui_fill, app);
 
-	nk_pugl_post_redisplay(&app->win);
-}
-
-// update all grids and connections
-static void
-_ui_refresh(app_t *app)
-{
-	_ui_refresh_single(app, app->type, app->designation);
-}
-
-// update connections
-static void
-_ui_realize(app_t *app)
-{
 	nk_pugl_post_redisplay(&app->win);
 }
 
@@ -2593,7 +2595,7 @@ main(int argc, char **argv)
 		goto cleanup;
 
 	_ui_populate(&app);
-	_ui_refresh(&app);
+	app.needs_refresh = true;
 
 	while(!app.done)
 	{
