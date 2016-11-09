@@ -152,7 +152,8 @@ struct _app_t {
 	// UI
 	int type;
 	int designation;
-	bool freewheeling;
+	bool freewheel;
+	bool realtime;
 	int32_t buffer_size;
 	int32_t sample_rate;
 	int32_t xruns;
@@ -1424,7 +1425,7 @@ _jack_anim(app_t *app)
 
 	// has cpu load changed considerably?
 	const float cpu_load = jack_cpu_load(app->client);
-	if(fabs(cpu_load - app->cpu_load) < 0.01)
+	if(fabs(cpu_load - app->cpu_load) >= 0.01)
 		nk_pugl_post_redisplay(&app->win);
 	app->cpu_load = cpu_load;
 
@@ -1711,7 +1712,7 @@ _jack_anim(app_t *app)
 			}
 			case EVENT_FREEWHEEL:
 			{
-				app->freewheeling = ev->freewheel.starting;
+				app->freewheel = ev->freewheel.starting;
 
 				realize = true;
 				break;
@@ -2024,7 +2025,8 @@ _jack_init(app_t *app)
 	app->sample_rate = jack_get_sample_rate(app->client);
 	app->buffer_size = jack_get_buffer_size(app->client);
 	app->xruns = 0;
-	app->freewheeling = 0;
+	app->freewheel = false;
+	app->realtime = jack_is_realtime(app->client);
 
 	jack_on_info_shutdown(app->client, _jack_on_info_shutdown_cb, app);
 
@@ -2232,25 +2234,28 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		}
 		nk_layout_row_end(ctx);
 
-		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 6);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 7);
 		{
 			nk_layout_row_push(ctx, 0.125);
 			nk_labelf(ctx, NK_TEXT_LEFT, "SampleRate: %"PRIi32, app->sample_rate);
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_RIGHT, "BufferSize: %"PRIi32, app->buffer_size);
+			nk_labelf(ctx, NK_TEXT_LEFT, "BufferSize: %"PRIi32, app->buffer_size);
 
-			nk_layout_row_push(ctx, 0.25);
-			nk_labelf(ctx, NK_TEXT_CENTERED, "FreeWheeling: %s", app->freewheeling ? "true" : "false");
+			nk_layout_row_push(ctx, 0.125);
+			nk_labelf(ctx, NK_TEXT_LEFT, "FreeWheel: %s", app->freewheel ? "true" : "false");
 
-			nk_layout_row_push(ctx, 0.25);
-			nk_labelf(ctx, NK_TEXT_CENTERED, "CPULoad: %2.2f%%", app->cpu_load);
+			nk_layout_row_push(ctx, 0.125);
+			nk_labelf(ctx, NK_TEXT_LEFT, "RealTime: %s", app->realtime? "true" : "false");
+
+			nk_layout_row_push(ctx, 0.125);
+			nk_labelf(ctx, NK_TEXT_LEFT, "CPULoad: %4.1f%%", app->cpu_load);
 
 			nk_layout_row_push(ctx, 0.125);
 			nk_labelf(ctx, NK_TEXT_LEFT, "XRuns: %"PRIi32, app->xruns);
 
-			nk_layout_row_push(ctx, 0.125);
-			nk_label(ctx, "v."PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
+			nk_layout_row_push(ctx, 0.25);
+			nk_label(ctx, "PatchMatrix: "PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
 		}
 		nk_layout_row_end(ctx);
 	}
