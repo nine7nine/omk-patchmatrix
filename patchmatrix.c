@@ -148,10 +148,11 @@ struct _app_t {
 	// UI
 	int type;
 	int designation;
-	int freewheeling;
-	int buffer_size;
-	int sample_rate;
-	int xruns;
+	bool freewheeling;
+	int32_t buffer_size;
+	int32_t sample_rate;
+	int32_t xruns;
+	float cpu_load;
 
 	// JACK
 	jack_client_t *client;
@@ -1390,6 +1391,12 @@ _jack_anim(app_t *app)
 	bool realize = false;
 	bool done = false;
 
+	// has cpu load changed considerably?
+	const float cpu_load = jack_cpu_load(app->client);
+	if(fabs(cpu_load - app->cpu_load) < 0.01)
+		nk_pugl_post_redisplay(&app->win);
+	app->cpu_load = cpu_load;
+
 	const event_t *ev;
 	size_t len;
 	while((ev = varchunk_read_request(app->from_jack, &len)))
@@ -2035,9 +2042,8 @@ _jack_deinit(app_t *app)
 }
 
 static inline int
-_expose_direction(struct nk_context *ctx, app_t *app, int direction)
+_expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 {
-	const int dy = 25;
 	int count = 0;
 
 	struct nk_style *style = &ctx->style;
@@ -2057,7 +2063,6 @@ _expose_direction(struct nk_context *ctx, app_t *app, int direction)
 		style->tab.border_color = _color_get(client_id);
 
 		int client_sel = _db_client_get_selected(app, client_id);
-		nk_layout_row_dynamic(ctx, dy, 1);
 		if( (client_sel = nk_tree_push_id(ctx, NK_TREE_TAB, client_pretty_name, client_sel ? NK_MAXIMIZED : NK_MINIMIZED, client_id) == NK_MAXIMIZED) )
 		{
 			for(int port_id = _db_port_find_all_itr(app, client_id, direction);
@@ -2081,6 +2086,8 @@ _expose_direction(struct nk_context *ctx, app_t *app, int direction)
 			nk_tree_pop(ctx);
 		}
 		_db_client_set_selected(app, client_id, client_sel);
+
+		nk_layout_row_dynamic(ctx, dy, 1);
 	}
 
 	style->tab.border_color = tab_border_color;
@@ -2121,7 +2128,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			nk_layout_row_push(ctx, 0.25);
 			if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
-				app->source_n = _expose_direction(ctx, app, 0);
+				app->source_n = _expose_direction(ctx, app, dy, 0);
 
 				nk_group_end(ctx);
 			}
@@ -2173,26 +2180,29 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			nk_layout_row_push(ctx, 0.25);
 			if(nk_group_begin(ctx, "Sinks", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
-				app->sink_n = _expose_direction(ctx, app, 1);
+				app->sink_n = _expose_direction(ctx, app, dy, 1);
 
 				nk_group_end(ctx);
 			}
 		}
 		nk_layout_row_end(ctx);
 
-		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 4);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 6);
 		{
-			nk_layout_row_push(ctx, 0.25);
-			nk_value_int(ctx, "SampleRate", app->sample_rate);
-
-			nk_layout_row_push(ctx, 0.25);
-			nk_value_int(ctx, "BufferSize", app->buffer_size);
-
-			nk_layout_row_push(ctx, 0.25);
-			nk_value_bool(ctx, "FreeWheeling", app->freewheeling);
+			nk_layout_row_push(ctx, 0.125);
+			nk_labelf(ctx, NK_TEXT_LEFT, "SampleRate: %"PRIi32, app->sample_rate);
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_value_int(ctx, "XRuns", app->xruns);
+			nk_labelf(ctx, NK_TEXT_RIGHT, "BufferSize: %"PRIi32, app->buffer_size);
+
+			nk_layout_row_push(ctx, 0.25);
+			nk_labelf(ctx, NK_TEXT_CENTERED, "FreeWheeling: %s", app->freewheeling ? "true" : "false");
+
+			nk_layout_row_push(ctx, 0.25);
+			nk_labelf(ctx, NK_TEXT_CENTERED, "CPULoad: %2.2f%%", app->cpu_load);
+
+			nk_layout_row_push(ctx, 0.125);
+			nk_labelf(ctx, NK_TEXT_LEFT, "XRuns: %"PRIi32, app->xruns);
 
 			nk_layout_row_push(ctx, 0.125);
 			nk_label(ctx, "v."PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
@@ -2542,10 +2552,11 @@ main(int argc, char **argv)
 	{
 		//FIXME
 		//nk_pugl_wait_for_event(&app.win);
+		usleep(40000); //25FPS
+
 		_jack_anim(&app);
 		if(nk_pugl_process_events(&app.win))
 			app.done = true;
-		usleep(40000); //25FPS
 	}
 
 cleanup:
