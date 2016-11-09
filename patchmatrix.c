@@ -2458,12 +2458,25 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 		}
 		nk_layout_row_end(ctx);
-		
-		nk_layout_row_dynamic(ctx, dy, 4);
-		nk_value_int(ctx, "SampleRate", app->sample_rate);
-		nk_value_int(ctx, "BufferSize", app->buffer_size);
-		nk_value_int(ctx, "XRuns", app->xruns);
-		nk_value_bool(ctx, "FreeWheeling", app->freewheeling);
+
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 4);
+		{
+			nk_layout_row_push(ctx, 0.25);
+			nk_value_int(ctx, "SampleRate", app->sample_rate);
+
+			nk_layout_row_push(ctx, 0.25);
+			nk_value_int(ctx, "BufferSize", app->buffer_size);
+
+			nk_layout_row_push(ctx, 0.25);
+			nk_value_bool(ctx, "FreeWheeling", app->freewheeling);
+
+			nk_layout_row_push(ctx, 0.125);
+			nk_value_int(ctx, "XRuns", app->xruns);
+
+			nk_layout_row_push(ctx, 0.125);
+			nk_label(ctx, "v."PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
+		}
+		nk_layout_row_end(ctx);
 	}
 	nk_end(ctx);
 }
