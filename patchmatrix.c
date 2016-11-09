@@ -282,6 +282,15 @@ _color_get(int n)
 	return colors[n % COLOR_N];
 }
 
+static const char * labels [TYPE_MAX] = {
+	[TYPE_AUDIO] = "AUDIO",
+	[TYPE_MIDI]  = "MIDI",
+#ifdef JACK_HAS_METADATA_API
+	[TYPE_OSC]   ="OSC",
+	[TYPE_CV]    ="CV"
+#endif
+};
+
 static int
 _db_init(app_t *app)
 {
@@ -2364,6 +2373,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 	_ui_refresh(app); //FIXME
 
+	struct nk_style *style = &ctx->style;
 	const struct nk_vec2 group_padding = nk_panel_get_padding(&ctx->style, NK_PANEL_GROUP);
 	const float dy = 25;
 
@@ -2399,26 +2409,17 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
 			{
 				const struct nk_panel *center = nk_window_get_panel(ctx);
-#ifdef JACK_HAS_METADATA_API
-				nk_layout_row_dynamic(ctx, dy, 4);
-#else
-				nk_layout_row_dynamic(ctx, dy, 2);
-#endif
+				nk_layout_row_dynamic(ctx, dy, TYPE_MAX);
 
-				app->type = nk_button_symbol_label(ctx,
-					app->type == TYPE_AUDIO ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "AUDIO", NK_TEXT_RIGHT)
-					? TYPE_AUDIO : app->type;
-				app->type = nk_button_symbol_label(ctx,
-					app->type == TYPE_MIDI ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "MIDI", NK_TEXT_RIGHT)
-					? TYPE_MIDI : app->type;
-#ifdef JACK_HAS_METADATA_API
-				app->type = nk_button_symbol_label(ctx,
-					app->type == TYPE_OSC ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "OSC", NK_TEXT_RIGHT)
-					? TYPE_OSC : app->type;
-				app->type = nk_button_symbol_label(ctx,
-					app->type == TYPE_CV ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "CV", NK_TEXT_RIGHT)
-					? TYPE_CV : app->type;
-#endif
+				const struct nk_color button_normal = style->button.normal.data.color;
+				for(int i=0; i<TYPE_MAX; i++)
+				{
+					style->button.normal.data.color = app->type == i
+						? style->button.hover.data.color : button_normal;
+					if(nk_button_image_label(ctx, app->icons[i], labels[i], NK_TEXT_LEFT))
+						app->type = i;
+				}
+				style->button.normal.data.color = button_normal;
 
 				struct nk_rect bounds = center->bounds;
 				bounds.x += group_padding.x;
