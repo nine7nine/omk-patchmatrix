@@ -124,6 +124,8 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 #endif // _NK_PATCHER_H
 
 #ifdef NK_PATCHER_IMPLEMENTATION
+static const struct nk_color bright = {.r = 0xee, .g = 0xee, .b = 0xee, .a = 0xff};
+
 static void
 nk_patcher_init(nk_patcher_t *patch, int source_n, int sink_n)
 {
@@ -569,18 +571,18 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					_rel_to_abs(priv, col+1.0, row+0.6, &p[2], &p[3]);
 					_rel_to_abs(priv, col+1.0, row+0.4, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, style->text.color);
+					nk_fill_polygon(canvas, p, 4, patch->sinks[row].color);
 				}
 
 				// HORIZONTAL_EDGE
 				if(conn->enm & HORIZONTAL_EDGE)
 				{
-					_rel_to_abs(priv, col+0.4, row+0.4, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.4, row+0.6, &p[4], &p[5]);
+					_rel_to_abs(priv, col+0.6, row+0.4, &p[6], &p[7]);
+					_rel_to_abs(priv, col+0.6, row+0.6, &p[4], &p[5]);
 					_rel_to_abs(priv, col+1.0, row+0.6, &p[2], &p[3]);
 					_rel_to_abs(priv, col+1.0, row+0.4, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, style->text.color);
+					nk_fill_polygon(canvas, p, 4, patch->sinks[row].color);
 				}
 
 				// VERTICAL
@@ -591,18 +593,18 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					_rel_to_abs(priv, col+0.6, row+1.0, &p[2], &p[3]);
 					_rel_to_abs(priv, col+0.6, row+0.0, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, style->text.color);
+					nk_fill_polygon(canvas, p, 4, patch->sources[col].color);
 				}
 
 				// VERTICAL_EDGE
 				if(conn->enm & VERTICAL_EDGE)
 				{
-					_rel_to_abs(priv, col+0.4, row+0.4, &p[6], &p[7]);
+					_rel_to_abs(priv, col+0.4, row+0.6, &p[6], &p[7]);
 					_rel_to_abs(priv, col+0.4, row+1.0, &p[4], &p[5]);
 					_rel_to_abs(priv, col+0.6, row+1.0, &p[2], &p[3]);
-					_rel_to_abs(priv, col+0.6, row+0.4, &p[0], &p[1]);
+					_rel_to_abs(priv, col+0.6, row+0.6, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, style->text.color);
+					nk_fill_polygon(canvas, p, 4, patch->sources[col].color);
 				}
 
 				// CONNECTED
@@ -613,7 +615,17 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					_rel_to_abs(priv, col+0.8, row+0.8, &p[2], &p[3]);
 					_rel_to_abs(priv, col+0.8, row+0.2, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, nk_white);
+					nk_fill_polygon(canvas, p, 4, bright);
+				}
+				// EDGE
+				else if(conn->enm & (VERTICAL_EDGE | HORIZONTAL_EDGE) )
+				{
+					_rel_to_abs(priv, col+0.38, row+0.38, &p[6], &p[7]);
+					_rel_to_abs(priv, col+0.38, row+0.62, &p[4], &p[5]);
+					_rel_to_abs(priv, col+0.62, row+0.62, &p[2], &p[3]);
+					_rel_to_abs(priv, col+0.62, row+0.38, &p[0], &p[1]);
+
+					nk_fill_polygon(canvas, p, 4, style->text.color);
 				}
 			}
 		}
@@ -723,7 +735,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			_rel_to_abs(priv, col+1, row+1, &p[4], &p[5]);
 			_rel_to_abs(priv, col+1, row+0, &p[6], &p[7]);
 
-			nk_stroke_polygon(canvas, p, 4, 2.f, nk_white);
+			nk_stroke_polygon(canvas, p, 4, 2.f, bright);
 		}
 	}
 

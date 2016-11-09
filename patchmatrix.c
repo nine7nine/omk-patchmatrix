@@ -2560,7 +2560,7 @@ main(int argc, char **argv)
 	cfg->height = 720;
 	cfg->resizable = true;
 	cfg->ignore = false;
-	cfg->class = "patchmatrix";
+	cfg->class = "PatchMatrix";
 	cfg->title = "PatchMatrix";
 	cfg->parent = 0;
 	cfg->data = &app;
