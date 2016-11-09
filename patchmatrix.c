@@ -42,12 +42,6 @@
 #define NK_PATCHER_IMPLEMENTATION
 #include <nk_patcher.h>
 
-#if 0
-# define debugf(...) fprintf(stderr, __VA_ARGS__)
-#else
-# define debugf(...) {}
-#endif
-
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
 
@@ -58,7 +52,12 @@ enum {
 	EVENT_PROPERTY_CHANGE,
 	EVENT_ON_INFO_SHUTDOWN,
 	EVENT_GRAPH_ORDER,
-	EVENT_SESSION
+	EVENT_SESSION,
+	EVENT_FREEWHEEL,
+	EVENT_BUFFER_SIZE,
+	EVENT_SAMPLE_RATE,
+	EVENT_PORT_RENAME,
+	EVENT_XRUN
 };
 
 enum {
@@ -125,6 +124,23 @@ struct _event_t {
 		struct {
 			jack_session_event_t *event;
 		} session;
+
+		struct {
+			int starting;
+		} freewheel;
+
+		struct {
+			jack_nframes_t nframes;
+		} buffer_size;
+
+		struct {
+			jack_nframes_t nframes;
+		} sample_rate;
+
+		struct {
+			char *old_name;
+			char *new_name;
+		} port_rename;
 	};
 };
 
@@ -132,6 +148,10 @@ struct _app_t {
 	// UI
 	int type;
 	int designation;
+	int freewheeling;
+	int buffer_size;
+	int sample_rate;
+	int xruns;
 
 	// JACK
 	jack_client_t *client;
@@ -1662,6 +1682,43 @@ _jack_anim(app_t *app)
 
 				jack_session_reply(app->client, jev);
 				jack_session_event_free(jev);
+
+				break;
+			}
+			case EVENT_FREEWHEEL:
+			{
+				app->freewheeling = ev->freewheel.starting;
+
+				break;
+			}
+			case EVENT_BUFFER_SIZE:
+			{
+				app->buffer_size = ev->buffer_size.nframes;
+
+				break;
+			}
+			case EVENT_SAMPLE_RATE:
+			{
+				app->sample_rate = ev->sample_rate.nframes;
+
+				break;
+			}
+			case EVENT_PORT_RENAME:
+			{
+				//FIXME
+
+				if(ev->port_rename.old_name)
+					free(ev->port_rename.old_name);
+				if(ev->port_rename.new_name)
+					free(ev->port_rename.new_name);
+
+				break;
+			}
+			case EVENT_XRUN:
+			{
+				app->xruns += 1;
+
+				break;
 			}
 		};
 
@@ -1700,7 +1757,17 @@ _jack_freewheel_cb(int starting, void *arg)
 {
 	app_t *app = arg;
 
-	//FIXME
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_FREEWHEEL;
+		ev->freewheel.starting = starting;
+
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/* FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
+	}
 }
 
 static int
@@ -1708,7 +1775,17 @@ _jack_buffer_size_cb(jack_nframes_t nframes, void *arg)
 {
 	app_t *app = arg;
 
-	//FIXME
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_BUFFER_SIZE;
+		ev->buffer_size.nframes = nframes; 
+
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/* FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
+	}
 
 	return 0;
 }
@@ -1718,7 +1795,17 @@ _jack_sample_rate_cb(jack_nframes_t nframes, void *arg)
 {
 	app_t *app = arg;
 
-	//FIXME
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_SAMPLE_RATE;
+		ev->sample_rate.nframes = nframes;
+
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/* FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
+	}
 
 	return 0;
 }
@@ -1766,7 +1853,18 @@ _jack_port_rename_cb(jack_port_id_t id, const char *old_name, const char *new_na
 {
 	app_t *app = arg;
 
-	//FIXME
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_PORT_RENAME;
+		ev->port_rename.old_name = strdup(old_name);
+		ev->port_rename.new_name = strdup(new_name);
+
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
+	}
 }
 
 static void
@@ -1794,7 +1892,16 @@ _jack_xrun_cb(void *arg)
 {
 	app_t *app = arg;
 
-	//FIXME
+	event_t *ev;
+	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
+	{
+		ev->type = EVENT_XRUN;
+
+		varchunk_write_advance(app->from_jack, sizeof(event_t));
+		/*FIXME
+		nk_pugl_signal_expose(&app->win);
+		*/
+	}
 
 	return 0;
 }
@@ -2275,84 +2382,89 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			bounds.w -= 2*group_padding.x;
 			bounds.h -= 2*group_padding.y;
 
-			base_h = bounds.h;
+			base_h = bounds.h - dy;
 		}
 
 		nk_layout_row_begin(ctx, NK_DYNAMIC, base_h, 3);
-
-		nk_layout_row_push(ctx, 0.25);
-		if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 		{
-			app->source_n = _expose_direction(ctx, app, 0);
-
-			nk_group_end(ctx);
-		}
-
-		nk_layout_row_push(ctx, 0.5);
-		if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
-		{
-			const struct nk_panel *center = nk_window_get_panel(ctx);
-#ifdef JACK_HAS_METADATA_API
-			nk_layout_row_dynamic(ctx, dy, 4);
-#else
-			nk_layout_row_dynamic(ctx, dy, 2);
-#endif
-
-			app->type = nk_button_symbol_label(ctx,
-				app->type == TYPE_AUDIO ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "AUDIO", NK_TEXT_RIGHT)
-				? TYPE_AUDIO : app->type;
-			app->type = nk_button_symbol_label(ctx,
-				app->type == TYPE_MIDI ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "MIDI", NK_TEXT_RIGHT)
-				? TYPE_MIDI : app->type;
-#ifdef JACK_HAS_METADATA_API
-			app->type = nk_button_symbol_label(ctx,
-				app->type == TYPE_OSC ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "OSC", NK_TEXT_RIGHT)
-				? TYPE_OSC : app->type;
-			app->type = nk_button_symbol_label(ctx,
-				app->type == TYPE_CV ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "CV", NK_TEXT_RIGHT)
-				? TYPE_CV : app->type;
-#endif
-
-			struct nk_rect bounds = center->bounds;
-			bounds.x += group_padding.x;
-			bounds.y += group_padding.y;
-			bounds.w -= 4*group_padding.x;
-			bounds.h -= 4*group_padding.y + dy;
-
-			nk_layout_row_dynamic(ctx, bounds.h, 1);
-			const nk_patcher_event_t *ev = nk_patcher_render(&app->patch, ctx, bounds);
-			if(ev)
+			nk_layout_row_push(ctx, 0.25);
+			if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
-				//printf("ev: %lu %lu %i\n", ev->source_id, ev->sink_id, ev->state);
+				app->source_n = _expose_direction(ctx, app, 0);
 
-				char *source_name = NULL;
-				char *sink_name = NULL;
-				_db_port_find_by_id(app, ev->source_id, &source_name, NULL, NULL);
-				_db_port_find_by_id(app, ev->sink_id, &sink_name, NULL, NULL);
-				if(source_name && sink_name)
-				{
-					if(ev->state)
-						jack_connect(app->client, source_name, sink_name);
-					else
-						jack_disconnect(app->client, source_name, sink_name);
-				}
+				nk_group_end(ctx);
 			}
 
-			nk_group_end(ctx);
+			nk_layout_row_push(ctx, 0.5);
+			if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
+			{
+				const struct nk_panel *center = nk_window_get_panel(ctx);
+#ifdef JACK_HAS_METADATA_API
+				nk_layout_row_dynamic(ctx, dy, 4);
+#else
+				nk_layout_row_dynamic(ctx, dy, 2);
+#endif
+
+				app->type = nk_button_symbol_label(ctx,
+					app->type == TYPE_AUDIO ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "AUDIO", NK_TEXT_RIGHT)
+					? TYPE_AUDIO : app->type;
+				app->type = nk_button_symbol_label(ctx,
+					app->type == TYPE_MIDI ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "MIDI", NK_TEXT_RIGHT)
+					? TYPE_MIDI : app->type;
+#ifdef JACK_HAS_METADATA_API
+				app->type = nk_button_symbol_label(ctx,
+					app->type == TYPE_OSC ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "OSC", NK_TEXT_RIGHT)
+					? TYPE_OSC : app->type;
+				app->type = nk_button_symbol_label(ctx,
+					app->type == TYPE_CV ? NK_SYMBOL_CIRCLE_SOLID : NK_SYMBOL_CIRCLE_OUTLINE, "CV", NK_TEXT_RIGHT)
+					? TYPE_CV : app->type;
+#endif
+
+				struct nk_rect bounds = center->bounds;
+				bounds.x += group_padding.x;
+				bounds.y += group_padding.y;
+				bounds.w -= 4*group_padding.x;
+				bounds.h -= 4*group_padding.y + dy;
+
+				nk_layout_row_dynamic(ctx, bounds.h, 1);
+				const nk_patcher_event_t *ev = nk_patcher_render(&app->patch, ctx, bounds);
+				if(ev)
+				{
+					//printf("ev: %lu %lu %i\n", ev->source_id, ev->sink_id, ev->state);
+
+					char *source_name = NULL;
+					char *sink_name = NULL;
+					_db_port_find_by_id(app, ev->source_id, &source_name, NULL, NULL);
+					_db_port_find_by_id(app, ev->sink_id, &sink_name, NULL, NULL);
+					if(source_name && sink_name)
+					{
+						if(ev->state)
+							jack_connect(app->client, source_name, sink_name);
+						else
+							jack_disconnect(app->client, source_name, sink_name);
+					}
+				}
+
+				nk_group_end(ctx);
+			}
+
+			nk_layout_row_push(ctx, 0.25);
+			if(nk_group_begin(ctx, "Sinks", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
+			{
+				app->sink_n = _expose_direction(ctx, app, 1);
+
+				nk_group_end(ctx);
+			}
 		}
-
-		nk_layout_row_push(ctx, 0.25);
-		if(nk_group_begin(ctx, "Sinks", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
-		{
-			app->sink_n = _expose_direction(ctx, app, 1);
-
-			nk_group_end(ctx);
-		}
-
 		nk_layout_row_end(ctx);
-
-		nk_end(ctx);
+		
+		nk_layout_row_dynamic(ctx, dy, 4);
+		nk_value_int(ctx, "SampleRate", app->sample_rate);
+		nk_value_int(ctx, "BufferSize", app->buffer_size);
+		nk_value_int(ctx, "XRuns", app->xruns);
+		nk_value_bool(ctx, "FreeWheeling", app->freewheeling);
 	}
+	nk_end(ctx);
 }
 
 int
