@@ -49,15 +49,19 @@ enum {
 	EVENT_CLIENT_REGISTER,
 	EVENT_PORT_REGISTER,
 	EVENT_PORT_CONNECT,
-	EVENT_PROPERTY_CHANGE,
 	EVENT_ON_INFO_SHUTDOWN,
 	EVENT_GRAPH_ORDER,
 	EVENT_SESSION,
 	EVENT_FREEWHEEL,
 	EVENT_BUFFER_SIZE,
 	EVENT_SAMPLE_RATE,
+	EVENT_XRUN,
+#ifdef JACK_HAS_PORT_RENAME_CALLBACK
 	EVENT_PORT_RENAME,
-	EVENT_XRUN
+#endif
+#ifdef JACK_HAS_METADATA_API
+	EVENT_PROPERTY_CHANGE,
+#endif
 };
 
 enum {
@@ -190,6 +194,7 @@ struct _app_t {
 	sqlite3_stmt *query_port_get_selected;
 	sqlite3_stmt *query_port_set_selected;
 	sqlite3_stmt *query_port_info;
+	sqlite3_stmt *query_port_set_name;
 	sqlite3_stmt *query_port_set_pretty;
 	sqlite3_stmt *query_port_set_type;
 	sqlite3_stmt *query_port_set_position;
@@ -463,6 +468,10 @@ _db_init(app_t *app)
 		-1, &app->query_port_info, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
+		"UPDATE Ports SET name=$1, short_name=$2 WHERE id=$3",
+		-1, &app->query_port_set_name, NULL);
+	(void)ret;
+	ret = sqlite3_prepare_v2(app->db,
 		"UPDATE Ports SET pretty_name=$1 WHERE id=$2",
 		-1, &app->query_port_set_pretty, NULL);
 	(void)ret;
@@ -569,6 +578,8 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_port_set_selected);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_info);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_port_set_name);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_set_pretty);
 	(void)ret;
@@ -1191,6 +1202,27 @@ _db_port_get_info(app_t *app, int id, int *type, int *direction, int *client_id,
 }
 
 static void
+_db_port_set_name(app_t *app, int id, const char *name, const char *short_name)
+{
+	int ret;
+
+	sqlite3_stmt *stmt = app->query_port_set_name;
+
+	ret = sqlite3_bind_text(stmt, 1, name, -1, NULL);
+	(void)ret;
+	ret = sqlite3_bind_text(stmt, 2, short_name, -1, NULL);
+	(void)ret;
+	ret = sqlite3_bind_int(stmt, 3, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+}
+
+static void
 _db_port_set_pretty(app_t *app, int id, const char *pretty_name)
 {
 	int ret;
@@ -1418,7 +1450,6 @@ _jack_anim(app_t *app)
 					free(ev->client_register.name); // strdup
 
 				refresh = true;
-
 				break;
 			}
 			case EVENT_PORT_REGISTER:
@@ -1443,7 +1474,6 @@ _jack_anim(app_t *app)
 				}
 
 				refresh = true;
-
 				break;
 			}
 			case EVENT_PORT_CONNECT:
@@ -1462,7 +1492,6 @@ _jack_anim(app_t *app)
 				}
 
 				realize = true;
-
 				break;
 			}
 #ifdef JACK_HAS_METADATA_API
@@ -1689,35 +1718,57 @@ _jack_anim(app_t *app)
 			{
 				app->freewheeling = ev->freewheel.starting;
 
+				realize = true;
 				break;
 			}
 			case EVENT_BUFFER_SIZE:
 			{
 				app->buffer_size = ev->buffer_size.nframes;
 
+				realize = true;
 				break;
 			}
 			case EVENT_SAMPLE_RATE:
 			{
 				app->sample_rate = ev->sample_rate.nframes;
 
+				realize = true;
 				break;
 			}
+#ifdef JACK_HAS_PORT_RENAME_CALLBACK
 			case EVENT_PORT_RENAME:
 			{
-				//FIXME
+				int id = _db_port_find_by_name(app, ev->port_rename.old_name);
+
+				if(id != -1)
+				{
+					const char *name = ev->port_rename.new_name;
+					char *sep = strchr(name, ':');
+					char *client_name = strndup(name, sep - name);
+					const char *short_name = sep + 1;
+
+					if(client_name)
+					{
+						_db_port_set_name(app, id, name, short_name);
+
+						free(client_name); // strdup
+					}
+				}
 
 				if(ev->port_rename.old_name)
 					free(ev->port_rename.old_name);
 				if(ev->port_rename.new_name)
 					free(ev->port_rename.new_name);
 
+				realize = true;
 				break;
 			}
+#endif
 			case EVENT_XRUN:
 			{
 				app->xruns += 1;
 
+				realize = true;
 				break;
 			}
 		};
@@ -1836,6 +1887,7 @@ _jack_port_registration_cb(jack_port_id_t id, int state, void *arg)
 	}
 }
 
+#ifdef JACK_HAS_PORT_RENAME_CALLBACK
 static void
 _jack_port_rename_cb(jack_port_id_t id, const char *old_name, const char *new_name, void *arg)
 {
@@ -1852,6 +1904,7 @@ _jack_port_rename_cb(jack_port_id_t id, const char *old_name, const char *new_na
 		_ui_signal(app);
 	}
 }
+#endif
 
 static void
 _jack_port_connect_cb(jack_port_id_t id_source, jack_port_id_t id_sink, int state, void *arg)
@@ -1986,14 +2039,16 @@ _jack_init(app_t *app)
 
 	jack_set_client_registration_callback(app->client, _jack_client_registration_cb, app);
 	jack_set_port_registration_callback(app->client, _jack_port_registration_cb, app);
-	//jack_set_port_rename_callback(app->client, _jack_port_rename_cb, app);
 	jack_set_port_connect_callback(app->client, _jack_port_connect_cb, app);
 	jack_set_xrun_callback(app->client, _jack_xrun_cb, app);
 	jack_set_graph_order_callback(app->client, _jack_graph_order_cb, app);
+	jack_set_session_callback(app->client, _jack_session_cb, app);
+#ifdef JACK_HAS_PORT_RENAME_CALLBACK
+	jack_set_port_rename_callback(app->client, _jack_port_rename_cb, app);
+#endif
 #ifdef JACK_HAS_METADATA_API
 	jack_set_property_change_callback(app->client, _jack_property_change_cb, app);
 #endif
-	jack_set_session_callback(app->client, _jack_session_cb, app);
 
 	jack_activate(app->client);
 

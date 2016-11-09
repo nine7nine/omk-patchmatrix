@@ -47,6 +47,13 @@ if(${JACK_HAS_METADATA_API})
 	add_definitions("-DJACK_HAS_METADATA_API")
 endif()
 
+# port_rename_callback
+include(CheckLibraryExists)
+CHECK_LIBRARY_EXISTS(jack jack_set_port_rename_callback "" JACK_HAS_PORT_RENAME_CALLBACK)
+if(${JACK_HAS_PORT_RENAME_CALLBACK})
+	add_definitions("-DJACK_HAS_PORT_RENAME_CALLBACK")
+endif()
+
 # sqlite3
 pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.0)
 include_directories(${SQLITE3_INCLUDE_DIRS})
@@ -110,7 +117,7 @@ endif()
 # binary
 add_executable(patchmatrix
 	patchmatrix.c
-	pugl/pugl/pugl_x11.c)
+	${TAR_UI})
 target_link_libraries(patchmatrix ${LIBS})
 install(TARGETS patchmatrix DESTINATION ${PATCHMATRIX_BIN_DIR})
 
