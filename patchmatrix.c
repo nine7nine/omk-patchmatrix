@@ -217,11 +217,7 @@ struct _app_t {
 
 	nk_pugl_window_t win;
 	nk_patcher_t patch;
-#ifdef JACK_HAS_METADATA_API
-	struct nk_image icons [4];
-#else
-	struct nk_image icons [2];
-#endif
+	struct nk_image icons [TYPE_MAX];
 
 	int source_n;
 	int sink_n;
@@ -2264,7 +2260,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 static int
 _ui_init(app_t *app)
 {
-	nk_patcher_init(&app->patch);
+	nk_patcher_init(&app->patch, 0.5);
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
@@ -2463,12 +2459,12 @@ _ui_refresh(app_t *app)
 		char *port_pretty_name;
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
 
-		nk_patcher_source_id_set(&app->patch, source, id);
-		nk_patcher_source_color_set(&app->patch, source, _color_get(client_id));
+		nk_patcher_src_id_set(&app->patch, source, id);
+		nk_patcher_src_color_set(&app->patch, source, _color_get(client_id));
 
 		if(port_pretty_name)
 		{
-			nk_patcher_source_label_set(&app->patch, source, port_pretty_name);
+			nk_patcher_src_label_set(&app->patch, source, port_pretty_name);
 			free(port_pretty_name);
 		}
 	}
@@ -2490,12 +2486,12 @@ _ui_refresh(app_t *app)
 		char *port_pretty_name;
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
 
-		nk_patcher_sink_id_set(&app->patch, sink, id);
-		nk_patcher_sink_color_set(&app->patch, sink, _color_get(client_id));
+		nk_patcher_snk_id_set(&app->patch, sink, id);
+		nk_patcher_snk_color_set(&app->patch, sink, _color_get(client_id));
 
 		if(port_pretty_name)
 		{
-			nk_patcher_sink_label_set(&app->patch, sink, port_pretty_name);
+			nk_patcher_snk_label_set(&app->patch, sink, port_pretty_name);
 			free(port_pretty_name);
 		}
 	}

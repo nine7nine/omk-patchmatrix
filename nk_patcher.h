@@ -5,13 +5,13 @@
  * it under the terms of the Artistic License 2.0 as published by
  * The Perl Foundation.
  *
- * This source is distributed in the hope that it will be useful,
+ * This src is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the iapplied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * Artistic License 2.0 for more details.
  *
  * You should have received a copy of the Artistic License 2.0
- * along the source as a COPYING file. If not, obtain it from
+ * along the src as a COPYING file. If not, obtain it from
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
@@ -21,11 +21,10 @@
 typedef enum _nk_patcher_type_t nk_patcher_type_t;
 typedef struct _nk_patcher_port_t nk_patcher_port_t;
 typedef struct _nk_patcher_connection_t nk_patcher_connection_t;
-typedef struct _nk_patcher_priv_t nk_patcher_priv_t;
 typedef struct _nk_patcher_t nk_patcher_t;
-typedef void (*nk_patcher_fill_t)(void *data, uintptr_t source_id, uintptr_t sink_id,
+typedef void (*nk_patcher_fill_t)(void *data, uintptr_t src_id, uintptr_t snk_id,
 	bool *state, nk_patcher_type_t *type);
-typedef void (nk_patcher_change_t)(void *data, uintptr_t source_id, uintptr_t sink_id,
+typedef void (nk_patcher_change_t)(void *data, uintptr_t src_id, uintptr_t snk_id,
 	bool state);
 
 enum _nk_patcher_type_t {
@@ -47,32 +46,22 @@ struct _nk_patcher_connection_t {
 	int enm;
 };
 
-struct _nk_patcher_priv_t {
-	float X, Y;
-	float x, y;
-	float w, h;
-	float W, H;
-	float scale;
-	int ncols, nrows;
-	float span, span1, span2;
-	float x0, y0;
-	int ax, ay;
-	int sx, sy;
-
-	bool needs_predraw;
-	bool realizing;
-};
-
 struct _nk_patcher_t {
-	int source_n;
-	int sink_n;
+	int src_n;
+	int snk_n;
+	float scale;
 
-	nk_patcher_port_t *sources;
-	nk_patcher_port_t *sinks;
+	nk_patcher_port_t *srcs;
+	nk_patcher_port_t *snks;
 
 	nk_patcher_connection_t **connections;
 
-	nk_patcher_priv_t priv;
+	// cached 'constants'
+	float X, Y;
+	float W, H;
+	float W2, H2;
+	float span, span1, span2;
+	float x0, y0;
 };
 
 enum {
@@ -86,35 +75,35 @@ enum {
 };
 
 static void
-nk_patcher_init(nk_patcher_t *patch);
+nk_patcher_init(nk_patcher_t *patch, float scale);
 
 static void
-nk_patcher_reinit(nk_patcher_t *patch, int source_n, int sink_n);
+nk_patcher_reinit(nk_patcher_t *patch, int src_n, int snk_n);
 
 static void
 nk_patcher_deinit(nk_patcher_t *patch);
 
 static int
-nk_patcher_connected_set(nk_patcher_t *patch, uintptr_t source_id, intptr_t sink_id,
+nk_patcher_connected_set(nk_patcher_t *patch, uintptr_t src_id, intptr_t snk_id,
 	bool state, nk_patcher_type_t type);
 
 static int
-nk_patcher_source_id_set(nk_patcher_t *patch, int source_idx, uintptr_t source_id);
+nk_patcher_src_id_set(nk_patcher_t *patch, int src_idx, uintptr_t src_id);
 
 static int
-nk_patcher_sink_id_set(nk_patcher_t *patch, int sink_idx, uintptr_t sink_id);
+nk_patcher_snk_id_set(nk_patcher_t *patch, int snk_idx, uintptr_t snk_id);
 
 static int
-nk_patcher_source_color_set(nk_patcher_t *patch, int source_idx, struct nk_color source_color);
+nk_patcher_src_color_set(nk_patcher_t *patch, int src_idx, struct nk_color src_color);
 
 static int
-nk_patcher_sink_color_set(nk_patcher_t *patch, int sink_idx, struct nk_color sink_color);
+nk_patcher_snk_color_set(nk_patcher_t *patch, int snk_idx, struct nk_color snk_color);
 
 static int
-nk_patcher_source_label_set(nk_patcher_t *patch, int source_idx, const char *source_label);
+nk_patcher_src_label_set(nk_patcher_t *patch, int src_idx, const char *src_label);
 
 static int
-nk_patcher_sink_label_set(nk_patcher_t *patch, int sink_idx, const char *sink_label);
+nk_patcher_snk_label_set(nk_patcher_t *patch, int snk_idx, const char *snk_label);
 
 static void
 nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds,
@@ -129,33 +118,28 @@ nk_patcher_fill(nk_patcher_t *patch, nk_patcher_fill_t fill, void *data);
 static const struct nk_color bright = {.r = 0xee, .g = 0xee, .b = 0xee, .a = 0xff};
 
 static void
-nk_patcher_init(nk_patcher_t *patch)
+nk_patcher_init(nk_patcher_t *patch, float scale)
 {
 	nk_patcher_reinit(patch, 0, 0);
 
-	nk_patcher_priv_t *priv = &patch->priv;
-	priv->scale = 0.45;
-	priv->ax = -1;
-	priv->ay = -1;
-	priv->sx = 0;
-	priv->sy = 0;
+	patch->scale = scale;
 }
 
 static void
-nk_patcher_reinit(nk_patcher_t *patch, int source_n, int sink_n)
+nk_patcher_reinit(nk_patcher_t *patch, int src_n, int snk_n)
 {
 	nk_patcher_deinit(patch);
 
-	patch->source_n = source_n;
-	patch->sink_n = sink_n;
+	patch->src_n = src_n;
+	patch->snk_n = snk_n;
 
-	patch->sources = calloc(patch->source_n, sizeof(nk_patcher_port_t));
-	patch->sinks = calloc(patch->sink_n, sizeof(nk_patcher_port_t));
+	patch->srcs = calloc(patch->src_n, sizeof(nk_patcher_port_t));
+	patch->snks = calloc(patch->snk_n, sizeof(nk_patcher_port_t));
 
-	patch->connections = calloc(patch->source_n, sizeof(nk_patcher_connection_t *));
-	for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+	patch->connections = calloc(patch->src_n, sizeof(nk_patcher_connection_t *));
+	for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 	{
-		patch->connections[source_idx] = calloc(patch->sink_n, sizeof(nk_patcher_connection_t));
+		patch->connections[src_idx] = calloc(patch->snk_n, sizeof(nk_patcher_connection_t));
 	}
 }
 
@@ -164,77 +148,77 @@ nk_patcher_deinit(nk_patcher_t *patch)
 {
 	if(patch->connections)
 	{
-		for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+		for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 		{
-			if(patch->connections[source_idx])
-				free(patch->connections[source_idx]);
+			if(patch->connections[src_idx])
+				free(patch->connections[src_idx]);
 		}
 		free(patch->connections);
 	}
 
-	if(patch->sources)
+	if(patch->srcs)
 	{
-		for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+		for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 		{
-			nk_patcher_port_t *port = &patch->sources[source_idx];
+			nk_patcher_port_t *port = &patch->srcs[src_idx];
 
 			if(port->label)
 				free(port->label);
 		}
-		free(patch->sources);
+		free(patch->srcs);
 	}
 
-	if(patch->sinks)
+	if(patch->snks)
 	{
-		for(int sink_idx=0; sink_idx<patch->sink_n; sink_idx++)
+		for(int snk_idx=0; snk_idx<patch->snk_n; snk_idx++)
 		{
-			nk_patcher_port_t *port = &patch->sinks[sink_idx];
+			nk_patcher_port_t *port = &patch->snks[snk_idx];
 
 			if(port->label)
 				free(port->label);
 		}
-		free(patch->sinks);
+		free(patch->snks);
 	}
 
-	patch->source_n = 0;
-	patch->sink_n = 0;
+	patch->src_n = 0;
+	patch->snk_n = 0;
 }
 
 static inline int
-_nk_patcher_source_idx_get(nk_patcher_t *patch, uintptr_t source_id)
+_nk_patcher_src_idx_get(nk_patcher_t *patch, uintptr_t src_id)
 {
-	for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+	for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 	{
-		if(patch->sources[source_idx].id == source_id)
-			return source_idx;
+		if(patch->srcs[src_idx].id == src_id)
+			return src_idx;
 	}
 
 	return -1; // not found
 }
 
 static inline int
-_nk_patcher_sink_idx_get(nk_patcher_t *patch, uintptr_t sink_id)
+_nk_patcher_snk_idx_get(nk_patcher_t *patch, uintptr_t snk_id)
 {
-	for(int sink_idx=0; sink_idx<patch->sink_n; sink_idx++)
+	for(int snk_idx=0; snk_idx<patch->snk_n; snk_idx++)
 	{
-		if(patch->sinks[sink_idx].id == sink_id)
-			return sink_idx;
+		if(patch->snks[snk_idx].id == snk_id)
+			return snk_idx;
 	}
 
 	return -1; // not found
 }
 
 static int
-nk_patcher_connected_set(nk_patcher_t *patch, uintptr_t source_id, intptr_t sink_id,
+nk_patcher_connected_set(nk_patcher_t *patch, uintptr_t src_id, intptr_t snk_id,
 	bool state, nk_patcher_type_t type)
 {
-	const int source_idx = _nk_patcher_source_idx_get(patch, source_id);
-	const int sink_idx = _nk_patcher_sink_idx_get(patch, sink_id);
+	const int src_idx = _nk_patcher_src_idx_get(patch, src_id);
+	const int snk_idx = _nk_patcher_snk_idx_get(patch, snk_id);
 
-	if( (source_idx == -1) || (sink_idx == -1) )
+	if( (src_idx == -1) || (snk_idx == -1) )
 		return -1;
 
-	nk_patcher_connection_t *conn = &patch->connections[source_idx][sink_idx];
+	nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_idx];
 	conn->state = state;
 	conn->type = type;
 
@@ -242,127 +226,121 @@ nk_patcher_connected_set(nk_patcher_t *patch, uintptr_t source_id, intptr_t sink
 }
 
 static int
-nk_patcher_source_id_set(nk_patcher_t *patch, int source_idx, uintptr_t source_id)
+nk_patcher_src_id_set(nk_patcher_t *patch, int src_idx, uintptr_t src_id)
 {
-	if( (source_idx < 0) || (source_idx >= patch->source_n) )
+	if( (src_idx < 0) || (src_idx >= patch->src_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sources[source_idx];
-	port->id = source_id;
+	nk_patcher_port_t *port = &patch->srcs[src_idx];
+	port->id = src_id;
 
 	return 0;
 }
 
 static int
-nk_patcher_sink_id_set(nk_patcher_t *patch, int sink_idx, uintptr_t sink_id)
+nk_patcher_snk_id_set(nk_patcher_t *patch, int snk_idx, uintptr_t snk_id)
 {
-	if( (sink_idx < 0) || (sink_idx >= patch->sink_n) )
+	if( (snk_idx < 0) || (snk_idx >= patch->snk_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sinks[sink_idx];
-	port->id = sink_id;
+	nk_patcher_port_t *port = &patch->snks[snk_idx];
+	port->id = snk_id;
 
 	return 0;
 }
 
 static int
-nk_patcher_source_color_set(nk_patcher_t *patch, int source_idx, struct nk_color source_color)
+nk_patcher_src_color_set(nk_patcher_t *patch, int src_idx, struct nk_color src_color)
 {
-	if( (source_idx < 0) || (source_idx >= patch->source_n) )
+	if( (src_idx < 0) || (src_idx >= patch->src_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sources[source_idx];
-	port->color = source_color;
+	nk_patcher_port_t *port = &patch->srcs[src_idx];
+	port->color = src_color;
 
 	return 0;
 }
 
 static int
-nk_patcher_sink_color_set(nk_patcher_t *patch, int sink_idx, struct nk_color sink_color)
+nk_patcher_snk_color_set(nk_patcher_t *patch, int snk_idx, struct nk_color snk_color)
 {
-	if( (sink_idx < 0) || (sink_idx >= patch->sink_n) )
+	if( (snk_idx < 0) || (snk_idx >= patch->snk_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sinks[sink_idx];
-	port->color = sink_color;
+	nk_patcher_port_t *port = &patch->snks[snk_idx];
+	port->color = snk_color;
 
 	return 0;
 }
 
 static int
-nk_patcher_source_label_set(nk_patcher_t *patch, int source_idx, const char *source_label)
+nk_patcher_src_label_set(nk_patcher_t *patch, int src_idx, const char *src_label)
 {
-	if( (source_idx < 0) || (source_idx >= patch->source_n) )
+	if( (src_idx < 0) || (src_idx >= patch->src_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sources[source_idx];
+	nk_patcher_port_t *port = &patch->srcs[src_idx];
 	if(port->label)
 		free(port->label);
-	port->label = strdup(source_label);
+	port->label = strdup(src_label);
 
 	return 0;
 }
 
 static int
-nk_patcher_sink_label_set(nk_patcher_t *patch, int sink_idx, const char *sink_label)
+nk_patcher_snk_label_set(nk_patcher_t *patch, int snk_idx, const char *snk_label)
 {
-	if( (sink_idx < 0) || (sink_idx >= patch->sink_n) )
+	if( (snk_idx < 0) || (snk_idx >= patch->snk_n) )
 		return -1;
 
-	nk_patcher_port_t *port = &patch->sinks[sink_idx];
+	nk_patcher_port_t *port = &patch->snks[snk_idx];
 	if(port->label)
 		free(port->label);
-	port->label = strdup(sink_label);
+	port->label = strdup(snk_label);
 
 	return 0;
 }
 
 static inline void
-_rel_to_abs(nk_patcher_priv_t *priv, float ax, float ay, float *_fx, float *_fy)
+_rel_to_abs(nk_patcher_t *patch, float ax, float ay, float *_fx, float *_fy)
 {
-	const float w2 = (float)priv->W/2;
-	const float h2 = (float)priv->H/2;
+	ay = patch->snk_n - ay;
+	float fx = patch->x0 + patch->span * ( ax + ay);
+	float fy = patch->y0 + patch->span * (-ax + ay);
 
-	ay = priv->nrows - ay;
-	float fx = priv->x0 + priv->span * ( ax + ay);
-	float fy = priv->y0 + priv->span * (-ax + ay);
-
-	fx =  fx*w2 + priv->X + w2;
-	fy = -fy*h2 + priv->Y + h2;
+	fx =  fx*patch->W2 + patch->X + patch->W2;
+	fy = -fy*patch->H2 + patch->Y + patch->H2;
 
 	*_fx = fx;
 	*_fy = fy;
 }
 
 static inline void
-_abs_to_rel(nk_patcher_priv_t *priv, float fx, float fy, int *_ax, int *_ay)
+_abs_to_rel(nk_patcher_t *patch, float fx, float fy, int *_ax, int *_ay)
 {
-	const float w2 = (float)priv->W/2;
-	const float h2 = (float)priv->H/2;
+	fx =  (fx - patch->X - patch->W2) / patch->W2;
+	fy = -(fy - patch->Y - patch->H2) / patch->H2;
 
-	fx =  (fx - priv->X - w2) / w2;
-	fy = -(fy - priv->Y - h2) / h2;
+	float ax = floor( (-patch->x0 + fx + patch->y0 - fy) * patch->span2);
+	float ay = floor( (-patch->x0 + fx - patch->y0 + fy) * patch->span2);
+	ay = patch->snk_n - 1 - ay;
 
-	float ax = floor( (-priv->x0 + fx + priv->y0 - fy) * priv->span2);
-	float ay = floor( (-priv->x0 + fx - priv->y0 + fy) * priv->span2);
-	ay = priv->nrows - 1 - ay;
-
-	if( (ax >= 0) && (ax < priv->ncols) && (ay >= 0) && (ay < priv->nrows) )
+	if( (ax >= 0) && (ax < patch->src_n) && (ay >= 0) && (ay < patch->snk_n) )
 	{
 		// inside-bounds
 	}
-	else if(ax >= priv->ncols)
+	else if(ax >= patch->src_n)
 	{
 		ax = -1; // out-of-bounds
 
-		ay = floor( (-priv->y0 - fy) * priv->span1);
-		if( (ay < 0) || (ay >= priv->nrows) )
+		ay = floor( (-patch->y0 - fy) * patch->span1);
+		if( (ay < 0) || (ay >= patch->snk_n) )
 			ay = -1; // out-of-bounds
 	}
-	else if(ay >= priv->nrows)
+	else if(ay >= patch->snk_n)
 	{
-		ax = floor( (priv->y0 - fy) * priv->span1);
-		if( (ax < 0) || (ax >= priv->ncols) )
+		ax = floor( (patch->y0 - fy) * patch->span1);
+		if( (ax < 0) || (ax >= patch->src_n) )
 			ax = -1; // out-of-bounds
 
 		ay = -1; // out-of-bounds
@@ -377,181 +355,130 @@ _abs_to_rel(nk_patcher_priv_t *priv, float fx, float fy, int *_ax, int *_ay)
 	*_ay = ay;
 }
 
-static inline void
-_screen_to_abs(nk_patcher_priv_t *priv, int sx, int sy, float *_fx, float *_fy)
-{
-	float fx = sx;
-	fx /= priv->W; //TODO precalc
-	fx *= 2.f;
-	fx -= 1.f;
-
-	float fy = sy;
-	fy /= priv->H; //TODO precalc
-	fy = 1.f - fy;
-	fy *= 2.f;
-	fy -= 1.f;
-
-	*_fx = fx;
-	*_fy = fy;
-}
-
-static inline void
-_abs_to_screen(nk_patcher_priv_t *priv, float fx, float fy, int *_sx, int *_sy)
-{
-	float sx = fx;
-	sx += 1.f;
-	sx *= 0.5;
-	sx *= priv->W;
-	
-	float sy = fy;
-	sy += 1.f;
-	sy *= 0.5;
-	sy = 1.f - sy;
-	sy *= priv->H;
-
-	*_sx = floor(sx);
-	*_sy = floor(sy);
-}
-
 static void
-_precalc(nk_patcher_priv_t *priv)
+_precalc(nk_patcher_t *patch, struct nk_rect bounds)
 {
-	if(priv->ncols > priv->nrows)
+	if(patch->src_n > patch->snk_n)
 	{
-		priv->span = 1.f*priv->scale / priv->ncols;
-		const float offset = priv->span * (priv->ncols - priv->nrows) * 0.5;
-		priv->x0 = -1.f*priv->scale + offset;
-		priv->y0 =  0.f*priv->scale + offset;
+		patch->span = 1.f*patch->scale / patch->src_n;
+		const float offset = patch->span * (patch->src_n - patch->snk_n) * 0.5;
+		patch->x0 = -1.f*patch->scale + offset;
+		patch->y0 =  0.f*patch->scale + offset;
 	}
-	else if(priv->nrows > priv->ncols)
+	else if(patch->snk_n > patch->src_n)
 	{
-		priv->span = 1.f*priv->scale / priv->nrows;
-		const float offset = priv->span * (priv->nrows - priv->ncols) * 0.5;
-		priv->x0 = -1.f*priv->scale + offset;
-		priv->y0 =  0.f*priv->scale - offset;
+		patch->span = 1.f*patch->scale / patch->snk_n;
+		const float offset = patch->span * (patch->snk_n - patch->src_n) * 0.5;
+		patch->x0 = -1.f*patch->scale + offset;
+		patch->y0 =  0.f*patch->scale - offset;
 	}
-	else // priv->nrows == priv->ncols
+	else // patch->snk_n == patch->src_n
 	{
-		priv->span = 1.f*priv->scale / priv->ncols;
-		priv->x0 = -1.f*priv->scale;
-		priv->y0 =  0.f*priv->scale;
+		patch->span = 1.f*patch->scale / patch->src_n;
+		patch->x0 = -1.f*patch->scale;
+		patch->y0 =  0.f*patch->scale;
 	}
 
-	priv->span1 = 1.f / priv->span;
-	priv->span2 = 0.5 / priv->span;
+	patch->span1 = 1.f / patch->span;
+	patch->span2 = 0.5 / patch->span;
+
+	patch->W = bounds.w > bounds.h ? bounds.w : bounds.h;
+	patch->H = bounds.h > bounds.w ? bounds.h : bounds.w;
+
+	patch->W2 = patch->W / 2.f;
+	patch->H2 = patch->H / 2.f;
+
+	patch->X = bounds.x - (patch->W - bounds.w) / 2;
+	patch->Y = bounds.y - (patch->H - bounds.h) / 2;
 }
 
 static void
 nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds,
 	nk_patcher_change_t *change, void *data)
 {
-	nk_patcher_priv_t *priv = &patch->priv;
-
-	priv->ncols = patch->source_n;
-	priv->nrows = patch->sink_n;
-
-	nk_widget(&bounds, ctx);
-
-	if(nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
-	{
-		//TODO
-		priv->scale *= 1.0 + ctx->input.mouse.scroll_delta * 0.05;
-		if(priv->scale < 0.1)
-			priv->scale = 0.1;
-		else if(priv->scale > 0.8)
-			priv->scale = 0.8;
-	}
-
-	if(priv->ncols && priv->nrows)
+	if(  patch->src_n && patch->snk_n
+		&& (nk_widget(&bounds, ctx) != NK_WIDGET_INVALID) )
 	{
 		struct nk_style *style = &ctx->style;
+		struct nk_input *in = &ctx->input;
+		int src_ptr = -1; // initialize
+		int snk_ptr = -1; // initialize
 
-		priv->w = bounds.w;
-		priv->h = bounds.h;
+		_precalc(patch, bounds);
 
-		priv->W = bounds.w > bounds.h ? bounds.w : bounds.h;
-		priv->H = bounds.h > bounds.w ? bounds.h : bounds.w;
-
-		priv->x = bounds.x;
-		priv->y = bounds.y;
-
-		priv->X = bounds.x - (priv->W - priv->w) / 2;
-		priv->Y = bounds.y - (priv->H - priv->h) / 2;
-
-		_precalc(priv);
-
-		int COL = -1; // initialize
-		int ROW = -1; // initialize
-
-		if(nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
+		// handle mouse input
+		if(nk_input_is_mouse_hovering_rect(in, bounds))
 		{
-			float mx = ctx->input.mouse.pos.x;
-			float my = ctx->input.mouse.pos.y;
+			if(in->mouse.scroll_delta)
+			{
+				patch->scale *= 1.0 + in->mouse.scroll_delta * 0.05;
+				patch->scale = NK_CLAMP(0.1, patch->scale, 0.8);
 
-			_abs_to_rel(priv, mx, my, &COL, &ROW);
+				in->mouse.scroll_delta = 0.f;
+			}
+
+			_abs_to_rel(patch, in->mouse.pos.x, in->mouse.pos.y, &src_ptr, &snk_ptr);
 
 			// handle state toggling
-			if(change && nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT))
+			if(change && nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT))
 			{
-				if( (COL != -1) && (ROW != -1) )
+				if( (src_ptr != -1) && (snk_ptr != -1) )
 				{
-					nk_patcher_port_t *source_port = &patch->sources[COL];
-					nk_patcher_port_t *sink_port = &patch->sinks[ROW];
-					nk_patcher_connection_t *conn = &patch->connections[COL][ROW];
+					nk_patcher_port_t *src_port = &patch->srcs[src_ptr];
+					nk_patcher_port_t *snk_port = &patch->snks[snk_ptr];
+					nk_patcher_connection_t *conn = &patch->connections[src_ptr][snk_ptr];
 
-					change(data, source_port->id, sink_port->id, !conn->state);
+					change(data, src_port->id, snk_port->id, !conn->state);
 				}
-				else if(COL != -1)
+				else if(src_ptr != -1)
 				{
-					nk_patcher_port_t *source_port = &patch->sources[COL];
+					nk_patcher_port_t *src_port = &patch->srcs[src_ptr];
 					bool state = false;
 
-					for(int row = 0; row < priv->nrows; row++)
+					for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 					{
-						nk_patcher_port_t *sink_port = &patch->sinks[row];
-						nk_patcher_connection_t *conn = &patch->connections[COL][row];
+						nk_patcher_port_t *snk_port = &patch->snks[snk_idx];
+						nk_patcher_connection_t *conn = &patch->connections[src_ptr][snk_idx];
 
 						state = state || conn->state;
 					}
-					for(int row = 0; row < priv->nrows; row++)
+					for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 					{
-						nk_patcher_port_t *sink_port = &patch->sinks[row];
-						nk_patcher_connection_t *conn = &patch->connections[COL][row];
+						nk_patcher_port_t *snk_port = &patch->snks[snk_idx];
+						nk_patcher_connection_t *conn = &patch->connections[src_ptr][snk_idx];
 
-						change(data, source_port->id, sink_port->id, !state);
+						change(data, src_port->id, snk_port->id, !state);
 					}
 				}
-				else if(ROW != -1)
+				else if(snk_ptr != -1)
 				{
-					nk_patcher_port_t *sink_port = &patch->sinks[ROW];
+					nk_patcher_port_t *snk_port = &patch->snks[snk_ptr];
 					bool state = false;
 
-					for(int col = 0; col < priv->ncols; col++)
+					for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 					{
-						nk_patcher_port_t *source_port = &patch->sources[col];
-						nk_patcher_connection_t *conn = &patch->connections[col][ROW];
+						nk_patcher_port_t *src_port = &patch->srcs[src_idx];
+						nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_ptr];
 
 						state = state || conn->state;
 					}
-					for(int col = 0; col < priv->ncols; col++)
+					for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 					{
-						nk_patcher_port_t *source_port = &patch->sources[col];
-						nk_patcher_connection_t *conn = &patch->connections[col][ROW];
+						nk_patcher_port_t *src_port = &patch->srcs[src_idx];
+						nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_ptr];
 
-						change(data, source_port->id, sink_port->id, !state);
+						change(data, src_port->id, snk_port->id, !state);
 					}
 				}
 			}
 		}
 
-		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
-	
 		// reset patch fields
-		for(int col = 0; col < priv->ncols; col++)
+		for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 		{
-			for(int row = 0; row < priv->nrows; row++)
+			for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 			{
-				nk_patcher_connection_t *conn = &patch->connections[col][row];
+				nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_idx];
 
 				conn->enm = 0;
 				switch(conn->type)
@@ -568,72 +495,76 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			}
 		}
 
-		if( (COL != -1) && (ROW != -1) )
+		// fill patch fields
+		if( (src_ptr != -1) && (snk_ptr != -1) )
 		{
-			for(int col = 0; col < priv->ncols; col++)
+			for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 			{
-				for(int row = 0; row < priv->nrows; row++)
+				for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 				{
-					nk_patcher_connection_t *conn = &patch->connections[col][row];
+					nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_idx];
 
-					if( (row == ROW) && (col >  COL) )
+					if( (snk_idx == snk_ptr) && (src_idx >  src_ptr) )
 						conn->enm |= HORIZONTAL;
-					if( (row == ROW) && (col == COL) )
+					if( (snk_idx == snk_ptr) && (src_idx == src_ptr) )
 						conn->enm |= HORIZONTAL_EDGE | VERTICAL_EDGE;
-					if( (row >  ROW) && (col == COL) )
+					if( (snk_idx >  snk_ptr) && (src_idx == src_ptr) )
 						conn->enm |= VERTICAL;
 				}
 			}
 		}
-		else if(COL != -1)
+		else if(src_ptr != -1)
 		{
-			int r = priv->nrows;
-			for(int row = r-1; row >= 0; row--)
+			int thresh = patch->snk_n;
+			for(int snk_idx = thresh-1; snk_idx >= 0; snk_idx--)
 			{
-				if(patch->connections[COL][row].state)
+				if(patch->connections[src_ptr][snk_idx].state)
 				{
-					r = row;
+					thresh = snk_idx;
 
-					patch->connections[COL][row].enm |= HORIZONTAL_EDGE;
-					for(int col = COL+1; col < priv->ncols; col++)
-						patch->connections[col][row].enm |= HORIZONTAL;
+					patch->connections[src_ptr][snk_idx].enm |= HORIZONTAL_EDGE;
+					for(int src_idx = src_ptr+1; src_idx < patch->src_n; src_idx++)
+						patch->connections[src_idx][snk_idx].enm |= HORIZONTAL;
 				}
 			}
 
-			for(int row = r; row < priv->nrows; row++)
-				patch->connections[COL][row].enm |= row == r ? VERTICAL_EDGE : VERTICAL;
+			for(int snk_idx = thresh; snk_idx < patch->snk_n; snk_idx++)
+				patch->connections[src_ptr][snk_idx].enm |= snk_idx == thresh ? VERTICAL_EDGE : VERTICAL;
 		}
-		else if(ROW != -1)
+		else if(snk_ptr != -1)
 		{
-			int c = priv->ncols;
-			for(int col = c-1; col >= 0; col--)
+			int thresh = patch->src_n;
+			for(int src_idx = thresh-1; src_idx >= 0; src_idx--)
 			{
-				if(patch->connections[col][ROW].state)
+				if(patch->connections[src_idx][snk_ptr].state)
 				{
-					c = col;
+					thresh = src_idx;
 
-					patch->connections[col][ROW].enm |= VERTICAL_EDGE;
-					for(int row = ROW+1; row < priv->nrows; row++)
-						patch->connections[col][row].enm |= VERTICAL;
+					patch->connections[src_idx][snk_ptr].enm |= VERTICAL_EDGE;
+					for(int snk_idx = snk_ptr+1; snk_idx < patch->snk_n; snk_idx++)
+						patch->connections[src_idx][snk_idx].enm |= VERTICAL;
 				}
 			}
 
-			for(int col = c; col < priv->ncols; col++)
-				patch->connections[col][ROW].enm |= col == c ? HORIZONTAL_EDGE : HORIZONTAL;
+			for(int src_idx = thresh; src_idx < patch->src_n; src_idx++)
+				patch->connections[src_idx][snk_ptr].enm |= src_idx == thresh ? HORIZONTAL_EDGE : HORIZONTAL;
 		}
 
-		for(int col = 0; col < priv->ncols; col++)
+		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+
+		// draw patch fields
+		for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 		{
-			for(int row = 0; row < priv->nrows; row++)
+			for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 			{
-				nk_patcher_connection_t *conn = &patch->connections[col][row];
+				nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_idx];
 				float p [8];
 
-				// tile color
-				_rel_to_abs(priv, col+0.0, row+0.0, &p[6], &p[7]);
-				_rel_to_abs(priv, col+0.0, row+1.0, &p[4], &p[5]);
-				_rel_to_abs(priv, col+1.0, row+1.0, &p[2], &p[3]);
-				_rel_to_abs(priv, col+1.0, row+0.0, &p[0], &p[1]);
+				// FEEDBACK | INDIRECT | DIRECT
+				_rel_to_abs(patch, src_idx + 0.0, snk_idx + 0.0, &p[6], &p[7]);
+				_rel_to_abs(patch, src_idx + 0.0, snk_idx + 1.0, &p[4], &p[5]);
+				_rel_to_abs(patch, src_idx + 1.0, snk_idx + 1.0, &p[2], &p[3]);
+				_rel_to_abs(patch, src_idx + 1.0, snk_idx + 0.0, &p[0], &p[1]);
 				if(conn->enm & FEEDBACK)
 					nk_fill_polygon(canvas, p, 4, style->button.hover.data.color);
 				else if(conn->enm & INDIRECT)
@@ -644,108 +575,108 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				// HORIZONTAL
 				if(conn->enm & HORIZONTAL)
 				{
-					_rel_to_abs(priv, col+0.0, row+0.4, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.0, row+0.6, &p[4], &p[5]);
-					_rel_to_abs(priv, col+1.0, row+0.6, &p[2], &p[3]);
-					_rel_to_abs(priv, col+1.0, row+0.4, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.0, snk_idx + 0.4, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.0, snk_idx + 0.6, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 1.0, snk_idx + 0.6, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 1.0, snk_idx + 0.4, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, patch->sinks[row].color);
+					nk_fill_polygon(canvas, p, 4, patch->snks[snk_idx].color);
 				}
 
 				// HORIZONTAL_EDGE
 				if(conn->enm & HORIZONTAL_EDGE)
 				{
-					_rel_to_abs(priv, col+0.6, row+0.4, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.6, row+0.6, &p[4], &p[5]);
-					_rel_to_abs(priv, col+1.0, row+0.6, &p[2], &p[3]);
-					_rel_to_abs(priv, col+1.0, row+0.4, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 0.4, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 0.6, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 1.0, snk_idx + 0.6, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 1.0, snk_idx + 0.4, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, patch->sinks[row].color);
+					nk_fill_polygon(canvas, p, 4, patch->snks[snk_idx].color);
 				}
 
 				// VERTICAL
 				if(conn->enm & VERTICAL)
 				{
-					_rel_to_abs(priv, col+0.4, row+0.0, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.4, row+1.0, &p[4], &p[5]);
-					_rel_to_abs(priv, col+0.6, row+1.0, &p[2], &p[3]);
-					_rel_to_abs(priv, col+0.6, row+0.0, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.4, snk_idx + 0.0, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.4, snk_idx + 1.0, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 1.0, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 0.0, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, patch->sources[col].color);
+					nk_fill_polygon(canvas, p, 4, patch->srcs[src_idx].color);
 				}
 
 				// VERTICAL_EDGE
 				if(conn->enm & VERTICAL_EDGE)
 				{
-					_rel_to_abs(priv, col+0.4, row+0.6, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.4, row+1.0, &p[4], &p[5]);
-					_rel_to_abs(priv, col+0.6, row+1.0, &p[2], &p[3]);
-					_rel_to_abs(priv, col+0.6, row+0.6, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.4, snk_idx + 0.6, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.4, snk_idx + 1.0, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 1.0, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 0.6, snk_idx + 0.6, &p[0], &p[1]);
 
-					nk_fill_polygon(canvas, p, 4, patch->sources[col].color);
+					nk_fill_polygon(canvas, p, 4, patch->srcs[src_idx].color);
 				}
 
 				// CONNECTED
 				if(conn->state)
 				{
-					_rel_to_abs(priv, col+0.2, row+0.2, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.2, row+0.8, &p[4], &p[5]);
-					_rel_to_abs(priv, col+0.8, row+0.8, &p[2], &p[3]);
-					_rel_to_abs(priv, col+0.8, row+0.2, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.2, snk_idx + 0.2, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.2, snk_idx + 0.8, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 0.8, snk_idx + 0.8, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 0.8, snk_idx + 0.2, &p[0], &p[1]);
 
 					nk_fill_polygon(canvas, p, 4, bright);
 				}
 				// EDGE
 				else if(conn->enm & (VERTICAL_EDGE | HORIZONTAL_EDGE) )
 				{
-					_rel_to_abs(priv, col+0.38, row+0.38, &p[6], &p[7]);
-					_rel_to_abs(priv, col+0.38, row+0.62, &p[4], &p[5]);
-					_rel_to_abs(priv, col+0.62, row+0.62, &p[2], &p[3]);
-					_rel_to_abs(priv, col+0.62, row+0.38, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.38, snk_idx + 0.38, &p[6], &p[7]);
+					_rel_to_abs(patch, src_idx + 0.38, snk_idx + 0.62, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 0.62, snk_idx + 0.62, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 0.62, snk_idx + 0.38, &p[0], &p[1]);
 
 					nk_fill_polygon(canvas, p, 4, style->text.color);
 				}
 			}
 		}
 
-		// HORIZONTAL_LINES
+		// draw HORIZONTAL_LINES
 		float yl, xl;
-		for(int col = 0; col <= priv->ncols; col++)
+		for(int src_idx = 0; src_idx <= patch->src_n; src_idx++)
 		{
-			const int row = priv->nrows;
+			const int snk_idx = patch->snk_n;
 
 			float p [6];
-			_rel_to_abs(priv, col, 0,   &p[0], &p[1]);
-			_rel_to_abs(priv, col, row, &p[2], &p[3]);
+			_rel_to_abs(patch, src_idx, 0,       &p[0], &p[1]);
+			_rel_to_abs(patch, src_idx, snk_idx, &p[2], &p[3]);
 			p[4] = bounds.x; //-1.f;
 			p[5] = p[3];
 
 			float q [6];
-			_rel_to_abs(priv, col - 0.2, row, &q[0], &q[1]);
-			_rel_to_abs(priv, col - 0.8, row, &q[2], &q[3]);
+			_rel_to_abs(patch, src_idx - 0.2, snk_idx, &q[0], &q[1]);
+			_rel_to_abs(patch, src_idx - 0.8, snk_idx, &q[2], &q[3]);
 			q[4] = q[2];
 			q[5] = q[1];
 
-			if(col > 0)
+			if(src_idx > 0)
 			{
-				const int c = col - 1;
-				const bool active = (COL == c)
-					|| ( (COL == -1) && (ROW != -1) && patch->connections[c][ROW].state );
+				const int c = src_idx - 1;
+				const bool active = (src_ptr == c)
+					|| ( (src_ptr == -1) && (snk_ptr != -1) && patch->connections[c][snk_ptr].state );
 
-				nk_patcher_port_t *source_port = &patch->sources[c];
+				nk_patcher_port_t *src_port = &patch->srcs[c];
 				struct nk_rect label = nk_rect(p[4], yl, xl-p[4], p[3]-yl);
-				const char *name = source_port->label;
+				const char *name = src_port->label;
 				const size_t len = nk_strlen(name);
 				const struct nk_text text = {
 					.padding.x = 2,
 					.padding.y = 0,
 					.background = style->window.background,
-					.text = active ? source_port->color : style->text.color
+					.text = active ? src_port->color : style->text.color
 				};
 
 				if(active)
 					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
-				nk_fill_polygon(canvas, q, 3, source_port->color);
+				nk_fill_polygon(canvas, q, 3, src_port->color);
 				nk_widget_text(canvas, label, name, len, &text,
 					NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
 			}
@@ -755,43 +686,43 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			yl = p[3];
 		}
 
-		// VERTICAL_LINES
-		for(int row = 0; row <= priv->nrows; row++)
+		// draw VERTICAL_LINES
+		for(int snk_idx = 0; snk_idx <= patch->snk_n; snk_idx++)
 		{
-			const int col = priv->ncols;
+			const int src_idx = patch->src_n;
 
 			float p [6];
-			_rel_to_abs(priv, 0,   row, &p[0], &p[1]);
-			_rel_to_abs(priv, col, row, &p[2], &p[3]);
+			_rel_to_abs(patch, 0,       snk_idx, &p[0], &p[1]);
+			_rel_to_abs(patch, src_idx, snk_idx, &p[2], &p[3]);
 			p[4] = bounds.x + bounds.w; //1.f;
 			p[5] = p[3];
 
 			float q[6];
-			_rel_to_abs(priv, col, row - 0.2, &q[0], &q[1]);
-			_rel_to_abs(priv, col, row - 0.8, &q[2], &q[3]);
+			_rel_to_abs(patch, src_idx, snk_idx - 0.2, &q[0], &q[1]);
+			_rel_to_abs(patch, src_idx, snk_idx - 0.8, &q[2], &q[3]);
 			q[4] = q[2];
 			q[5] = q[1];
 
-			if(row > 0)
+			if(snk_idx > 0)
 			{
-				const int r = row - 1;
-				const bool active = (ROW == r)
-					|| ( (COL != -1) && (ROW == -1) && patch->connections[COL][r].state );
+				const int r = snk_idx - 1;
+				const bool active = (snk_ptr == r)
+					|| ( (src_ptr != -1) && (snk_ptr == -1) && patch->connections[src_ptr][r].state );
 
-				nk_patcher_port_t *sink_port = &patch->sinks[r];
+				nk_patcher_port_t *snk_port = &patch->snks[r];
 				struct nk_rect label = nk_rect(xl, yl, p[4]-xl, p[3]-yl);
-				const char *name = sink_port->label;
+				const char *name = snk_port->label;
 				const size_t len = nk_strlen(name);
 				const struct nk_text text = {
 					.padding.x = 2,
 					.padding.y = 0,
 					.background = style->window.background,
-					.text = active ? sink_port->color : style->text.color
+					.text = active ? snk_port->color : style->text.color
 				};
 
 				if(active)
 					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
-				nk_fill_polygon(canvas, q, 3, sink_port->color);
+				nk_fill_polygon(canvas, q, 3, snk_port->color);
 				nk_widget_text(canvas, label, name, len, &text,
 					NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
 			}
@@ -801,17 +732,15 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			yl = p[3];
 		}
 
-		// HOVER
-		if( (COL != -1) && (ROW != -1) )
+		// draw HOVER
+		if( (src_ptr != -1) && (snk_ptr != -1) )
 		{
-			const int col = COL;
-			const int row = ROW;
 			float p [8];
 
-			_rel_to_abs(priv, col+0, row+0, &p[0], &p[1]);
-			_rel_to_abs(priv, col+0, row+1, &p[2], &p[3]);
-			_rel_to_abs(priv, col+1, row+1, &p[4], &p[5]);
-			_rel_to_abs(priv, col+1, row+0, &p[6], &p[7]);
+			_rel_to_abs(patch, src_ptr + 0, snk_ptr + 0, &p[0], &p[1]);
+			_rel_to_abs(patch, src_ptr + 0, snk_ptr + 1, &p[2], &p[3]);
+			_rel_to_abs(patch, src_ptr + 1, snk_ptr + 1, &p[4], &p[5]);
+			_rel_to_abs(patch, src_ptr + 1, snk_ptr + 0, &p[6], &p[7]);
 
 			nk_stroke_polygon(canvas, p, 4, 2.f, bright);
 		}
@@ -824,16 +753,16 @@ nk_patcher_fill(nk_patcher_t *patch, nk_patcher_fill_t fill, void *data)
 	if(!fill)
 		return;
 
-	for(int source_idx=0; source_idx<patch->source_n; source_idx++)
+	for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 	{
-		nk_patcher_port_t *source_port = &patch->sources[source_idx];
+		nk_patcher_port_t *src_port = &patch->srcs[src_idx];
 
-		for(int sink_idx=0; sink_idx<patch->sink_n; sink_idx++)
+		for(int snk_idx=0; snk_idx<patch->snk_n; snk_idx++)
 		{
-			nk_patcher_port_t *sink_port = &patch->sinks[sink_idx];
-			nk_patcher_connection_t *conn = &patch->connections[source_idx][sink_idx];
+			nk_patcher_port_t *snk_port = &patch->snks[snk_idx];
+			nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_idx];
 
-			fill(data, source_port->id, sink_port->id, &conn->state, &conn->type);
+			fill(data, src_port->id, snk_port->id, &conn->state, &conn->type);
 		}
 	}
 }
