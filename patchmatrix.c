@@ -2159,6 +2159,44 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	const struct nk_vec2 group_padding = nk_panel_get_padding(&ctx->style, NK_PANEL_GROUP);
 	const float dy = 25;
 
+	// handle keyboard shortcuts
+	struct nk_input *in = &ctx->input;
+	if(nk_input_is_key_down(in, NK_KEY_CTRL))
+	{
+		if(in->keyboard.text_len == 1)
+		{
+			switch(in->keyboard.text[0])
+			{
+				case 'q':
+				{
+					atomic_store_explicit(&done, true, memory_order_relaxed);
+				} break;
+				case 'a':
+				{
+					app->type = TYPE_AUDIO;
+					app->needs_refresh = true;
+				} break;
+				case 'm':
+				{
+					app->type = TYPE_MIDI;
+					app->needs_refresh = true;
+				} break;
+#ifdef JACK_HAS_METADATA_API
+				case 'o':
+				{
+					app->type = TYPE_OSC;
+					app->needs_refresh = true;
+				} break;
+				case 'c':
+				{
+					app->type = TYPE_CV;
+					app->needs_refresh = true;
+				} break;
+#endif
+			}
+		}
+	}
+
 	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
 		const struct nk_panel *base = nk_window_get_panel(ctx);
@@ -2198,6 +2236,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				{
 					style->button.normal.data.color = app->type == i
 						? style->button.hover.data.color : button_normal;
+
 					if(nk_button_image_label(ctx, app->icons[i], labels[i], NK_TEXT_LEFT))
 					{
 						app->type = i;
