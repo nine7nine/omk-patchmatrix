@@ -38,7 +38,7 @@
 #include <varchunk.h>
 
 #define NK_PUGL_IMPLEMENTATION
-#include <nk_pugl.h>
+#include <nk_pugl/nk_pugl.h>
 
 #define NK_PATCHER_IMPLEMENTATION
 #include <nk_patcher.h>
