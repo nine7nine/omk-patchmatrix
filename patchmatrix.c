@@ -718,11 +718,16 @@ _db_client_add(app_t *app, const char *name)
 #ifdef JACK_HAS_METADATA_API
 	jack_uuid_t uuid;
 
-	const char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
+	char *uuid_str = jack_get_uuid_for_client_name(app->client, name);
 	if(uuid_str)
+	{
 		jack_uuid_parse(uuid_str, &uuid);
+		free(uuid_str);
+	}
 	else
+	{
 		jack_uuid_clear(&uuid);
+	}
 
 	if(!jack_uuid_empty(uuid))
 		jack_get_property(uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
@@ -2003,11 +2008,16 @@ _jack_init(app_t *app)
 
 #ifdef JACK_HAS_METADATA_API
 	const char *client_name = jack_get_client_name(app->client);
-	const char *uuid_str = jack_get_uuid_for_client_name(app->client, client_name);
+	char *uuid_str = jack_get_uuid_for_client_name(app->client, client_name);
 	if(uuid_str)
+	{
 		jack_uuid_parse(uuid_str, &app->uuid);
+		free(uuid_str);
+	}
 	else
+	{
 		jack_uuid_clear(&app->uuid);
+	}
 
 	if(!jack_uuid_empty(app->uuid))
 	{
@@ -2098,9 +2108,8 @@ _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 		client_id;
 		client_id = _db_client_find_all_itr(app))
 	{
-		char *client_name = NULL;
 		char *client_pretty_name = NULL;
-		_db_client_find_by_id(app, client_id, &client_name, &client_pretty_name);
+		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
 		if(_db_port_count(app, client_id, direction) == 0)
 			continue; // ignore
@@ -2109,27 +2118,37 @@ _expose_direction(struct nk_context *ctx, app_t *app, float dy, int direction)
 
 		const int client_sel = _db_client_get_selected(app, client_id);
 		const int client_flag = client_sel ? NK_MAXIMIZED : NK_MINIMIZED;
-		const int client_sel_new = nk_tree_push_id(ctx, NK_TREE_TAB, client_pretty_name, client_flag, client_id);
+		const int client_sel_new = nk_tree_push_id(ctx, NK_TREE_TAB,
+			client_pretty_name ? client_pretty_name : "Unknown", client_flag, client_id);
+
+		if(client_pretty_name)
+			free(client_pretty_name);
+
 		if(client_sel_new != client_sel)
 		{
 			_db_client_set_selected(app, client_id, client_sel_new);
 			app->needs_refresh = true;
 		}
+
 		if(client_sel_new)
 		{
 			for(int port_id = _db_port_find_all_itr(app, client_id, direction);
 				port_id;
 				port_id = _db_port_find_all_itr(app, client_id, direction))
 			{
-				char *port_name = NULL;
-				char *port_short_name = NULL;
 				char *port_pretty_name = NULL;
-				_db_port_find_by_id(app, port_id, &port_name, &port_short_name, &port_pretty_name, NULL);
+				_db_port_find_by_id(app, port_id, NULL, NULL, &port_pretty_name, NULL);
 
 				const int port_sel = _db_port_get_selected(app, port_id);
 				int type = TYPE_AUDIO;
 				_db_port_get_info(app, port_id, &type, NULL, NULL, NULL, NULL);
-				const int port_sel_new = nk_select_image_label(ctx, app->icons[type], port_pretty_name, NK_TEXT_LEFT, port_sel);
+
+				const int port_sel_new = nk_select_image_label(ctx, app->icons[type],
+					port_pretty_name ? port_pretty_name : "Unknow", NK_TEXT_LEFT, port_sel);
+
+				if(port_pretty_name)
+					free(port_pretty_name);
+
 				if(port_sel_new != port_sel)
 				{
 					_db_port_set_selected(app, port_id, port_sel_new);
@@ -2348,12 +2367,10 @@ _ui_init(app_t *app)
 static void
 _ui_deinit(app_t *app)
 {
-	nk_pugl_icon_unload(&app->win, app->icons[0]);
-	nk_pugl_icon_unload(&app->win, app->icons[1]);
-#ifdef JACK_HAS_METADATA_API
-	nk_pugl_icon_unload(&app->win, app->icons[2]);
-	nk_pugl_icon_unload(&app->win, app->icons[3]);
-#endif
+	for(int i=0; i< TYPE_MAX; i++)
+	{
+		nk_pugl_icon_unload(&app->win, app->icons[i]);
+	}
 
 	nk_pugl_hide(&app->win);
 	nk_pugl_shutdown(&app->win);
