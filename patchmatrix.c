@@ -2079,6 +2079,11 @@ _ui_change(void *data, uintptr_t source_id, uintptr_t sink_id, bool state)
 		else
 			jack_disconnect(app->client, source_name, sink_name);
 	}
+
+	if(source_name)
+		free(source_name);
+	if(sink_name)
+		free(sink_name);
 }
 
 static inline int
@@ -2447,10 +2452,15 @@ _ui_fill(void *data, uintptr_t source_id, uintptr_t sink_id,
 
 	const bool have_same_client = source_client_id == sink_client_id;
 
-	if(state)
+	if(state && source_name && sink_name)
 		*state = _db_connection_get(app, source_name, sink_name);
 	if(type)
 		*type = have_same_client ? NK_PATCHER_TYPE_FEEDBACK : NK_PATCHER_TYPE_DIRECT;
+
+	if(source_name)
+		free(source_name);
+	if(sink_name)
+		free(sink_name);
 }
 
 // update all grid and connections

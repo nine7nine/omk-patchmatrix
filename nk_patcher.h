@@ -133,13 +133,13 @@ nk_patcher_reinit(nk_patcher_t *patch, int src_n, int snk_n)
 	patch->src_n = src_n;
 	patch->snk_n = snk_n;
 
-	patch->srcs = calloc(patch->src_n, sizeof(nk_patcher_port_t));
-	patch->snks = calloc(patch->snk_n, sizeof(nk_patcher_port_t));
+	patch->srcs = patch->src_n ? calloc(patch->src_n, sizeof(nk_patcher_port_t)) : NULL;
+	patch->snks = patch->snk_n ? calloc(patch->snk_n, sizeof(nk_patcher_port_t)) : NULL;
 
-	patch->connections = calloc(patch->src_n, sizeof(nk_patcher_connection_t *));
+	patch->connections = patch->src_n ? calloc(patch->src_n, sizeof(nk_patcher_connection_t *)) : NULL;
 	for(int src_idx=0; src_idx<patch->src_n; src_idx++)
 	{
-		patch->connections[src_idx] = calloc(patch->snk_n, sizeof(nk_patcher_connection_t));
+		patch->connections[src_idx] = snk_n ? calloc(patch->snk_n, sizeof(nk_patcher_connection_t)) : NULL;
 	}
 }
 
@@ -437,7 +437,6 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 
 					for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 					{
-						nk_patcher_port_t *snk_port = &patch->snks[snk_idx];
 						nk_patcher_connection_t *conn = &patch->connections[src_ptr][snk_idx];
 
 						state = state || conn->state;
@@ -445,7 +444,6 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					for(int snk_idx = 0; snk_idx < patch->snk_n; snk_idx++)
 					{
 						nk_patcher_port_t *snk_port = &patch->snks[snk_idx];
-						nk_patcher_connection_t *conn = &patch->connections[src_ptr][snk_idx];
 
 						change(data, src_port->id, snk_port->id, !state);
 					}
@@ -457,7 +455,6 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 
 					for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 					{
-						nk_patcher_port_t *src_port = &patch->srcs[src_idx];
 						nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_ptr];
 
 						state = state || conn->state;
@@ -465,7 +462,6 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					for(int src_idx = 0; src_idx < patch->src_n; src_idx++)
 					{
 						nk_patcher_port_t *src_port = &patch->srcs[src_idx];
-						nk_patcher_connection_t *conn = &patch->connections[src_idx][snk_ptr];
 
 						change(data, src_port->id, snk_port->id, !state);
 					}
