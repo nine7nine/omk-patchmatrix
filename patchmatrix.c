@@ -21,6 +21,7 @@
 #include <math.h>
 #include <sys/stat.h> // mkdir
 #include <errno.h> // mkdir
+#include <signal.h>
 
 #include <sqlite3.h>
 
@@ -214,7 +215,6 @@ struct _app_t {
 	const char *session_id;
 
 	bool needs_refresh;
-	bool done;
 
 	nk_pugl_window_t win;
 	nk_patcher_t patch;
@@ -224,6 +224,7 @@ struct _app_t {
 	int sink_n;
 };
 
+static atomic_bool done = ATOMIC_VAR_INIT(false);
 static void _ui_signal(app_t *app);
 static void _ui_refresh(app_t *app);
 
@@ -1416,12 +1417,12 @@ mkdirp(const char* path, mode_t mode)
 	return ret;
 }
 
-static void
+static bool
 _jack_anim(app_t *app)
 {
 	bool refresh = false;
 	bool realize = false;
-	bool done = false;
+	bool quit = false;
 
 	// has cpu load changed considerably?
 	const float cpu_load = jack_cpu_load(app->client);
@@ -1674,7 +1675,7 @@ _jack_anim(app_t *app)
 			case EVENT_ON_INFO_SHUTDOWN:
 			{
 				app->client = NULL; // JACK has shut down, hasn't it?
-				done = true;
+				quit = true;
 
 				break;
 			}
@@ -1697,7 +1698,7 @@ _jack_anim(app_t *app)
 				switch(jev->type)
 				{
 					case JackSessionSaveAndQuit:
-						done = true;
+						quit = true;
 						break;
 					case JackSessionSave:
 						break;
@@ -1777,7 +1778,7 @@ _jack_anim(app_t *app)
 	if(realize)
 		nk_pugl_post_redisplay(&app->win);
 
-	app->done = done;
+	return quit;
 }
 
 static void
@@ -2384,9 +2385,8 @@ _ui_populate(app_t *app)
 static void
 _ui_signal(app_t *app)
 {
-	/* FIXME
-	nk_pugl_signal_expose(&app->win);
-	*/
+	if(!atomic_load_explicit(&done, memory_order_acquire))
+		nk_pugl_async_redisplay(&app->win);
 }
 
 static void
@@ -2508,10 +2508,20 @@ _ui_refresh(app_t *app)
 	nk_pugl_post_redisplay(&app->win);
 }
 
+static app_t *app_ptr = NULL; // need a global variable to capture signals :(
+
+static void
+_sig(int signum)
+{
+	_ui_signal(app_ptr);
+	atomic_store_explicit(&done, true, memory_order_release);
+}
+
 int
 main(int argc, char **argv)
 {
 	static app_t app;
+	app_ptr = &app; // set global pointer
 
 	app.server_name = NULL;
 	app.session_id = NULL;
@@ -2574,6 +2584,8 @@ main(int argc, char **argv)
 		}
 	}
 
+	signal(SIGINT, _sig);
+
 	if(!(app.from_jack = varchunk_new(0x10000, true)))
 		goto cleanup;
 
@@ -2589,15 +2601,15 @@ main(int argc, char **argv)
 	_ui_populate(&app);
 	app.needs_refresh = true;
 
-	while(!app.done)
+	while(!atomic_load_explicit(&done, memory_order_acquire))
 	{
-		//FIXME
-		//nk_pugl_wait_for_event(&app.win);
-		usleep(40000); //25FPS
+		nk_pugl_wait_for_event(&app.win);
 
-		_jack_anim(&app);
-		if(nk_pugl_process_events(&app.win))
-			app.done = true;
+		if(  _jack_anim(&app)
+			|| nk_pugl_process_events(&app.win) )
+		{
+			atomic_store_explicit(&done, true, memory_order_release);
+		}
 	}
 
 cleanup:
@@ -2606,6 +2618,8 @@ cleanup:
 	_jack_deinit(&app);
 	if(app.from_jack)
 		varchunk_free(app.from_jack);
+
+	fprintf(stderr, "bye from PatchMatrix\n");
 
 	return 0;
 }
