@@ -13,7 +13,8 @@
 
 * [JACK](http://jackaudio.org/) (JACK audio connection kit)
 * [SQLite3](https://www.sqlite.org/) (SQL database engine)
-* [Elementary](http://docs.enlightenment.org/auto/elementary/) (EFL UI toolkit)
+* [pugl](http://drobilla.net/software/pugl) (Portable API for OpenGL GUIs)
+* [nuklear](https://github.com/vurtun/nuklear) (Immediate-mode GUI)
 
 ### Build / install
 
