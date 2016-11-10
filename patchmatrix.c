@@ -158,7 +158,6 @@ struct _app_t {
 	int32_t buffer_size;
 	int32_t sample_rate;
 	int32_t xruns;
-	float cpu_load;
 
 	// JACK
 	jack_client_t *client;
@@ -1424,12 +1423,6 @@ _jack_anim(app_t *app)
 	bool realize = false;
 	bool quit = false;
 
-	// has cpu load changed considerably?
-	const float cpu_load = jack_cpu_load(app->client);
-	if(fabs(cpu_load - app->cpu_load) >= 0.01)
-		nk_pugl_post_redisplay(&app->win);
-	app->cpu_load = cpu_load;
-
 	const event_t *ev;
 	size_t len;
 	while((ev = varchunk_read_request(app->from_jack, &len)))
@@ -1720,7 +1713,7 @@ _jack_anim(app_t *app)
 			}
 			case EVENT_BUFFER_SIZE:
 			{
-				app->buffer_size = ev->buffer_size.nframes;
+				app->buffer_size = log2(ev->buffer_size.nframes);
 
 				realize = true;
 				break;
@@ -2024,7 +2017,7 @@ _jack_init(app_t *app)
 #endif
 
 	app->sample_rate = jack_get_sample_rate(app->client);
-	app->buffer_size = jack_get_buffer_size(app->client);
+	app->buffer_size = log2(jack_get_buffer_size(app->client));
 	app->xruns = 0;
 	app->freewheel = false;
 	app->realtime = jack_is_realtime(app->client);
@@ -2235,27 +2228,37 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		}
 		nk_layout_row_end(ctx);
 
-		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 7);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy-5, 6);
 		{
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "SampleRate: %"PRIi32, app->sample_rate);
+			const int32_t buffer_size = nk_propertyi(ctx, "BufferSize: 2^", 0, app->buffer_size, 14, 1, 1);
+			if(buffer_size != app->buffer_size)
+			{
+				jack_set_buffer_size (app->client, exp2(buffer_size));
+			}
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "BufferSize: %"PRIi32, app->buffer_size);
+			nk_labelf(ctx, NK_TEXT_CENTERED, "SampleRate: %"PRIi32, app->sample_rate);
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "FreeWheel: %s", app->freewheel ? "true" : "false");
+			if(nk_button_label(ctx,
+				app->freewheel ? "FreeWheel: true" : "FreeWheel: false"))
+			{
+				jack_set_freewheel(app->client, !app->freewheel);
+			}
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "RealTime: %s", app->realtime? "true" : "false");
+			nk_labelf(ctx, NK_TEXT_CENTERED, "RealTime: %s", app->realtime? "true" : "false");
 
 			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "CPULoad: %4.1f%%", app->cpu_load);
+			char tmp [32];
+			snprintf(tmp, 32, "XRuns: %"PRIi32, app->xruns);
+			if(nk_button_label(ctx, tmp))
+			{
+				app->xruns = 0;
+			}
 
-			nk_layout_row_push(ctx, 0.125);
-			nk_labelf(ctx, NK_TEXT_LEFT, "XRuns: %"PRIi32, app->xruns);
-
-			nk_layout_row_push(ctx, 0.25);
+			nk_layout_row_push(ctx, 0.375);
 			nk_label(ctx, "PatchMatrix: "PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
 		}
 		nk_layout_row_end(ctx);
