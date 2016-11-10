@@ -13,11 +13,16 @@ include_directories(${PROJECT_SOURCE_DIR}/jackey)
 include_directories(${PROJECT_SOURCE_DIR}/varchunk)
 include_directories(${PROJECT_SOURCE_DIR}/pugl)
 
+if(NOT DEFINED PLUGIN_DEST)
+	set(PLUGIN_DEST "")
+endif()
+
 # paths
-set(PATCHMATRIX_BIN_DIR "bin")
-set(PATCHMATRIX_ICON_DIR "share/icons/hicolor/256x256/apps")
-set(PATCHMATRIX_DESKTOP_DIR "share/applications")
-set(PATCHMATRIX_DATA_DIR "share/patchmatrix")
+set(PATCHMATRIX_BIN_DIR "${PLUGIN_DEST}bin")
+set(PATCHMATRIX_ICON_DIR "${PLUGIN_DEST}share/icons/hicolor/256x256/apps")
+set(PATCHMATRIX_DESKTOP_DIR "${PLUGIN_DEST}share/applications")
+set(PATCHMATRIX_DATA_DIR "${PLUGIN_DEST}share/patchmatrix")
+set(PATCHMATRIX_MAN_DIR "${PLUGIN_DEST}share/man/man1")
 add_definitions("-DPATCHMATRIX_DATA_DIR=\"${CMAKE_INSTALL_PREFIX}/${PATCHMATRIX_DATA_DIR}\"")
 
 # version
@@ -138,7 +143,7 @@ add_custom_command(
 	DEPENDS
 		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.1)
 add_custom_target(PATCHMATRIX_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.1.gz)
-install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.1.gz DESTINATION share/man/man1)
+install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.1.gz DESTINATION ${PATCHMATRIX_MAN_DIR})
 
 # icons
 install(FILES ${PROJECT_SOURCE_DIR}/pix/audio.png DESTINATION ${PATCHMATRIX_DATA_DIR})
