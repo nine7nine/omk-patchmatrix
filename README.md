@@ -4,7 +4,7 @@
 
 ### Build status
 
-[![Build Status](https://travis-ci.org/OpenMusicKontrollers/patchmatrix.svg?branch=master)](https://travis-ci.org/OpenMusicKontrollers/patchmatrix)
+[![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix/commits/master)
 
 ### Screenshot
 ![Screenshot](https://raw.githubusercontent.com/OpenMusicKontrollers/patchmatrix/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
