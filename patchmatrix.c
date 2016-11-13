@@ -286,11 +286,11 @@ _color_get(int n)
 }
 
 static const char * labels [TYPE_MAX] = {
-	[TYPE_AUDIO] = "AUDIO",
-	[TYPE_MIDI]  = "MIDI",
+	[TYPE_AUDIO] = "AUDIO (C-a)",
+	[TYPE_MIDI]  = "MIDI (C-m)",
 #ifdef JACK_HAS_METADATA_API
-	[TYPE_OSC]   ="OSC",
-	[TYPE_CV]    ="CV"
+	[TYPE_OSC]   ="OSC (C-o)",
+	[TYPE_CV]    ="CV (C-c)"
 #endif
 };
 
