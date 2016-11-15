@@ -221,6 +221,9 @@ struct _app_t {
 
 	int source_n;
 	int sink_n;
+
+	float scale;
+	float dy;
 };
 
 static atomic_bool done = ATOMIC_VAR_INIT(false);
@@ -2179,10 +2182,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		app->needs_refresh = false;
 	}
 
-	struct nk_style *style = &ctx->style;
-	const struct nk_vec2 group_padding = nk_panel_get_padding(&ctx->style, NK_PANEL_GROUP);
-	const float dy = 25;
-
 	// handle keyboard shortcuts
 	struct nk_input *in = &ctx->input;
 	if(nk_input_is_key_down(in, NK_KEY_CTRL))
@@ -2223,23 +2222,16 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
-		const struct nk_panel *base = nk_window_get_panel(ctx);
-		const struct nk_vec2 size = nk_window_get_size(ctx);
-		if( (size.x != wbounds.w) || (size.y != wbounds.h) )
-			nk_window_set_size(ctx, nk_vec2(wbounds.w, wbounds.h));
+		nk_window_set_bounds(ctx, wbounds);
 
-		float base_h;
-		{
-			struct nk_rect bounds = base->bounds;
-			bounds.x += group_padding.x;
-			bounds.y += group_padding.y;
-			bounds.w -= 2*group_padding.x;
-			bounds.h -= 2*group_padding.y;
+		struct nk_style *style = &ctx->style;
+		const struct nk_vec2 group_padding = nk_panel_get_padding(style, NK_PANEL_GROUP);
+		const struct nk_vec2 window_padding = nk_panel_get_padding(style, NK_PANEL_WINDOW);
+		const float dy = app->dy;
+		const float dy_body= nk_window_get_height(ctx)
+			- 3*window_padding.y - dy;
 
-			base_h = bounds.h - dy;
-		}
-
-		nk_layout_row_begin(ctx, NK_DYNAMIC, base_h, 3);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy_body, 3);
 		{
 			nk_layout_row_push(ctx, 0.25);
 			if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
@@ -2252,9 +2244,9 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			nk_layout_row_push(ctx, 0.5);
 			if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
 			{
-				const struct nk_panel *center = nk_window_get_panel(ctx);
-				nk_layout_row_dynamic(ctx, dy, TYPE_MAX);
+				struct nk_panel *center = nk_window_get_panel(ctx);
 
+				nk_layout_row_dynamic(ctx, dy, TYPE_MAX);
 				const struct nk_color button_normal = style->button.normal.data.color;
 				for(int i=0; i<TYPE_MAX; i++)
 				{
@@ -2271,9 +2263,9 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				struct nk_rect bounds = center->bounds;
 				bounds.x += group_padding.x;
-				bounds.y += group_padding.y;
-				bounds.w -= 4*group_padding.x;
-				bounds.h -= 4*group_padding.y + dy;
+				bounds.y += group_padding.y + dy;
+				bounds.w -= 2*group_padding.x;
+				bounds.h -= 2*group_padding.y + dy;
 
 				nk_layout_row_dynamic(ctx, bounds.h, 1);
 				nk_patcher_render(&app->patch, ctx, bounds, _ui_change, app);
@@ -2291,7 +2283,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		}
 		nk_layout_row_end(ctx);
 
-		nk_layout_row_begin(ctx, NK_DYNAMIC, dy-5, 6);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 6);
 		{
 			nk_layout_row_push(ctx, 0.125);
 			const int32_t buffer_size = nk_propertyi(ctx, "BufferSize: 2^", 0, app->buffer_size, 14, 1, 1);
@@ -2336,8 +2328,8 @@ _ui_init(app_t *app)
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
-	cfg->width = 1280;
-	cfg->height = 720;
+	cfg->width = 1280 * app->scale;
+	cfg->height = 720 * app->scale;
 	cfg->resizable = true;
 	cfg->ignore = false;
 	cfg->class = "PatchMatrix";
@@ -2346,8 +2338,9 @@ _ui_init(app_t *app)
 	cfg->data = app;
 	cfg->expose = _expose;
 	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
-	cfg->font.size = 13;
+	cfg->font.size = 13 * app->scale;
 
+	app->dy = 20.f * app->scale;
 	app->type = TYPE_AUDIO;
 	app->designation = DESIGNATION_NONE;
 
@@ -2594,6 +2587,8 @@ main(int argc, char **argv)
 
 	app.server_name = NULL;
 	app.session_id = NULL;
+	const char *scale = getenv("NK_SCALE");
+	app.scale = scale ? atof(scale) : 1.f;
 
 	fprintf(stderr,
 		"PatchMatrix "PATCHMATRIX_VERSION"\n"
