@@ -105,6 +105,12 @@ nk_patcher_src_label_set(nk_patcher_t *patch, int src_idx, const char *src_label
 static int
 nk_patcher_snk_label_set(nk_patcher_t *patch, int snk_idx, const char *snk_label);
 
+static int
+nk_patcher_src_group_set(nk_patcher_t *patch, int src_idx, const char *src_group);
+
+static int
+nk_patcher_snk_group_set(nk_patcher_t *patch, int snk_idx, const char *snk_group);
+
 static void
 nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bounds,
 	nk_patcher_change_t *change, void *data);
@@ -413,6 +419,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			{
 				patch->scale *= 1.0 + in->mouse.scroll_delta * 0.05;
 				patch->scale = NK_CLAMP(0.1, patch->scale, 0.8);
+				_precalc(patch, bounds);
 
 				in->mouse.scroll_delta = 0.f;
 			}
@@ -662,7 +669,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				nk_patcher_port_t *src_port = &patch->srcs[c];
 				struct nk_rect label = nk_rect(p[4], yl, xl-p[4], p[3]-yl);
 				const char *name = src_port->label;
-				const size_t len = nk_strlen(name);
+				const size_t len = name ? nk_strlen(name) : 0;
 				const struct nk_text text = {
 					.padding.x = 2,
 					.padding.y = 0,
@@ -673,8 +680,12 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				if(active)
 					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
 				nk_fill_polygon(canvas, q, 3, src_port->color);
+
+				const struct nk_rect old_clip = canvas->clip;
+				nk_push_scissor(canvas, label);
 				nk_widget_text(canvas, label, name, len, &text,
-					NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
+				nk_push_scissor(canvas, old_clip);
 			}
 
 			nk_stroke_polyline(canvas, p, 3, 2.f, style->window.border_color);
@@ -708,7 +719,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				nk_patcher_port_t *snk_port = &patch->snks[r];
 				struct nk_rect label = nk_rect(xl, yl, p[4]-xl, p[3]-yl);
 				const char *name = snk_port->label;
-				const size_t len = nk_strlen(name);
+				const size_t len = name ? nk_strlen(name) : 0;
 				const struct nk_text text = {
 					.padding.x = 2,
 					.padding.y = 0,
@@ -719,10 +730,14 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				if(active)
 					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
 				nk_fill_polygon(canvas, q, 3, snk_port->color);
+
+				const struct nk_rect old_clip = canvas->clip;
+				nk_push_scissor(canvas, label);
 				nk_widget_text(canvas, label, name, len, &text,
-					NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
+				nk_push_scissor(canvas, old_clip);
 			}
-	
+
 			nk_stroke_polyline(canvas, p, 3, 2.f, style->window.border_color);
 			xl = p[2];
 			yl = p[3];
