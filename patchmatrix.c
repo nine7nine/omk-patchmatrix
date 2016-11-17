@@ -1,4 +1,4 @@
- /*
+/*
  * Copyright (c) 2016 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
@@ -379,124 +379,126 @@ _db_init(app_t *app)
 
 	// Client
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, $4, 1)",
+		"INSERT INTO Clients (name, pretty_name, uuid, position, selected) VALUES ($1, $2, $3, $4, 1);",
 		-1, &app->query_client_add, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"DELETE FROM Clients WHERE id=$1",
+		"DELETE FROM Ports WHERE client_id=$1;"
+		"DELETE FROM Clients WHERE id=$1;",
 		-1, &app->query_client_del, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Clients WHERE name=$1",
+		"SELECT id FROM Clients WHERE name=$1;",
 		-1, &app->query_client_find_by_name, NULL);
 	(void)ret;
 #ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Clients WHERE uuid=$1",
+		"SELECT id FROM Clients WHERE uuid=$1;",
 		-1, &app->query_client_find_by_uuid, NULL);
 	(void)ret;
 #endif
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT name, pretty_name FROM Clients WHERE id=$1",
+		"SELECT name, pretty_name FROM Clients WHERE id=$1;",
 		-1, &app->query_client_find_by_id, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Clients",
+		"SELECT id FROM Clients;",
 		-1, &app->query_client_find_all_itr, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT selected FROM Clients WHERE id=$1",
+		"SELECT selected FROM Clients WHERE id=$1;",
 		-1, &app->query_client_get_selected, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Clients SET selected=$1 WHERE id=$2",
+		"UPDATE Clients SET selected=$1 WHERE id=$2;",
 		-1, &app->query_client_set_selected, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Clients SET pretty_name=$1 WHERE id=$2",
+		"UPDATE Clients SET pretty_name=$1 WHERE id=$2;",
 		-1, &app->query_client_set_pretty, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Clients SET position=$1 WHERE id=$2",
+		"UPDATE Clients SET position=$1 WHERE id=$2;",
 		-1, &app->query_client_set_position, NULL);
 	(void)ret;
 
 	// Port
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, position, designation, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)",
+		"INSERT INTO Ports (name, client_id, short_name, pretty_name, type_id, direction_id, uuid, terminal, physical, position, designation, selected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1);",
 		-1, &app->query_port_add, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"DELETE FROM Ports WHERE id=$1",
+		"DELETE FROM Connections WHERE source_id=$1 OR sink_id=$1;"
+		"DELETE FROM Ports WHERE id=$1;",
 		-1, &app->query_port_del, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE name=$1",
+		"SELECT id FROM Ports WHERE name=$1;",
 		-1, &app->query_port_find_by_name, NULL);
 	(void)ret;
 #ifdef JACK_HAS_METADATA_API
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE uuid=$1",
+		"SELECT id FROM Ports WHERE uuid=$1;",
 		-1, &app->query_port_find_by_uuid, NULL);
 	(void)ret;
 #endif
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT name, short_name, pretty_name, client_id FROM Ports WHERE id=$1",
+		"SELECT name, short_name, pretty_name, client_id FROM Ports WHERE id=$1;",
 		-1, &app->query_port_find_by_id, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2",
+		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2;",
 		-1, &app->query_port_find_all_itr, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET selected=$1 WHERE id=$2",
+		"UPDATE Ports SET selected=$1 WHERE id=$2;",
 		-1, &app->query_port_set_selected, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT selected FROM Ports WHERE id=$1",
+		"SELECT selected FROM Ports WHERE id=$1;",
 		-1, &app->query_port_get_selected, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT type_id, direction_id, client_id, terminal, physical FROM Ports WHERE id=$1",
+		"SELECT type_id, direction_id, client_id, terminal, physical FROM Ports WHERE id=$1;",
 		-1, &app->query_port_info, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET name=$1, short_name=$2 WHERE id=$3",
+		"UPDATE Ports SET name=$1, short_name=$2 WHERE id=$3;",
 		-1, &app->query_port_set_name, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET pretty_name=$1 WHERE id=$2",
+		"UPDATE Ports SET pretty_name=$1 WHERE id=$2;",
 		-1, &app->query_port_set_pretty, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET type_id=$1 WHERE id=$2",
+		"UPDATE Ports SET type_id=$1 WHERE id=$2;",
 		-1, &app->query_port_set_type, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET position=$1 WHERE id=$2",
+		"UPDATE Ports SET position=$1 WHERE id=$2;",
 		-1, &app->query_port_set_position, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"UPDATE Ports SET designation=$1 WHERE id=$2",
+		"UPDATE Ports SET designation=$1 WHERE id=$2;",
 		-1, &app->query_port_set_designation, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"INSERT INTO Connections (source_id, sink_id) VALUES ($1, $2)",
+		"INSERT INTO Connections (source_id, sink_id) VALUES ($1, $2);",
 		-1, &app->query_connection_add, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"DELETE FROM Connections WHERE source_id=$1 AND sink_id=$2",
+		"DELETE FROM Connections WHERE source_id=$1 AND sink_id=$2;",
 		-1, &app->query_connection_del, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Connections WHERE source_id=$1 AND sink_id=$2",
+		"SELECT id FROM Connections WHERE source_id=$1 AND sink_id=$2;",
 		-1, &app->query_connection_get, NULL);
 	(void)ret;
 
@@ -512,15 +514,15 @@ _db_init(app_t *app)
 			"AND Types.id=$1 "
 			"AND Directions.id=$2 "
 			"AND ($3=0 OR Designations.id=$3) " // NOTE designation=0 matches all designations
-			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.position, Ports.short_name",
+			"ORDER BY Ports.terminal=Ports.direction_id, Clients.position, Ports.position, Ports.short_name;",
 		-1, &app->query_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY position, type_id, short_name",
+		"SELECT id FROM Ports WHERE client_id=$1 AND direction_id=$2 ORDER BY position, type_id, short_name;",
 		-1, &app->query_client_port_list, NULL);
 	(void)ret;
 	ret = sqlite3_prepare_v2(app->db,
-		"SELECT COUNT(id) FROM Ports WHERE client_id=$1 AND direction_id=$2",
+		"SELECT COUNT(id) FROM Ports WHERE client_id=$1 AND direction_id=$2;",
 		-1, &app->query_client_port_count, NULL);
 	(void)ret;
 
