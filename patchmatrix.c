@@ -289,11 +289,11 @@ _color_get(int n)
 }
 
 static const char * labels [TYPE_MAX] = {
-	[TYPE_AUDIO] = "AUDIO (C-a)",
-	[TYPE_MIDI]  = "MIDI (C-m)",
+	[TYPE_AUDIO] = "AUDIO (C-A)",
+	[TYPE_MIDI]  = "MIDI (C-D)",
 #ifdef JACK_HAS_METADATA_API
-	[TYPE_OSC]   ="OSC (C-o)",
-	[TYPE_CV]    ="CV (C-c)"
+	[TYPE_OSC]   ="OSC (C-O)",
+	[TYPE_CV]    ="CV (C-T)"
 #endif
 };
 
@@ -2201,7 +2201,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					app->type = TYPE_AUDIO;
 					app->needs_refresh = true;
 				} break;
-				case 'm':
+				case 'd':
 				{
 					app->type = TYPE_MIDI;
 					app->needs_refresh = true;
@@ -2212,7 +2212,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					app->type = TYPE_OSC;
 					app->needs_refresh = true;
 				} break;
-				case 'c':
+				case 't':
 				{
 					app->type = TYPE_CV;
 					app->needs_refresh = true;
