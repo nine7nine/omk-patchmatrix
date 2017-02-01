@@ -173,6 +173,8 @@ struct _app_t {
 
 	sqlite3_stmt *query_client_add;
 	sqlite3_stmt *query_client_del;
+	sqlite3_stmt *query_client_connections_del;
+	sqlite3_stmt *query_client_ports_del;
 	sqlite3_stmt *query_client_find_by_name;
 #ifdef JACK_HAS_METADATA_API
 	sqlite3_stmt *query_client_find_by_uuid;
@@ -186,6 +188,7 @@ struct _app_t {
 
 	sqlite3_stmt *query_port_add;
 	sqlite3_stmt *query_port_del;
+	sqlite3_stmt *query_port_connections_del;
 	sqlite3_stmt *query_port_find_by_name;
 #ifdef JACK_HAS_METADATA_API
 	sqlite3_stmt *query_port_find_by_uuid;
@@ -285,15 +288,15 @@ static const struct nk_color colors [COLOR_N] = {
 static inline struct nk_color
 _color_get(int n)
 {
-	return colors[n % COLOR_N];
+	return colors[ (n-1) % COLOR_N];
 }
 
 static const char * labels [TYPE_MAX] = {
-	[TYPE_AUDIO] = "AUDIO (C-A)",
-	[TYPE_MIDI]  = "MIDI (C-D)",
+	[TYPE_AUDIO] = "AUDIO",
+	[TYPE_MIDI]  = "MIDI",
 #ifdef JACK_HAS_METADATA_API
-	[TYPE_OSC]   ="OSC (C-O)",
-	[TYPE_CV]    ="CV (C-T)"
+	[TYPE_OSC]   ="OSC",
+	[TYPE_CV]    ="CV"
 #endif
 };
 
@@ -334,8 +337,8 @@ _db_init(app_t *app)
 			""
 		"CREATE TABLE Connections ("
 			"id INTEGER PRIMARY KEY,"
-			"source_id INT,"
-			"sink_id INT);"
+			"source_id INTEGER,"
+			"sink_id INTEGER);"
 			""
 		"CREATE TABLE Types ("
 			"id INTEGER PRIMARY KEY,"
@@ -384,9 +387,18 @@ _db_init(app_t *app)
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"DELETE FROM Ports WHERE client_id=$1;"
 		"DELETE FROM Clients WHERE id=$1;",
 		-1, &app->query_client_del, NULL);
+	(void)ret;
+
+	ret = sqlite3_prepare_v2(app->db,
+		"DELETE FROM Connections WHERE source_id IN (SELECT id FROM Ports WHERE client_id=$1) OR sink_id IN (SELECT id FROM Ports WHERE client_id=$1);",
+		-1, &app->query_client_connections_del, NULL);
+	(void)ret;
+
+	ret = sqlite3_prepare_v2(app->db,
+		"DELETE FROM Ports WHERE client_id=$1;",
+		-1, &app->query_client_ports_del, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -432,9 +444,13 @@ _db_init(app_t *app)
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
-		"DELETE FROM Connections WHERE source_id=$1 OR sink_id=$1;"
 		"DELETE FROM Ports WHERE id=$1;",
 		-1, &app->query_port_del, NULL);
+	(void)ret;
+
+	ret = sqlite3_prepare_v2(app->db,
+		"DELETE FROM Connections WHERE source_id=$1 OR sink_id=$1;",
+		-1, &app->query_port_connections_del, NULL);
 	(void)ret;
 
 	ret = sqlite3_prepare_v2(app->db,
@@ -541,6 +557,10 @@ _db_deinit(app_t *app)
 	(void)ret;
 	ret = sqlite3_finalize(app->query_client_del);
 	(void)ret;
+	ret = sqlite3_finalize(app->query_client_connections_del);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_client_ports_del);
+	(void)ret;
 	ret = sqlite3_finalize(app->query_client_find_by_name);
 	(void)ret;
 #ifdef JACK_HAS_METADATA_API
@@ -563,6 +583,8 @@ _db_deinit(app_t *app)
 	ret = sqlite3_finalize(app->query_port_add);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_del);
+	(void)ret;
+	ret = sqlite3_finalize(app->query_port_connections_del);
 	(void)ret;
 	ret = sqlite3_finalize(app->query_port_find_by_name);
 	(void)ret;
@@ -771,6 +793,28 @@ _db_client_del(app_t *app, const char *name)
 	int id = _db_client_find_by_name(app, name);
 
 	sqlite3_stmt *stmt = app->query_client_del;
+
+	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+
+	stmt = app->query_client_connections_del;
+
+	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+
+	stmt = app->query_client_ports_del;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
 	(void)ret;
@@ -1313,6 +1357,17 @@ _db_port_del(app_t *app, const char *client_name, const char *name,
 	int id = _db_port_find_by_name(app, name);
 
 	sqlite3_stmt *stmt = app->query_port_del;
+
+	ret = sqlite3_bind_int(stmt, 1, id);
+	(void)ret;
+
+	ret = sqlite3_step(stmt);
+	(void)ret;
+
+	ret = sqlite3_reset(stmt);
+	(void)ret;
+
+	stmt = app->query_port_connections_del;
 
 	ret = sqlite3_bind_int(stmt, 1, id);
 	(void)ret;
@@ -2230,12 +2285,13 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		const struct nk_vec2 group_padding = nk_panel_get_padding(style, NK_PANEL_GROUP);
 		const struct nk_vec2 window_padding = nk_panel_get_padding(style, NK_PANEL_WINDOW);
 		const float dy = app->dy;
-		const float dy_body= nk_window_get_height(ctx)
-			- 3*window_padding.y - dy;
+		const float dy_body = (nk_window_get_height(ctx) - 4*window_padding.y - dy);
+		const float dy_body_upper = dy_body * 1 / 3;
+		const float dy_body_lower = dy_body * 2 / 3;
 
-		nk_layout_row_begin(ctx, NK_DYNAMIC, dy_body, 3);
+		nk_layout_row_begin(ctx, NK_DYNAMIC, dy_body_upper, 3);
 		{
-			nk_layout_row_push(ctx, 0.25);
+			nk_layout_row_push(ctx, 0.4);
 			if(nk_group_begin(ctx, "Sources", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
 				app->source_n = _expose_direction(ctx, app, dy, 0);
@@ -2243,12 +2299,10 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				nk_group_end(ctx);
 			}
 
-			nk_layout_row_push(ctx, 0.5);
-			if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
+			nk_layout_row_push(ctx, 0.2);
+			if(nk_group_begin(ctx, "Types", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
-				struct nk_panel *center = nk_window_get_panel(ctx);
-
-				nk_layout_row_dynamic(ctx, dy, TYPE_MAX);
+				nk_layout_row_dynamic(ctx, dy*2, 1);
 				const struct nk_color button_normal = style->button.normal.data.color;
 				for(int i=0; i<TYPE_MAX; i++)
 				{
@@ -2263,19 +2317,10 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				}
 				style->button.normal.data.color = button_normal;
 
-				struct nk_rect bounds = center->bounds;
-				bounds.x += group_padding.x;
-				bounds.y += group_padding.y + dy;
-				bounds.w -= 2*group_padding.x;
-				bounds.h -= 2*group_padding.y + dy;
-
-				nk_layout_row_dynamic(ctx, bounds.h, 1);
-				nk_patcher_render(&app->patch, ctx, bounds, _ui_change, app);
-
 				nk_group_end(ctx);
 			}
 
-			nk_layout_row_push(ctx, 0.25);
+			nk_layout_row_push(ctx, 0.4);
 			if(nk_group_begin(ctx, "Sinks", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
 			{
 				app->sink_n = _expose_direction(ctx, app, dy, 1);
@@ -2284,6 +2329,18 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 		}
 		nk_layout_row_end(ctx);
+
+		nk_layout_row_dynamic(ctx, dy_body_lower, 1);
+		if(nk_group_begin(ctx, "Connections", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
+		{
+			struct nk_panel *center = nk_window_get_panel(ctx);
+			struct nk_rect bounds = center->bounds;
+
+			nk_layout_row_dynamic(ctx, bounds.h, 1);
+			nk_patcher_render(&app->patch, ctx, bounds, _ui_change, app);
+
+			nk_group_end(ctx);
+		}
 
 		nk_layout_row_begin(ctx, NK_DYNAMIC, dy, 6);
 		{
@@ -2326,7 +2383,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 static int
 _ui_init(app_t *app)
 {
-	nk_patcher_init(&app->patch, 0.5);
+	nk_patcher_init(&app->patch, 0.2);
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
@@ -2526,7 +2583,9 @@ _ui_refresh(app_t *app)
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *port_pretty_name;
+		char *client_pretty_name;
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
+		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
 		nk_patcher_src_id_set(&app->patch, source, id);
 		nk_patcher_src_color_set(&app->patch, source, _color_get(client_id));
@@ -2535,6 +2594,11 @@ _ui_refresh(app_t *app)
 		{
 			nk_patcher_src_label_set(&app->patch, source, port_pretty_name);
 			free(port_pretty_name);
+		}
+		if(client_pretty_name)
+		{
+			nk_patcher_src_group_set(&app->patch, source, client_pretty_name);
+			free(client_pretty_name);
 		}
 	}
 	ret = sqlite3_reset(stmt);
@@ -2553,7 +2617,9 @@ _ui_refresh(app_t *app)
 		int id = sqlite3_column_int(stmt, 0);
 		int client_id = sqlite3_column_int(stmt, 1);
 		char *port_pretty_name;
+		char *client_pretty_name;
 		_db_port_find_by_id(app, id, NULL, NULL, &port_pretty_name, NULL);
+		_db_client_find_by_id(app, client_id, NULL, &client_pretty_name);
 
 		nk_patcher_snk_id_set(&app->patch, sink, id);
 		nk_patcher_snk_color_set(&app->patch, sink, _color_get(client_id));
@@ -2562,6 +2628,11 @@ _ui_refresh(app_t *app)
 		{
 			nk_patcher_snk_label_set(&app->patch, sink, port_pretty_name);
 			free(port_pretty_name);
+		}
+		if(client_pretty_name)
+		{
+			nk_patcher_snk_group_set(&app->patch, sink, client_pretty_name);
+			free(client_pretty_name);
 		}
 	}
 	ret = sqlite3_reset(stmt);

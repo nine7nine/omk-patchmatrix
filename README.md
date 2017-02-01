@@ -13,8 +13,7 @@
 
 * [JACK](http://jackaudio.org/) (JACK audio connection kit)
 * [SQLite3](https://www.sqlite.org/) (SQL database engine)
-* [pugl](http://drobilla.net/software/pugl) (Portable API for OpenGL GUIs)
-* [nuklear](https://github.com/vurtun/nuklear) (Immediate-mode GUI)
+* [LV2](http://lv2plug.in) (LV2 Plugin Specification)
 
 ### Build / install
 

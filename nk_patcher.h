@@ -38,6 +38,7 @@ struct _nk_patcher_port_t {
 	uintptr_t id;
 	struct nk_color color;
 	char *label;
+	char *group;
 };
 
 struct _nk_patcher_connection_t {
@@ -71,7 +72,8 @@ enum {
 	VERTICAL_EDGE		= (1 << 3),
 	HORIZONTAL_EDGE	= (1 << 4),
 	FEEDBACK				= (1 << 5),
-	INDIRECT				= (1 << 6)
+	INDIRECT				= (1 << 6),
+	BOXED						= (1 << 7)
 };
 
 static void
@@ -170,6 +172,8 @@ nk_patcher_deinit(nk_patcher_t *patch)
 
 			if(port->label)
 				free(port->label);
+			if(port->group)
+				free(port->group);
 		}
 		free(patch->srcs);
 	}
@@ -182,6 +186,8 @@ nk_patcher_deinit(nk_patcher_t *patch)
 
 			if(port->label)
 				free(port->label);
+			if(port->group)
+				free(port->group);
 		}
 		free(patch->snks);
 	}
@@ -307,6 +313,34 @@ nk_patcher_snk_label_set(nk_patcher_t *patch, int snk_idx, const char *snk_label
 	return 0;
 }
 
+static int
+nk_patcher_src_group_set(nk_patcher_t *patch, int src_idx, const char *src_group)
+{
+	if( (src_idx < 0) || (src_idx >= patch->src_n) )
+		return -1;
+
+	nk_patcher_port_t *port = &patch->srcs[src_idx];
+	if(port->group)
+		free(port->group);
+	port->group = strdup(src_group);
+
+	return 0;
+}
+
+static int
+nk_patcher_snk_group_set(nk_patcher_t *patch, int snk_idx, const char *snk_group)
+{
+	if( (snk_idx < 0) || (snk_idx >= patch->snk_n) )
+		return -1;
+
+	nk_patcher_port_t *port = &patch->snks[snk_idx];
+	if(port->group)
+		free(port->group);
+	port->group = strdup(snk_group);
+
+	return 0;
+}
+
 static inline void
 _rel_to_abs(nk_patcher_t *patch, float ax, float ay, float *_fx, float *_fy)
 {
@@ -418,7 +452,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 			if(in->mouse.scroll_delta)
 			{
 				patch->scale *= 1.0 + in->mouse.scroll_delta * 0.05;
-				patch->scale = NK_CLAMP(0.1, patch->scale, 0.8);
+				patch->scale = NK_CLAMP(0.05, patch->scale, 0.5);
 				_precalc(patch, bounds);
 
 				in->mouse.scroll_delta = 0.f;
@@ -510,7 +544,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					if( (snk_idx == snk_ptr) && (src_idx >  src_ptr) )
 						conn->enm |= HORIZONTAL;
 					if( (snk_idx == snk_ptr) && (src_idx == src_ptr) )
-						conn->enm |= HORIZONTAL_EDGE | VERTICAL_EDGE;
+						conn->enm |= HORIZONTAL_EDGE | VERTICAL_EDGE | BOXED;
 					if( (snk_idx >  snk_ptr) && (src_idx == src_ptr) )
 						conn->enm |= VERTICAL;
 				}
@@ -525,7 +559,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				{
 					thresh = snk_idx;
 
-					patch->connections[src_ptr][snk_idx].enm |= HORIZONTAL_EDGE;
+					patch->connections[src_ptr][snk_idx].enm |= HORIZONTAL_EDGE | BOXED;
 					for(int src_idx = src_ptr+1; src_idx < patch->src_n; src_idx++)
 						patch->connections[src_idx][snk_idx].enm |= HORIZONTAL;
 				}
@@ -543,7 +577,7 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 				{
 					thresh = src_idx;
 
-					patch->connections[src_idx][snk_ptr].enm |= VERTICAL_EDGE;
+					patch->connections[src_idx][snk_ptr].enm |= VERTICAL_EDGE | BOXED;
 					for(int snk_idx = snk_ptr+1; snk_idx < patch->snk_n; snk_idx++)
 						patch->connections[src_idx][snk_idx].enm |= VERTICAL;
 				}
@@ -639,6 +673,17 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 
 					nk_fill_polygon(canvas, p, 4, style->text.color);
 				}
+
+				// BOXED
+				if(conn->enm & BOXED)
+				{
+					_rel_to_abs(patch, src_idx + 0.1, snk_idx + 0.1, &p[0], &p[1]);
+					_rel_to_abs(patch, src_idx + 0.1, snk_idx + 0.9, &p[2], &p[3]);
+					_rel_to_abs(patch, src_idx + 0.9, snk_idx + 0.9, &p[4], &p[5]);
+					_rel_to_abs(patch, src_idx + 0.9, snk_idx + 0.1, &p[6], &p[7]);
+
+					nk_stroke_polygon(canvas, p, 4, 2.f, bright);
+				}
 			}
 		}
 
@@ -667,25 +712,46 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					|| ( (src_ptr == -1) && (snk_ptr != -1) && patch->connections[c][snk_ptr].state );
 
 				nk_patcher_port_t *src_port = &patch->srcs[c];
-				struct nk_rect label = nk_rect(p[4], yl, xl-p[4], p[3]-yl);
-				const char *name = src_port->label;
-				const size_t len = name ? nk_strlen(name) : 0;
-				const struct nk_text text = {
-					.padding.x = 2,
-					.padding.y = 0,
-					.background = style->window.background,
-					.text = active ? src_port->color : style->text.color
-				};
+				struct nk_rect field_bnd = nk_rect(p[4], yl, xl-p[4], p[3]-yl);
+				{ // field
+					if(active)
+						nk_fill_rect(canvas, field_bnd, 0.f, style->button.active.data.color);
+					nk_fill_polygon(canvas, q, 3, src_port->color);
+				}
+				{ // label
+					struct nk_rect label_bnd = nk_rect(field_bnd.x+field_bnd.w/2, field_bnd.y, field_bnd.w/2, field_bnd.h);
+					const char *label = src_port->label;
+					const size_t label_len = label ? nk_strlen(label) : 0;
+					const struct nk_text text = {
+						.padding.x = 2,
+						.padding.y = 0,
+						.background = style->window.background,
+						.text = style->text.color //src_port->color
+					};
 
-				if(active)
-					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
-				nk_fill_polygon(canvas, q, 3, src_port->color);
+					const struct nk_rect old_clip = canvas->clip;
+					nk_push_scissor(canvas, label_bnd);
+					nk_widget_text(canvas, label_bnd, label, label_len, &text,
+						NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					nk_push_scissor(canvas, old_clip);
+				}
+				{ // group
+					struct nk_rect group_bnd = nk_rect(field_bnd.x, field_bnd.y, field_bnd.w/2, field_bnd.h);
+					const char *group = src_port->group;
+					const size_t group_len = group ? nk_strlen(group) : 0;
+					const struct nk_text text = {
+						.padding.x = 2,
+						.padding.y = 0,
+						.background = style->window.background,
+						.text = src_port->color
+					};
 
-				const struct nk_rect old_clip = canvas->clip;
-				nk_push_scissor(canvas, label);
-				nk_widget_text(canvas, label, name, len, &text,
-					NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
-				nk_push_scissor(canvas, old_clip);
+					const struct nk_rect old_clip = canvas->clip;
+					nk_push_scissor(canvas, group_bnd);
+					nk_widget_text(canvas, group_bnd, group, group_len, &text,
+						NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					nk_push_scissor(canvas, old_clip);
+				}
 			}
 
 			nk_stroke_polyline(canvas, p, 3, 2.f, style->window.border_color);
@@ -717,43 +783,51 @@ nk_patcher_render(nk_patcher_t *patch, struct nk_context *ctx, struct nk_rect bo
 					|| ( (src_ptr != -1) && (snk_ptr == -1) && patch->connections[src_ptr][r].state );
 
 				nk_patcher_port_t *snk_port = &patch->snks[r];
-				struct nk_rect label = nk_rect(xl, yl, p[4]-xl, p[3]-yl);
-				const char *name = snk_port->label;
-				const size_t len = name ? nk_strlen(name) : 0;
-				const struct nk_text text = {
-					.padding.x = 2,
-					.padding.y = 0,
-					.background = style->window.background,
-					.text = active ? snk_port->color : style->text.color
-				};
+				struct nk_rect field_bnd= nk_rect(xl, yl, p[4]-xl, p[3]-yl);
+				{ // field
+					if(active)
+						nk_fill_rect(canvas, field_bnd, 0.f, style->button.active.data.color);
+					nk_fill_polygon(canvas, q, 3, snk_port->color);
+				}
+				{ // label
+					struct nk_rect label_bnd = nk_rect(field_bnd.x, field_bnd.y, field_bnd.w/2, field_bnd.h);
+					const char *label = snk_port->label;
+					const size_t label_len = label ? nk_strlen(label) : 0;
+					const struct nk_text text = {
+						.padding.x = 2,
+						.padding.y = 0,
+						.background = style->window.background,
+						.text = style->text.color //snk_port->color
+					};
 
-				if(active)
-					nk_fill_rect(canvas, label, 0.f, style->button.active.data.color);
-				nk_fill_polygon(canvas, q, 3, snk_port->color);
+					const struct nk_rect old_clip = canvas->clip;
+					nk_push_scissor(canvas, label_bnd);
+					nk_widget_text(canvas, label_bnd, label, label_len, &text,
+						NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					nk_push_scissor(canvas, old_clip);
+				}
+				{ // group
+					struct nk_rect group_bnd = nk_rect(field_bnd.x+field_bnd.w/2, field_bnd.y, field_bnd.w/2, field_bnd.h);
+					const char *group = snk_port->group;
+					const size_t group_len = group ? nk_strlen(group) : 0;
+					const struct nk_text text = {
+						.padding.x = 2,
+						.padding.y = 0,
+						.background = style->window.background,
+						.text = snk_port->color
+					};
 
-				const struct nk_rect old_clip = canvas->clip;
-				nk_push_scissor(canvas, label);
-				nk_widget_text(canvas, label, name, len, &text,
-					NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_MIDDLE, style->font);
-				nk_push_scissor(canvas, old_clip);
+					const struct nk_rect old_clip = canvas->clip;
+					nk_push_scissor(canvas, group_bnd);
+					nk_widget_text(canvas, group_bnd, group, group_len, &text,
+						NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE, style->font);
+					nk_push_scissor(canvas, old_clip);
+				}
 			}
 
 			nk_stroke_polyline(canvas, p, 3, 2.f, style->window.border_color);
 			xl = p[2];
 			yl = p[3];
-		}
-
-		// draw HOVER
-		if( (src_ptr != -1) && (snk_ptr != -1) )
-		{
-			float p [8];
-
-			_rel_to_abs(patch, src_ptr + 0, snk_ptr + 0, &p[0], &p[1]);
-			_rel_to_abs(patch, src_ptr + 0, snk_ptr + 1, &p[2], &p[3]);
-			_rel_to_abs(patch, src_ptr + 1, snk_ptr + 1, &p[4], &p[5]);
-			_rel_to_abs(patch, src_ptr + 1, snk_ptr + 0, &p[6], &p[7]);
-
-			nk_stroke_polygon(canvas, p, 4, 2.f, bright);
 		}
 	}
 }
