@@ -300,6 +300,22 @@ static const char * labels [TYPE_MAX] = {
 #endif
 };
 
+static const char * tooltips [TYPE_MAX] = {
+	[TYPE_AUDIO] = "Ctrl-A",
+	[TYPE_MIDI]  = "Ctrl-D",
+#ifdef JACK_HAS_METADATA_API
+	[TYPE_OSC]   ="Ctrl-O",
+	[TYPE_CV]    ="Ctrl-T"
+#endif
+};
+
+static bool
+_tooltip_visible(struct nk_context *ctx)
+{
+	return nk_widget_has_mouse_click_down(ctx, NK_BUTTON_RIGHT, nk_true)
+		|| (nk_widget_is_hovered(ctx) && nk_input_is_key_down(&ctx->input, NK_KEY_CTRL));
+}
+
 static int
 _db_init(app_t *app)
 {
@@ -2309,6 +2325,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					style->button.normal.data.color = app->type == i
 						? style->button.hover.data.color : button_normal;
 
+					if(_tooltip_visible(ctx))
+						nk_tooltip(ctx, tooltips[i]);
 					if(nk_button_image_label(ctx, app->icons[i], labels[i], NK_TEXT_LEFT))
 					{
 						app->type = i;
@@ -2355,6 +2373,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			nk_labelf(ctx, NK_TEXT_CENTERED, "SampleRate: %"PRIi32, app->sample_rate);
 
 			nk_layout_row_push(ctx, 0.125);
+			if(_tooltip_visible(ctx))
+				nk_tooltip(ctx, "toggle freewheling mode");
 			if(nk_button_label(ctx,
 				app->freewheel ? "FreeWheel: true" : "FreeWheel: false"))
 			{
@@ -2367,6 +2387,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			nk_layout_row_push(ctx, 0.125);
 			char tmp [32];
 			snprintf(tmp, 32, "XRuns: %"PRIi32, app->xruns);
+			if(_tooltip_visible(ctx))
+				nk_tooltip(ctx, "clear XRun counter");
 			if(nk_button_label(ctx, tmp))
 			{
 				app->xruns = 0;
