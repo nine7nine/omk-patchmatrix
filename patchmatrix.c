@@ -2257,41 +2257,32 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 	// handle keyboard shortcuts
 	struct nk_input *in = &ctx->input;
-	if(nk_input_is_key_down(in, NK_KEY_CTRL))
+	if(nk_pugl_is_shortcut_pressed(in, 'q', true))
 	{
-		if(in->keyboard.text_len == 1)
-		{
-			switch(in->keyboard.text[0])
-			{
-				case 'q':
-				{
-					atomic_store_explicit(&done, true, memory_order_relaxed);
-				} break;
-				case 'a':
-				{
-					app->type = TYPE_AUDIO;
-					app->needs_refresh = true;
-				} break;
-				case 'd':
-				{
-					app->type = TYPE_MIDI;
-					app->needs_refresh = true;
-				} break;
-#ifdef JACK_HAS_METADATA_API
-				case 'o':
-				{
-					app->type = TYPE_OSC;
-					app->needs_refresh = true;
-				} break;
-				case 't':
-				{
-					app->type = TYPE_CV;
-					app->needs_refresh = true;
-				} break;
-#endif
-			}
-		}
+		atomic_store_explicit(&done, true, memory_order_relaxed);
 	}
+	else if(nk_pugl_is_shortcut_pressed(in, 'a', true))
+	{
+		app->type = TYPE_AUDIO;
+		app->needs_refresh = true;
+	}
+	else if(nk_pugl_is_shortcut_pressed(in, 'd', true))
+	{
+		app->type = TYPE_MIDI;
+		app->needs_refresh = true;
+	}
+#ifdef JACK_HAS_METADATA_API
+	else if(nk_pugl_is_shortcut_pressed(in, 'o', true))
+	{
+		app->type = TYPE_OSC;
+		app->needs_refresh = true;
+	}
+	else if(nk_pugl_is_shortcut_pressed(in, 't', true))
+	{
+		app->type = TYPE_CV;
+		app->needs_refresh = true;
+	}
+#endif
 
 	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
