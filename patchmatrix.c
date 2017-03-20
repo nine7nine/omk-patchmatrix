@@ -34,6 +34,7 @@
 #endif
 
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
+#include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
 
 #include <varchunk.h>
 
@@ -225,7 +226,6 @@ struct _app_t {
 	int source_n;
 	int sink_n;
 
-	float scale;
 	float dy;
 };
 
@@ -2249,6 +2249,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 {
 	app_t *app = data;
 
+	app->dy = 20.f * nk_pugl_get_scale(&app->win);
+
 	if(app->needs_refresh)
 	{
 		_ui_refresh(app);
@@ -2400,8 +2402,8 @@ _ui_init(app_t *app)
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
-	cfg->width = 1280 * app->scale;
-	cfg->height = 720 * app->scale;
+	cfg->width = 1280 ;
+	cfg->height = 720;
 	cfg->resizable = true;
 	cfg->ignore = false;
 	cfg->class = "PatchMatrix";
@@ -2410,9 +2412,8 @@ _ui_init(app_t *app)
 	cfg->data = app;
 	cfg->expose = _expose;
 	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
-	cfg->font.size = 13 * app->scale;
+	cfg->font.size = 13;
 
-	app->dy = 20.f * app->scale;
 	app->type = TYPE_AUDIO;
 	app->designation = DESIGNATION_NONE;
 
@@ -2673,8 +2674,6 @@ main(int argc, char **argv)
 
 	app.server_name = NULL;
 	app.session_id = NULL;
-	const char *scale = getenv("NK_SCALE");
-	app.scale = scale ? atof(scale) : 1.f;
 
 	fprintf(stderr,
 		"PatchMatrix "PATCHMATRIX_VERSION"\n"
