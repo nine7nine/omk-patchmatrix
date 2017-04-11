@@ -59,11 +59,6 @@ if(${JACK_HAS_PORT_RENAME_CALLBACK})
 	add_definitions("-DJACK_HAS_PORT_RENAME_CALLBACK")
 endif()
 
-# sqlite3
-pkg_search_module(SQLITE3 REQUIRED sqlite3>=3.0)
-include_directories(${SQLITE3_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${SQLITE3_LDFLAGS})
-
 set(LIBS ${LIBS} m)
 add_definitions("-DPUGL_HAVE_GL")
 
