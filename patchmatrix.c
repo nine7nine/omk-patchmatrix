@@ -164,6 +164,8 @@ struct _client_t {
 	int moving;
 
 	mixer_t *mixer;
+	port_type_t sink_type;
+	port_type_t source_type;
 };
 
 struct _event_t {
@@ -391,13 +393,6 @@ _color_get(int n)
 	return colors[ (n-1) % COLOR_N];
 }
 
-static bool
-_tooltip_visible(struct nk_context *ctx)
-{
-	return nk_widget_has_mouse_click_down(ctx, NK_BUTTON_RIGHT, nk_true)
-		|| (nk_widget_is_hovered(ctx) && nk_input_is_key_down(&ctx->input, NK_KEY_CTRL));
-}
-
 static int
 mkdirp(const char* path, mode_t mode)
 {
@@ -531,7 +526,7 @@ _client_conn_find(app_t *app, client_t *source_client, client_t *sink_client)
 			return client_conn;
 		}
 	}
-	
+
 	return NULL;
 }
 
@@ -618,6 +613,11 @@ _port_add(client_t *client, jack_uuid_t port_uuid,
 			_hash_add(&client->sinks, port);
 		else
 			_hash_add(&client->sources, port);
+
+		if(is_input)
+			client->sink_type |= port->type;
+		else
+			client->source_type |= port->type;
 	}
 
 	return port;
@@ -706,7 +706,7 @@ _port_remove(app_t *app, client_t *client, port_t *port)
 					if(  (port_conn->source_port != port)
 						&& (port_conn->sink_port != port) )
 					{
-						_hash_add(&port_conns, port_conn); 
+						_hash_add(&port_conns, port_conn);
 					}
 				}
 
@@ -740,7 +740,7 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		client->name = strdup(client_name);
 		client->pretty_name = NULL; //FIXME
 		client->flags = client_flags;
-	
+
 		const float w = 200;
 		const float h = 25;
 		app->nxt.x += w/2;
@@ -822,7 +822,7 @@ _client_remove(app_t *app, client_t *client)
 	}
 }
 
-static int 
+static int
 _mixer_process(jack_nframes_t nframes, void *arg)
 {
 	mixer_t *mixer = arg;
@@ -928,7 +928,6 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 		jack_activate(mixer->client);
 		_hash_add(&app->mixers, mixer);
 
-	
 		const char *client_name = jack_get_client_name(mixer->client);
 		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
 		if(client)
@@ -1085,6 +1084,8 @@ _jack_anim(app_t *app)
 					client_t *client_source = _port_client_find(app, name_source);
 					client_t *client_sink = _port_client_find(app, name_sink);
 
+					const char *port_type = jack_port_type(jport_source);
+
 					if(port_source && port_sink && client_source && client_sink)
 					{
 						client_conn_t *client_conn = _client_conn_find(app, client_source, client_sink);
@@ -1092,6 +1093,12 @@ _jack_anim(app_t *app)
 							client_conn = _client_conn_add(app, client_source, client_sink);
 						if(client_conn)
 						{
+							if(!strcmp(port_type, JACK_DEFAULT_AUDIO_TYPE))
+								client_conn->type |= TYPE_AUDIO;
+							else if(!strcmp(port_type, JACK_DEFAULT_MIDI_TYPE))
+								client_conn->type |= TYPE_MIDI;
+							//FIXME more types
+
 							if(ev->port_connect.state)
 								_port_conn_add(client_conn, port_source, port_sink);
 							else
@@ -1711,7 +1718,6 @@ _jack_populate(app_t *app)
 			port_t *src_port = *src_itr;
 			const char *src_name = src_port->name;
 
-
 			jack_port_t *src_jport = jack_port_by_name(app->client, src_name);
 			if(!src_jport)
 				continue;
@@ -1732,12 +1738,11 @@ _jack_populate(app_t *app)
 						client_conn_t *client_conn = _client_conn_find(app, src_client, snk_client);
 
 						if(!client_conn)
-						{
 							client_conn = _client_conn_add(app, src_client, snk_client);
-						}
-
 						if(client_conn)
 						{
+							client_conn->type |= src_port->type | snk_port->type;
+
 							_port_conn_add(client_conn, src_port, snk_port);
 						}
 					}
@@ -1863,7 +1868,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	int hovers = 0;
 	if(client->moving)
 	{
-		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
+		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
 		{
 			client->moving = false;
 		}
@@ -1897,25 +1902,25 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	{
 		hovers = 1;
 
-		if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) )
+		if(nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
 		{
 			client->moving = 1;
 		}
 	}
 	(void)hovers; //FIXME
-	nk_layout_space_push(ctx, bounds);
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 	if(client->mixer)
 		nk_button_label(ctx, "MIXER"); //FIXME draw mixer
 	else
 		nk_button_label(ctx, client->name);
 
 	const float cw = 4.f;
-	const float cy = 4.f - scrolling.y + client->pos.y;
+	const float cy = client->pos.y - scrolling.y;
 
 	/* output connector */
-	if(_hash_size(&client->sources) > 0)
+	if(client->source_type & app->type)
 	{
-		const float cx = 4.f + client->pos.x - scrolling.x + client_w/2;
+		const float cx = client->pos.x - scrolling.x + client_w/2;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
@@ -1949,9 +1954,9 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	}
 
 	/* input connector */
-	if(_hash_size(&client->sinks) > 0)
+	if(client->sink_type & app->type)
 	{
-		const float cx = 4.f + client->pos.x - scrolling.x - client_w/2;
+		const float cx = client->pos.x - scrolling.x - client_w/2;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
@@ -1975,8 +1980,10 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 			{
 				client_conn_t *client_conn = _client_conn_find(app, src, client);
 				if(!client_conn) // does not yet exist
-				{
 					client_conn = _client_conn_add(app, src, client);
+				if(client_conn)
+				{
+					client_conn->type |= app->type;
 				}
 			}
 		}
@@ -1987,8 +1994,11 @@ static void
 node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	client_conn_t *client_conn, port_type_t port_type)
 {
-	if( (client_conn->type != TYPE_NONE) && !(client_conn->type & port_type) )
+	if(  (client_conn->type != app->type)
+		&& !(client_conn->type & port_type) )
+	{
 		return;
+	}
 
 	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_input *in = &ctx->input;
@@ -2035,7 +2045,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	int hovers = 0;
 	if(client_conn->moving)
 	{
-		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
+		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
 		{
 			client_conn->moving = false;
 		}
@@ -2051,12 +2061,12 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	{
 		hovers = 1;
 
-		if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) )
+		if(nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
 		{
 			client_conn->moving = 1;
 		}
 	}
-	nk_layout_space_push(ctx, bounds);
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
 	struct nk_rect body;
 	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
@@ -2115,7 +2125,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 				if(  nk_input_is_mouse_hovering_rect(in, tile)
-					&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
+					&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) )
 				{
 					if(port_conn)
 						jack_disconnect(app->client, source_port->name, sink_port->name);
@@ -2131,20 +2141,18 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	}
 
 	const float cs = 4.f;
-	const float cx = 4.f + bounds.x + pw/2;
-	//const float cxl = bounds.x + cs;
-	const float cxr = bounds.x + cs + pw;
-	const float cy = 4.f + bounds.y + ph/2;
-	const float cyl = bounds.y + cs;
-	//const float cyr = bounds.y + cs + ph;
+	const float cx = client_conn->pos.x - scrolling.x;
+	const float cxr = cx + pw/2;
+	const float cy = client_conn->pos.y - scrolling.y;
+	const float cyl = cy - ph/2;
 	const struct nk_color col = hovers || client_conn->moving
 		? nk_rgb(200, 200, 200)
 		: nk_rgb(100, 100, 100);
 
-	const float l0x = 4.f + src->pos.x - scrolling.x + client_w/2;
-	const float l0y = 4.f + src->pos.y - scrolling.y;
-	const float l1x = 4.f + snk->pos.x - scrolling.x - client_w/2;
-	const float l1y = 4.f + snk->pos.y - scrolling.y;
+	const float l0x = src->pos.x - scrolling.x + client_w/2;
+	const float l0y = src->pos.y - scrolling.y;
+	const float l1x = snk->pos.x - scrolling.x - client_w/2;
+	const float l1y = snk->pos.y - scrolling.y;
 
 	const float bend = 50.f;
 	nk_stroke_curve(canvas,
@@ -2189,11 +2197,9 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 		const struct nk_rect total_space = nk_window_get_content_region(ctx);
 
-#if 0
 		nk_menubar_begin(ctx);
 		{
 			nk_layout_row_dynamic(ctx, dy, 2);
-
 			if(nk_button_label(ctx, "AUDIO"))
 			{
 				app->type = TYPE_AUDIO;
@@ -2203,9 +2209,26 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				app->type = TYPE_MIDI;
 			}
 			// FIXME more
+
+			nk_layout_row_dynamic(ctx, dy, 4);
+			if(nk_button_label(ctx, "Audio Mixer 1x1"))
+			{
+				_mixer_add(app, 1, 1);
+			}
+			if(nk_button_label(ctx, "Audio Mixer 2x2"))
+			{
+				_mixer_add(app, 2, 2);
+			}
+			if(nk_button_label(ctx, "Audio Mixer 4x4"))
+			{
+				_mixer_add(app, 4, 4);
+			}
+			if(nk_button_label(ctx, "Audio Mixer 8x8"))
+			{
+				_mixer_add(app, 8, 8);
+			}
 		}
 		nk_menubar_end(ctx);
-#endif
 
 		const struct nk_vec2 scrolling = nodedit->scrolling;
 
@@ -2258,21 +2281,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				client_conn_t *client_conn = *client_conn_itr;
 
 				node_editor_client_conn(ctx, app, client_conn, app->type);
-			}
-
-			/* contextual menu */
-			if(nk_contextual_begin(ctx, 0, nk_vec2(200, 220), nk_window_get_bounds(ctx)))
-			{
-				nk_layout_row_dynamic(ctx, 25, 1);
-				if(nk_contextual_item_label(ctx, "Audio Mixer 1x1", NK_TEXT_LEFT))
-					_mixer_add(app, 1, 1);
-				if(nk_contextual_item_label(ctx, "Audio Mixer 2x2", NK_TEXT_LEFT))
-					_mixer_add(app, 2, 2);
-				if(nk_contextual_item_label(ctx, "Audio Mixer 4x4", NK_TEXT_LEFT))
-					_mixer_add(app, 4, 4);
-				if(nk_contextual_item_label(ctx, "Audio Mixer 8x8", NK_TEXT_LEFT))
-					_mixer_add(app, 8, 8);
-				nk_contextual_end(ctx);
 			}
 		}
 		nk_layout_space_end(ctx);
@@ -2433,6 +2441,9 @@ main(int argc, char **argv)
 {
 	static app_t app;
 	app_ptr = &app; // set global pointer
+
+	app.nxt.x = 100;
+	app.nxt.y = 100;
 
 	app.server_name = NULL;
 	app.session_id = NULL;
