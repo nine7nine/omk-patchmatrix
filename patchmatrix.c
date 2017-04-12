@@ -39,6 +39,8 @@
 #define NK_PUGL_IMPLEMENTATION
 #include <nk_pugl/nk_pugl.h>
 
+#define PORT_MAX 8 //FIXME
+
 typedef enum _event_type_t event_type_t;
 typedef enum _port_type_t port_type_t;
 typedef enum _port_designation_t port_designation_t;
@@ -47,6 +49,7 @@ typedef struct _hash_t hash_t;
 typedef struct _port_conn_t port_conn_t;
 typedef struct _client_conn_t client_conn_t;
 typedef struct _port_t port_t;
+typedef struct _mixer_t mixer_t;
 typedef struct _client_t client_t;
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
@@ -118,6 +121,13 @@ struct _client_conn_t {
 	int moving;
 };
 
+struct _mixer_t {
+	jack_client_t *client;
+	atomic_uintptr_t jsinks [PORT_MAX];
+	atomic_uintptr_t jsources [PORT_MAX];
+	atomic_int jgains [PORT_MAX][PORT_MAX];
+};
+
 struct _port_t {
 	jack_uuid_t uuid;
 	char *name;
@@ -152,6 +162,8 @@ struct _client_t {
 	int flags;
 	struct nk_vec2 pos;
 	int moving;
+
+	mixer_t *mixer;
 };
 
 struct _event_t {
@@ -245,6 +257,7 @@ struct _app_t {
 	struct nk_vec2 nxt;
 	hash_t clients;
 	hash_t conns;
+	hash_t mixers;
 
 	struct node_editor nodedit;
 };
@@ -807,6 +820,164 @@ _client_remove(app_t *app, client_t *client)
 		_hash_free(&app->clients);
 		app->clients = clients;
 	}
+}
+
+static int 
+_mixer_process(jack_nframes_t nframes, void *arg)
+{
+	mixer_t *mixer = arg;
+
+	float *psinks [PORT_MAX];
+	const float *psources [PORT_MAX];
+
+	for(unsigned j = 0; j < PORT_MAX; j++)
+	{
+		jack_port_t *jsink = (jack_port_t *)atomic_load_explicit(&mixer->jsinks[j], memory_order_relaxed);
+		jack_port_t *jsource = (jack_port_t *)atomic_load_explicit(&mixer->jsources[j], memory_order_relaxed);
+
+		psinks[j] = jsink
+			? jack_port_get_buffer(jsink, nframes)
+			: NULL;
+		psources[j] = jsource
+			? jack_port_get_buffer(jsource, nframes)
+			: NULL;
+
+		if(psinks[j]) // clear
+		{
+			for(unsigned k = 0; k < nframes; k++)
+			{
+				psinks[j][k] = 0.f;
+			}
+		}
+	}
+
+	for(unsigned j = 0; j < PORT_MAX; j++)
+	{
+		if(!psinks[j])
+			continue;
+
+		for(unsigned i = 0; i < PORT_MAX; i++)
+		{
+			if(!psources[i])
+				continue;
+
+			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][j], memory_order_relaxed);
+			if(jgain == 0) // just add
+			{
+				for(unsigned k = 0; k < nframes; k++)
+				{
+					psinks[j][k] += psources[i][k];
+				}
+			}
+			else if(jgain > -72) // multiply-add
+			{
+				const float gain = exp10f(jgain/20.f); // jgain = 20*log10(gain/1);
+
+				for(unsigned k = 0; k < nframes; k++)
+				{
+					psinks[j][k] += gain * psources[i][k];
+				}
+			}
+			// else connection not to be mixed
+		}
+	}
+
+	return 0;
+}
+
+static mixer_t *
+_mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
+{
+	mixer_t *mixer = calloc(1, sizeof(mixer_t));
+	if(mixer)
+	{
+		for(unsigned j = 0; j < PORT_MAX; j++)
+		{
+			atomic_init(&mixer->jsinks[j], 0);
+			atomic_init(&mixer->jsources[j], 0);
+
+			for(unsigned i = 0; i < PORT_MAX; i++)
+			{
+				atomic_init(&mixer->jgains[i][j], -72);
+			}
+		}
+
+		const jack_options_t opts = JackNullOption;
+		jack_status_t status;
+		mixer->client = jack_client_open("mixer", opts, &status);
+
+		for(unsigned j = 0; j < nsinks; j++)
+		{
+			char name [32];
+			snprintf(name, 32, "sink_%u", j);
+			jack_port_t *jsink = jack_port_register(mixer->client, name,
+				JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+			atomic_init(&mixer->jsinks[j], (uintptr_t)jsink);
+		}
+
+		for(unsigned j = 0; j < nsources; j++)
+		{
+			char name [32];
+			snprintf(name, 32, "source_%u", j);
+			jack_port_t *jsource = jack_port_register(mixer->client, name,
+				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+			atomic_init(&mixer->jsources[j], (uintptr_t)jsource);
+		}
+
+		jack_set_process_callback(mixer->client, _mixer_process, mixer);
+		jack_activate(mixer->client);
+		_hash_add(&app->mixers, mixer);
+
+	
+		const char *client_name = jack_get_client_name(mixer->client);
+		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
+		if(client)
+			client->mixer = mixer;
+	}
+
+	return mixer;
+}
+
+static void
+_mixer_remove(app_t *app, mixer_t *mixer)
+{
+	hash_t mixers;
+	memset(&mixers, 0x0, sizeof(mixer_t));
+
+	HASH_FOREACH(&app->mixers, mixer_itr)
+	{
+		mixer_t *mixer2 = *mixer_itr;
+
+		if(mixer2 != mixer)
+			_hash_add(&mixers, mixer2);
+	}
+
+	_hash_free(&app->mixers);
+	app->mixers = mixers;
+}
+
+static void
+_mixer_free(mixer_t *mixer)
+{
+	if(mixer->client)
+	{
+		jack_deactivate(mixer->client);
+
+		for(unsigned j = 0; j < PORT_MAX; j++)
+		{
+			jack_port_t *jsink = (jack_port_t *)atomic_load(&mixer->jsinks[j]);
+			jack_port_t *jsource = (jack_port_t *)atomic_load(&mixer->jsources[j]);
+
+			if(jsink)
+				jack_port_unregister(mixer->client, jsink);
+			if(jsource)
+				jack_port_unregister(mixer->client, jsource);
+		}
+
+		jack_client_close(mixer->client);
+	}
+
+	free(mixer);
 }
 
 static bool
@@ -1733,7 +1904,10 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	}
 	(void)hovers; //FIXME
 	nk_layout_space_push(ctx, bounds);
-	nk_button_label(ctx, client->name);
+	if(client->mixer)
+		nk_button_label(ctx, "MIXER"); //FIXME draw mixer
+	else
+		nk_button_label(ctx, client->name);
 
 	const float cw = 4.f;
 	const float cy = 4.f - scrolling.y + client->pos.y;
@@ -2085,6 +2259,21 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				node_editor_client_conn(ctx, app, client_conn, app->type);
 			}
+
+			/* contextual menu */
+			if(nk_contextual_begin(ctx, 0, nk_vec2(200, 220), nk_window_get_bounds(ctx)))
+			{
+				nk_layout_row_dynamic(ctx, 25, 1);
+				if(nk_contextual_item_label(ctx, "Audio Mixer 1x1", NK_TEXT_LEFT))
+					_mixer_add(app, 1, 1);
+				if(nk_contextual_item_label(ctx, "Audio Mixer 2x2", NK_TEXT_LEFT))
+					_mixer_add(app, 2, 2);
+				if(nk_contextual_item_label(ctx, "Audio Mixer 4x4", NK_TEXT_LEFT))
+					_mixer_add(app, 4, 4);
+				if(nk_contextual_item_label(ctx, "Audio Mixer 8x8", NK_TEXT_LEFT))
+					_mixer_add(app, 8, 8);
+				nk_contextual_end(ctx);
+			}
 		}
 		nk_layout_space_end(ctx);
 
@@ -2106,7 +2295,7 @@ _ui_init(app_t *app)
 	nk_pugl_config_t *cfg = &app->win.cfg;
 	cfg->width = 1280;
 	cfg->height = 720;
-	cfg->resizable = true;
+	cfg->resizable = false; //FIXME
 	cfg->ignore = false;
 	cfg->class = "PatchMatrix";
 	cfg->title = "PatchMatrix";
