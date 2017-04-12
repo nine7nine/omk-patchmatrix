@@ -123,8 +123,10 @@ struct _client_conn_t {
 
 struct _mixer_t {
 	jack_client_t *client;
-	atomic_uintptr_t jsinks [PORT_MAX];
-	atomic_uintptr_t jsources [PORT_MAX];
+	unsigned nsinks;
+	unsigned nsources;
+	jack_port_t *jsinks [PORT_MAX];
+	jack_port_t *jsources [PORT_MAX];
 	atomic_int jgains [PORT_MAX][PORT_MAX];
 };
 
@@ -161,6 +163,7 @@ struct _client_t {
 
 	int flags;
 	struct nk_vec2 pos;
+	struct nk_vec2 dim;
 	int moving;
 
 	mixer_t *mixer;
@@ -594,7 +597,7 @@ _port_add(client_t *client, jack_uuid_t port_uuid,
 	const char *port_name, const char *port_short_name, const char *port_type,
 	bool is_input)
 {
-	port_t *port = calloc(1, sizeof(client_t));
+	port_t *port = calloc(1, sizeof(port_t));
 	if(port)
 	{
 		port->uuid = port_uuid;
@@ -746,6 +749,7 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		app->nxt.x += w/2;
 		app->nxt.y += 2*h;
 		client->pos = nk_vec2(app->nxt.x, app->nxt.y);
+		client->dim = nk_vec2(200.f, 25.f);
 		_hash_add(&app->clients, client);
 	}
 
@@ -830,17 +834,19 @@ _mixer_process(jack_nframes_t nframes, void *arg)
 	float *psinks [PORT_MAX];
 	const float *psources [PORT_MAX];
 
-	for(unsigned j = 0; j < PORT_MAX; j++)
-	{
-		jack_port_t *jsink = (jack_port_t *)atomic_load_explicit(&mixer->jsinks[j], memory_order_relaxed);
-		jack_port_t *jsource = (jack_port_t *)atomic_load_explicit(&mixer->jsources[j], memory_order_relaxed);
+	const unsigned nsources = mixer->nsources;
+	const unsigned nsinks = mixer->nsinks;
 
-		psinks[j] = jsink
-			? jack_port_get_buffer(jsink, nframes)
-			: NULL;
-		psources[j] = jsource
-			? jack_port_get_buffer(jsource, nframes)
-			: NULL;
+	for(unsigned i = 0; i < nsources; i++)
+	{
+		jack_port_t *jsource = mixer->jsources[i];
+		psources[i] = jack_port_get_buffer(jsource, nframes);
+	}
+
+	for(unsigned j = 0; j < nsinks; j++)
+	{
+		jack_port_t *jsink = mixer->jsinks[j];
+		psinks[j] = jack_port_get_buffer(jsink, nframes);
 
 		if(psinks[j]) // clear
 		{
@@ -851,16 +857,10 @@ _mixer_process(jack_nframes_t nframes, void *arg)
 		}
 	}
 
-	for(unsigned j = 0; j < PORT_MAX; j++)
+	for(unsigned j = 0; j < nsources; j++)
 	{
-		if(!psinks[j])
-			continue;
-
-		for(unsigned i = 0; i < PORT_MAX; i++)
+		for(unsigned i = 0; i < nsinks; i++)
 		{
-			if(!psources[i])
-				continue;
-
 			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][j], memory_order_relaxed);
 			if(jgain == 0) // just add
 			{
@@ -891,12 +891,12 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 	mixer_t *mixer = calloc(1, sizeof(mixer_t));
 	if(mixer)
 	{
-		for(unsigned j = 0; j < PORT_MAX; j++)
-		{
-			atomic_init(&mixer->jsinks[j], 0);
-			atomic_init(&mixer->jsources[j], 0);
+		mixer->nsources = nsources;
+		mixer->nsinks = nsinks;
 
-			for(unsigned i = 0; i < PORT_MAX; i++)
+		for(unsigned j = 0; j < nsinks; j++)
+		{
+			for(unsigned i = 0; i < nsources; i++)
 			{
 				atomic_init(&mixer->jgains[i][j], -72);
 			}
@@ -912,16 +912,16 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 			snprintf(name, 32, "sink_%u", j);
 			jack_port_t *jsink = jack_port_register(mixer->client, name,
 				JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-			atomic_init(&mixer->jsinks[j], (uintptr_t)jsink);
+			mixer->jsinks[j] = jsink;
 		}
 
-		for(unsigned j = 0; j < nsources; j++)
+		for(unsigned i = 0; i < nsources; i++)
 		{
 			char name [32];
-			snprintf(name, 32, "source_%u", j);
+			snprintf(name, 32, "source_%u", i);
 			jack_port_t *jsource = jack_port_register(mixer->client, name,
 				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
-			atomic_init(&mixer->jsources[j], (uintptr_t)jsource);
+			mixer->jsources[i] = jsource;
 		}
 
 		jack_set_process_callback(mixer->client, _mixer_process, mixer);
@@ -964,8 +964,8 @@ _mixer_free(mixer_t *mixer)
 
 		for(unsigned j = 0; j < PORT_MAX; j++)
 		{
-			jack_port_t *jsink = (jack_port_t *)atomic_load(&mixer->jsinks[j]);
-			jack_port_t *jsource = (jack_port_t *)atomic_load(&mixer->jsources[j]);
+			jack_port_t *jsink = mixer->jsinks[j];
+			jack_port_t *jsource = mixer->jsources[j];
 
 			if(jsink)
 				jack_port_unregister(mixer->client, jsink);
@@ -1846,26 +1846,13 @@ node_editor_init(struct node_editor *editor)
 	editor->show_grid = nk_true;
 }
 
-//FIXME
-static const float client_w = 200.f;
-static const float client_h = 25.f;
-
 static void
-node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
+_client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
+	struct nk_rect *bounds)
 {
-	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_input *in = &ctx->input;
-	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
-	const struct nk_vec2 scrolling = nodedit->scrolling;
-
-	/* calculate scrolled node window position and size */
-	struct nk_rect bounds = nk_rect(
-		client->pos.x - client_w/2 - scrolling.x,
-		client->pos.y - client_h/2 - scrolling.y,
-		client_w, client_h);
 
 	/* node connector and linking */
-	int hovers = 0;
 	if(client->moving)
 	{
 		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
@@ -1876,8 +1863,8 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		{
 			client->pos.x += in->mouse.delta.x;
 			client->pos.y += in->mouse.delta.y;
-			bounds.x += in->mouse.delta.x;
-			bounds.y += in->mouse.delta.y;
+			bounds->x += in->mouse.delta.x;
+			bounds->y += in->mouse.delta.y;
 
 			// move connections together with client
 			HASH_FOREACH(&app->conns, client_conn_itr)
@@ -1898,21 +1885,23 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 			}
 		}
 	}
-	else if(nk_input_is_mouse_hovering_rect(in, bounds))
+	else if(nk_input_is_mouse_hovering_rect(in, *bounds))
 	{
-		hovers = 1;
-
 		if(nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
 		{
 			client->moving = 1;
 		}
 	}
-	(void)hovers; //FIXME
-	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
-	if(client->mixer)
-		nk_button_label(ctx, "MIXER"); //FIXME draw mixer
-	else
-		nk_button_label(ctx, client->name);
+}
+
+static void
+_client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
+	float width)
+{
+	struct node_editor *nodedit = &app->nodedit;
+	const struct nk_input *in = &ctx->input;
+	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	const float cw = 4.f;
 	const float cy = client->pos.y - scrolling.y;
@@ -1920,7 +1909,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	/* output connector */
 	if(client->source_type & app->type)
 	{
-		const float cx = client->pos.x - scrolling.x + client_w/2;
+		const float cx = client->pos.x - scrolling.x + width/2;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
@@ -1956,7 +1945,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	/* input connector */
 	if(client->sink_type & app->type)
 	{
-		const float cx = client->pos.x - scrolling.x - client_w/2;
+		const float cx = client->pos.x - scrolling.x - width/2;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
@@ -1988,6 +1977,93 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 			}
 		}
 	}
+}
+
+static void
+node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
+{
+	struct node_editor *nodedit = &app->nodedit;
+	const struct nk_input *in = &ctx->input;
+	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+	const struct nk_vec2 scrolling = nodedit->scrolling;
+
+	mixer_t *mixer = client->mixer;
+
+	const float ps = 16.f;
+	const int nx = mixer->nsinks;
+	const int ny = mixer->nsources;
+
+	client->dim.x = nx * ps;
+	client->dim.y = ny * ps;
+
+	struct nk_rect bounds = nk_rect(
+		client->pos.x - client->dim.x/2 - scrolling.x,
+		client->pos.y - client->dim.y/2 - scrolling.y,
+		client->dim.x, client->dim.y);
+
+	_client_moveable(ctx, app, client, &bounds);
+
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
+
+	struct nk_rect body;
+	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
+	if(states != NK_WIDGET_INVALID)
+	{
+		struct nk_style_button *style = &ctx->style.button;
+
+    const struct nk_style_item *background;
+		nk_flags state = 0; //FIXME
+    if(state & NK_WIDGET_STATE_HOVER)
+			background = &style->hover;
+		else if(state & NK_WIDGET_STATE_ACTIVED)
+			background = &style->active;
+		else
+			background = &style->normal;
+
+		//nk_fill_rect(canvas, body, style->rounding, background->data.color);
+		nk_fill_rect(canvas, body, style->rounding, ctx->style.button.hover.data.color);
+		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
+
+		for(float x = ps; x < body.w; x += ps)
+		{
+			nk_stroke_line(canvas,
+				body.x + x, body.y,
+				body.x + x, body.y + body.h,
+				style->border, style->border_color);
+		}
+
+		for(float y = ps; y < body.h; y += ps)
+		{
+			nk_stroke_line(canvas,
+				body.x, body.y + y,
+				body.x + body.w, body.y + y,
+				style->border, style->border_color);
+		}
+
+		//FIXME draw dials
+	}
+
+	_client_connectors(ctx, app, client, bounds.w);
+}
+
+static void
+node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
+{
+	struct node_editor *nodedit = &app->nodedit;
+	const struct nk_vec2 scrolling = nodedit->scrolling;
+
+	struct nk_rect bounds = nk_rect(
+		client->pos.x - client->dim.x/2 - scrolling.x,
+		client->pos.y - client->dim.y/2 - scrolling.y,
+		client->dim.x, client->dim.y);
+
+	_client_moveable(ctx, app, client, &bounds);
+
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
+
+	nk_button_label(ctx, client->name);
+
+	_client_connectors(ctx, app, client, bounds.w);
 }
 
 static void
@@ -2149,9 +2225,9 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		? nk_rgb(200, 200, 200)
 		: nk_rgb(100, 100, 100);
 
-	const float l0x = src->pos.x - scrolling.x + client_w/2;
+	const float l0x = src->pos.x - scrolling.x + src->dim.x/2;
 	const float l0y = src->pos.y - scrolling.y;
-	const float l1x = snk->pos.x - scrolling.x - client_w/2;
+	const float l1x = snk->pos.x - scrolling.x - snk->dim.x/2;
 	const float l1y = snk->pos.y - scrolling.y;
 
 	const float bend = 50.f;
@@ -2265,7 +2341,10 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			{
 				client_t *client = *client_itr;
 
-				node_editor_client(ctx, app, client);
+				if(client->mixer)
+					node_editor_mixer(ctx, app, client);
+				else
+					node_editor_client(ctx, app, client);
 			}
 
 			/* reset linking connection */
