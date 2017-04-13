@@ -144,6 +144,7 @@ struct _port_t {
 	char *name;
 	char *short_name;
 	char *pretty_name;
+	int order;
 	port_type_t type;
 	port_designation_t designation;
 };
@@ -602,6 +603,18 @@ _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_
 	client_conn->conns = conns;
 }
 
+static int
+_client_port_sort(const void *a, const void *b)
+{
+	const port_t *port_a = *(const port_t **)a;
+	const port_t *port_b = *(const port_t **)b;
+
+	if(port_a->order != port_b->order) // order according to metadata
+		return port_a->order - port_b->order;
+
+	return strcasecmp(port_a->name, port_b->name); // order according to name
+}
+
 static port_t *
 _port_add(client_t *client, jack_uuid_t port_uuid,
 	const char *port_name, const char *port_short_name, const char *port_type,
@@ -623,9 +636,15 @@ _port_add(client_t *client, jack_uuid_t port_uuid,
 		port->designation = DESIGNATION_NONE;
 		_hash_add(&client->ports, port);
 		if(is_input)
+		{
 			_hash_add(&client->sinks, port);
+			_hash_sort(&client->sinks, _client_port_sort);
+		}
 		else
+		{
 			_hash_add(&client->sources, port);
+			_hash_sort(&client->sources, _client_port_sort);
+		}
 
 		if(is_input)
 			client->sink_type |= port->type;
@@ -1497,11 +1516,12 @@ _jack_anim(app_t *app)
 #ifdef JACK_HAS_PORT_RENAME_CALLBACK
 			case EVENT_PORT_RENAME:
 			{
-				/*
-				int id = _db_port_find_by_name(app, ev->port_rename.old_name);
-
-				if(id != -1)
+				port_t *port = _port_find(app, ev->port_rename.old_name);
+				if(port)
 				{
+					free(port->name);
+					free(port->short_name);
+
 					const char *name = ev->port_rename.new_name;
 					char *sep = strchr(name, ':');
 					char *client_name = strndup(name, sep - name);
@@ -1509,12 +1529,16 @@ _jack_anim(app_t *app)
 
 					if(client_name)
 					{
-						_db_port_set_name(app, id, name, short_name);
+						client_t *client = _client_find(app, client_name, JackPortIsInput | JackPortIsOutput); //FIXME
+						if(client)
+						{
+							_hash_sort(&client->sources, _client_port_sort);
+							_hash_sort(&client->sinks, _client_port_sort);
+						}
 
 						free(client_name); // strdup
 					}
 				}
-				*/
 
 				if(ev->port_rename.old_name)
 					free(ev->port_rename.old_name);
@@ -1800,8 +1824,6 @@ _jack_populate(app_t *app)
 			char *client_name = strndup(port_name, port_short_name - port_name);
 			if(!client_name)
 				continue;
-
-			printf("%s\n", client_name);
 
 			port_short_name++;
 			jack_port_t *jport = jack_port_by_name(app->client, port_name);
