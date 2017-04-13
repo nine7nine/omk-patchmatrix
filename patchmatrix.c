@@ -564,6 +564,41 @@ _client_port_find_by_name(client_t *client, const char *port_name)
 	return NULL;
 }
 
+static void
+_client_refresh_type(client_t *client)
+{
+	client->source_type = TYPE_NONE;
+	client->sink_type = TYPE_NONE;
+
+	HASH_FOREACH(&client->sources, port_itr)
+	{
+		port_t *port = *port_itr;
+
+		client->source_type |= port->type;
+	}
+
+	HASH_FOREACH(&client->sinks, port_itr)
+	{
+		port_t *port = *port_itr;
+
+		client->sink_type |= port->type;
+	}
+}
+
+static void
+_client_conn_refresh_type(client_conn_t *client_conn)
+{
+	client_conn->type = TYPE_NONE;
+
+	HASH_FOREACH(&client_conn->conns, port_conn_itr)
+	{
+		port_conn_t *port_conn = *port_conn_itr;
+
+		client_conn->type |= port_conn->source_port->type;
+		client_conn->type |= port_conn->sink_port->type;
+	}
+}
+
 static client_conn_t *
 _client_conn_find(app_t *app, client_t *source_client, client_t *sink_client)
 {
@@ -638,6 +673,8 @@ _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_
 
 	_hash_free(&client_conn->conns);
 	client_conn->conns = conns;
+
+	_client_conn_refresh_type(client_conn);
 }
 
 static int
@@ -704,8 +741,6 @@ _port_free(port_t *port)
 static void
 _port_remove(app_t *app, client_t *client, port_t *port)
 {
-	printf("_port_remove: %s\n", port->name);
-
 	{
 		hash_t ports;
 		memset(&ports, 0x0, sizeof(hash_t));
@@ -789,6 +824,8 @@ _port_remove(app_t *app, client_t *client, port_t *port)
 		_hash_free(&app->conns);
 		app->conns = client_conns;
 	}
+
+	_client_refresh_type(client);
 }
 
 static client_t *
@@ -2180,6 +2217,12 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 static void
 node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 {
+	if(  !(client->source_type & app->type)
+		&& !(client->sink_type & app->type) )
+	{
+		return;
+	}
+
 	struct node_editor *nodedit = &app->nodedit;
 	struct nk_input *in = &ctx->input;
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
@@ -2312,6 +2355,12 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 static void
 node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 {
+	if(  !(client->source_type & app->type)
+		&& !(client->sink_type & app->type) )
+	{
+		return;
+	}
+
 	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
