@@ -962,7 +962,7 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 					psinks[j][k] += psources[i][k];
 				}
 			}
-			else if(jgain > -72) // multiply-add
+			else if(jgain > -36) // multiply-add
 			{
 				const float gain = exp10f(jgain/20.f); // jgain = 20.f*log10f(gain);
 
@@ -1040,7 +1040,7 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 		{
 			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][J], memory_order_relaxed);
 
-			if(jgain > -72) // connection to be mixed
+			if(jgain > -36) // connection to be mixed
 			{
 				uint8_t *msg = jack_midi_event_reserve(psinks[i], ev.time, ev.size);
 				if(!msg)
@@ -1082,7 +1082,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 		{
 			for(unsigned i = 0; i < nsources; i++)
 			{
-				atomic_init(&mixer->jgains[i][j], -72);
+				atomic_init(&mixer->jgains[i][j], (i == j) ? 0 : -36);
 			}
 		}
 
@@ -2180,15 +2180,15 @@ static void
 node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 {
 	struct node_editor *nodedit = &app->nodedit;
-	const struct nk_input *in = &ctx->input;
+	struct nk_input *in = &ctx->input;
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	mixer_t *mixer = client->mixer;
 
-	const float ps = 16.f;
-	const int nx = mixer->nsinks;
-	const int ny = mixer->nsources;
+	const float ps = 32.f;
+	const unsigned nx = mixer->nsinks;
+	const unsigned ny = mixer->nsources;
 
 	client->dim.x = nx * ps;
 	client->dim.y = ny * ps;
@@ -2237,7 +2237,72 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 				style->border, style->border_color);
 		}
 
-		//FIXME draw dials
+		float x = body.x + ps/2;
+		for(unsigned i = 0; i < nx; i++)
+		{
+			float y = body.y + ps/2;
+			for(unsigned j = 0; j < ny; j++)
+			{
+				int32_t jgain = atomic_load_explicit(&mixer->jgains[i][j], memory_order_acquire);
+
+				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
+
+				const struct nk_mouse_button *btn = &in->mouse.buttons[NK_BUTTON_LEFT];;
+				const bool left_mouse_down = btn->down;
+				const bool left_mouse_click_in_cursor = nk_input_has_mouse_click_down_in_rect(in,
+					NK_BUTTON_LEFT, tile, nk_true);
+
+				int32_t dd = 0;
+				if(left_mouse_down && left_mouse_click_in_cursor)
+				{
+					const float dx = in->mouse.delta.x;
+					const float dy = in->mouse.delta.y;
+					dd = fabs(dx) > fabs(dy) ? dx : -dy;
+				}
+				else if(nk_input_is_mouse_hovering_rect(in, tile))
+				{
+					if(in->mouse.scroll_delta != 0.f) // has scrolling
+					{
+						dd = in->mouse.scroll_delta;
+						in->mouse.scroll_delta = 0.f;
+					}
+				}
+
+				if(dd != 0)
+				{
+					jgain = NK_CLAMP(-36, jgain + dd, 36);
+					atomic_store_explicit(&mixer->jgains[i][j], jgain, memory_order_release);
+				}
+
+				if( (left_mouse_down && left_mouse_click_in_cursor) || (dd != 0) )
+				{
+					char tooltip [32];
+					snprintf(tooltip, 32, "%+2"PRIi32" dBFS", jgain);
+					nk_tooltip(ctx, tooltip);
+				}
+
+				if(jgain > -36)
+				{
+					const float alpha = (jgain + 36) / 72.f;
+					const float beta = NK_PI/2;
+
+					nk_stroke_arc(canvas,
+						x, y, 10.f,
+						beta + 0.2f*NK_PI, beta + 1.8f*NK_PI,
+						1.f,
+						nk_rgb(100, 100, 100));
+					nk_stroke_arc(canvas,
+						x, y, 7.f,
+						beta + 0.2f*NK_PI, beta + (0.2f + alpha*1.6f)*NK_PI,
+						2.f,
+						nk_rgb(200, 200, 200));
+				}
+
+				y += ps;
+			}
+
+			x += ps;
+		}
 	}
 
 	_client_connectors(ctx, app, client, bounds.w);
