@@ -25,6 +25,7 @@
 
 #include <jack/jack.h>
 #include <jack/session.h>
+#include <jack/midiport.h>
 #ifdef JACK_HAS_METADATA_API
 #	include <jack/uuid.h>
 #	include <jack/metadata.h>
@@ -827,7 +828,7 @@ _client_remove(app_t *app, client_t *client)
 }
 
 static int
-_mixer_process(jack_nframes_t nframes, void *arg)
+_audio_mixer_process(jack_nframes_t nframes, void *arg)
 {
 	mixer_t *mixer = arg;
 
@@ -848,12 +849,10 @@ _mixer_process(jack_nframes_t nframes, void *arg)
 		jack_port_t *jsink = mixer->jsinks[j];
 		psinks[j] = jack_port_get_buffer(jsink, nframes);
 
-		if(psinks[j]) // clear
+		// clear
+		for(unsigned k = 0; k < nframes; k++)
 		{
-			for(unsigned k = 0; k < nframes; k++)
-			{
-				psinks[j][k] = 0.f;
-			}
+			psinks[j][k] = 0.f;
 		}
 	}
 
@@ -880,6 +879,97 @@ _mixer_process(jack_nframes_t nframes, void *arg)
 			}
 			// else connection not to be mixed
 		}
+	}
+
+	return 0;
+}
+
+static int
+_midi_mixer_process(jack_nframes_t nframes, void *arg)
+{
+	mixer_t *mixer = arg;
+
+	void *psinks [PORT_MAX];
+	void *psources [PORT_MAX];
+
+	const unsigned nsources = mixer->nsources;
+	const unsigned nsinks = mixer->nsinks;
+
+	int count [PORT_MAX];
+	int pos [PORT_MAX];
+
+	for(unsigned i = 0; i < nsources; i++)
+	{
+		jack_port_t *jsource = mixer->jsources[i];
+		psources[i] = jack_port_get_buffer(jsource, nframes);
+
+		count[i] = jack_midi_get_event_count(psources[i]);
+		pos[i] = 0;
+	}
+
+	for(unsigned j = 0; j < nsinks; j++)
+	{
+		jack_port_t *jsink = mixer->jsinks[j];
+		psinks[j] = jack_port_get_buffer(jsink, nframes);
+
+		// clear
+		jack_midi_clear_buffer(psinks[j]);
+	}
+
+	while(true)
+	{
+		uint32_t T = UINT32_MAX;
+		int J = -1;
+
+		for(unsigned j = 0; j < nsources; j++)
+		{
+			if(pos[j] >= count[j]) // no more events to process on this source
+				continue;
+
+			jack_midi_event_t ev;
+			jack_midi_event_get(&ev, psources[j], pos[j]);
+
+			if(ev.time <= T)
+			{
+				T = ev.time;
+				J = j;
+			}
+		}
+
+		if(J == -1) // no more events to process from all sources
+			break;
+
+		jack_midi_event_t ev;
+		jack_midi_event_get(&ev, psources[J], pos[J]);
+
+		for(unsigned i = 0; i < nsinks; i++)
+		{
+			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][J], memory_order_relaxed);
+
+			if(jgain > -72) // connection to be mixed
+			{
+				uint8_t *msg = jack_midi_event_reserve(psinks[i], ev.time, ev.size);
+				if(!msg)
+					continue;
+
+				memcpy(msg, ev.buffer, ev.size);
+
+				if( (jgain != 0) && (ev.size == 3) ) // multiply-add
+				{
+					const uint8_t cmd = msg[0] & 0xf0;
+					if( (cmd == 0x90) || (cmd == 0x80) ) // noteOn or noteOff
+					{
+						const float gain = exp10f(jgain/20.f); // jgain = 20*log10(gain/1);
+
+						const float vel = msg[2] * gain; // velocity
+						msg[2] = vel < 0 ? 0 : (vel > 0x7f ? 0x7f : vel);
+					}
+				}
+			}
+			// else connection not to be mixed
+		}
+
+		pos[J] += 1; // advance event pointer from this source
 	}
 
 	return 0;
@@ -924,7 +1014,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 			mixer->jsources[i] = jsource;
 		}
 
-		jack_set_process_callback(mixer->client, _mixer_process, mixer);
+		jack_set_process_callback(mixer->client, _audio_mixer_process, mixer);
 		jack_activate(mixer->client);
 		_hash_add(&app->mixers, mixer);
 
