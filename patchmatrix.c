@@ -2093,7 +2093,7 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 
 static void
 _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
-	float width)
+	struct nk_vec2 dim)
 {
 	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_input *in = &ctx->input;
@@ -2101,19 +2101,20 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	const float cw = 4.f;
-	const float cy = client->pos.y - scrolling.y;
 
 	/* output connector */
 	if(client->source_type & app->type)
 	{
-		const float cx = client->pos.x - scrolling.x + width/2;
+		const float cx = client->pos.x - scrolling.x + dim.x/2;
+		const float cy = client->pos.y - scrolling.y;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
 		);
 
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI, nk_rgb(100, 100, 100));
-		if(nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw)))
+		if(  nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw))
+			&& !nodedit->linking.active)
 		{
 			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, nk_rgb(100, 100, 100));
 		}
@@ -2129,20 +2130,20 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			&& (nodedit->linking.source_client == client) )
 		{
 			struct nk_vec2 m = in->mouse.pos;
-			const float bend = 50.f;
-			nk_stroke_curve(canvas,
-				cx, cy,
-				cx + bend, cy,
-				m.x - bend, m.y,
-				m.x, m.y,
-				1.0f, nk_rgb(200, 200, 200));
+
+			nk_stroke_line(canvas, cx, cy, m.x, m.y, 1.f, nk_rgb(200, 200, 200));
 		}
 	}
 
 	/* input connector */
 	if(client->sink_type & app->type)
 	{
-		const float cx = client->pos.x - scrolling.x - width/2;
+		const float cx = client->mixer
+			? client->pos.x - scrolling.x
+			: client->pos.x - scrolling.x - dim.x/2;
+		const float cy = client->mixer
+			? client->pos.y - scrolling.y - dim.y/2
+			: client->pos.y - scrolling.y;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
 			2*cw, 2*cw
@@ -2305,7 +2306,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		}
 	}
 
-	_client_connectors(ctx, app, client, bounds.w);
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
 }
 
 static void
@@ -2325,7 +2326,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 
 	nk_button_label(ctx, client->name);
 
-	_client_connectors(ctx, app, client, bounds.w);
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
 }
 
 static void
@@ -2489,8 +2490,12 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 
 	const float l0x = src->pos.x - scrolling.x + src->dim.x/2;
 	const float l0y = src->pos.y - scrolling.y;
-	const float l1x = snk->pos.x - scrolling.x - snk->dim.x/2;
-	const float l1y = snk->pos.y - scrolling.y;
+	const float l1x = snk->mixer
+		? snk->pos.x - scrolling.x
+		: snk->pos.x - scrolling.x - snk->dim.x/2;
+	const float l1y = snk->mixer
+		? snk->pos.y - scrolling.y - snk->dim.y/2
+		: snk->pos.y - scrolling.y;
 
 	const float bend = 50.f;
 	nk_stroke_curve(canvas,
@@ -2502,7 +2507,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	nk_stroke_curve(canvas,
 		cxr, cy,
 		cxr + bend, cy,
-		l1x - bend, l1y,
+		snk->mixer ? l1x : l1x - bend, snk->mixer ? l1y - bend : l1y,
 		l1x, l1y,
 		1.f, col);
 
