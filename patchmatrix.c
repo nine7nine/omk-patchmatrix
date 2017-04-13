@@ -1316,49 +1316,60 @@ _jack_anim(app_t *app)
 							{
 								if(!strcmp(ev->property_change.key, JACK_METADATA_PRETTY_NAME))
 								{
-									/*
-									int id;
-									if((id = _db_client_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_client_set_pretty(app, id, value);
-									else if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_port_set_pretty(app, id, value);
-									*/
+									port_t *port = NULL;
+									client_t *client = NULL;
+									if((port = _port_find_by_uuid(app, ev->property_change.uuid)))
+									{
+										free(port->pretty_name);
+										port->pretty_name = strdup(value);
+									}
+									else if((client = _client_find_by_uuid(app, ev->property_change.uuid, JackPortIsInput | JackPortIsOutput))) //FIXME
+									{
+										free(client->pretty_name);
+										client->pretty_name = strdup(value);
+									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_EVENT_TYPES))
 								{
-									/*
-									int id;
-									int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
-									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_port_set_type(app, id, type_id);
-										*/
+									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
+									if(port)
+									{
+										port->type = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
+										//FIXME update type of client, client_conn
+									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE))
 								{
-									/*
-									int id;
-									int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
-									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_port_set_type(app, id, type_id);
-									*/
+									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
+									if(port)
+									{
+										port->type = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
+										//FIXME update type of client, client_conn
+									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_ORDER))
 								{
-									/*
-									int id;
-									int position = atoi(value);
-									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_port_set_position(app, id, position);
-									*/
+									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
+									if(port)
+									{
+										port->order = atoi(value);
+
+										client_t *client = _port_client_find_by_name(app, port->name);
+										if(client)
+										{
+											_hash_sort(&client->sources, _client_port_sort);
+											_hash_sort(&client->sinks, _client_port_sort);
+										}
+									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_DESIGNATION))
 								{
-									/*
-									int id;
-									int designation = _designation_get(value);
-									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-										_db_port_set_designation(app, id, designation);
-									*/
+									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
+									if(port)
+									{
+										port->designation = _designation_get(value);
+										//FIXME do something?
+									}
 								}
 
 								free(value);
@@ -1374,16 +1385,11 @@ _jack_anim(app_t *app)
 					{
 						if(!jack_uuid_empty(ev->property_change.uuid))
 						{
-							/*
-							int id;
-							if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
-							{
-								jack_port_t *port = jack_port_by_id(app->client, id);
-								int midi = 0;
-								if(port)
-									midi = !strcmp(jack_port_type(port), JACK_DEFAULT_MIDI_TYPE) ? 1 : 0;
-								int type_id = midi ? TYPE_MIDI : TYPE_AUDIO;
+							port_t *port = NULL;
+							client_t *client = NULL;
 
+							if((port = _port_find_by_uuid(app, ev->property_change.uuid)))
+							{
 								bool needs_port_update = false;
 								bool needs_pretty_update = false;
 								bool needs_position_update = false;
@@ -1420,31 +1426,41 @@ _jack_anim(app_t *app)
 
 								if(needs_port_update)
 								{
-									_db_port_set_type(app, id, type_id);
+									jack_port_t *jport = jack_port_by_name(app->client, port->name);
+									bool midi = 0;
+
+									if(jport)
+										midi = !strcmp(jack_port_type(jport), JACK_DEFAULT_MIDI_TYPE) ? true : false;
+
+									port->type = midi ? TYPE_MIDI : TYPE_AUDIO;
+									//FIXME adjust types of client, client_conn
 								}
 
 								if(needs_pretty_update)
 								{
-									char *short_name = NULL;
-									_db_port_find_by_name_by_id(app, id, NULL, &short_name, NULL, NULL);
-									if(short_name)
-									{
-										_db_port_set_pretty(app, id, short_name);
-										free(short_name);
-									}
+									free(port->pretty_name);
+									port->pretty_name = NULL;
 								}
 
 								if(needs_position_update)
 								{
-									_db_port_set_position(app, id, 0); //TODO or rather use id?
+									port->order = 0;
+
+									client_t *client2 = _port_client_find_by_name(app, port->name);
+									if(client2)
+									{
+										_hash_sort(&client2->sources, _client_port_sort);
+										_hash_sort(&client2->sinks, _client_port_sort);
+									}
 								}
 
 								if(needs_designation_update)
 								{
-									_db_port_set_designation(app, id, DESIGNATION_NONE);
+									port->designation = DESIGNATION_NONE;
+									//FIXME do something?
 								}
 							}
-							else if ((id = _db_client_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
+							else if((client = _client_find_by_uuid(app, ev->property_change.uuid, JackPortIsInput | JackPortIsOutput))) //FIXME
 							{
 								bool needs_pretty_update = false;
 
@@ -1460,16 +1476,10 @@ _jack_anim(app_t *app)
 
 								if(needs_pretty_update)
 								{
-									char *name = NULL;
-									_db_client_find_by_name_by_id(app, id, &name, NULL);
-									if(name)
-									{
-										_db_client_set_pretty(app, id, name);
-										free(name);
-									}
+									free(client->pretty_name);
+									client->pretty_name = NULL;
 								}
 							}
-							*/
 						}
 						else
 						{
