@@ -437,7 +437,7 @@ mkdirp(const char* path, mode_t mode)
 }
 
 static client_t *
-_port_client_find(app_t *app, const char *port_name)
+_port_client_find_by_name(app_t *app, const char *port_name)
 {
 	HASH_FOREACH(&app->clients, client_itr)
 	{
@@ -458,7 +458,7 @@ _port_client_find(app_t *app, const char *port_name)
 }
 
 static port_t *
-_port_find(app_t *app, const char *port_name)
+_port_find_by_name(app_t *app, const char *port_name)
 {
 	HASH_FOREACH(&app->clients, client_itr)
 	{
@@ -469,6 +469,27 @@ _port_find(app_t *app, const char *port_name)
 			port_t *port = *port_itr;
 
 			if(!strcmp(port->name, port_name))
+			{
+				return port;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+static port_t *
+_port_find_by_uuid(app_t *app, jack_uuid_t port_uuid)
+{
+	HASH_FOREACH(&app->clients, client_itr)
+	{
+		client_t *client = *client_itr;
+
+		HASH_FOREACH(&client->ports, port_itr)
+		{
+			port_t *port = *port_itr;
+
+			if(!jack_uuid_compare(port->uuid, port_uuid))
 			{
 				return port;
 			}
@@ -496,7 +517,7 @@ _port_conn_find(client_conn_t *client_conn, port_t *source_port, port_t *sink_po
 }
 
 static client_t *
-_client_find(app_t *app, const char *client_name, int client_flags)
+_client_find_by_name(app_t *app, const char *client_name, int client_flags)
 {
 	HASH_FOREACH(&app->clients, client_itr)
 	{
@@ -511,8 +532,24 @@ _client_find(app_t *app, const char *client_name, int client_flags)
 	return NULL;
 }
 
+static client_t *
+_client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags)
+{
+	HASH_FOREACH(&app->clients, client_itr)
+	{
+		client_t *client = *client_itr;
+
+		if(!jack_uuid_compare(client->uuid, client_uuid) && (client->flags == client_flags))
+		{
+			return client;
+		}
+	}
+
+	return NULL;
+}
+
 static port_t *
-_client_port_find(client_t *client, const char *port_name)
+_client_port_find_by_name(client_t *client, const char *port_name)
 {
 	HASH_FOREACH(&client->ports, port_itr)
 	{
@@ -1147,13 +1184,13 @@ _jack_anim(app_t *app)
 				}
 				else
 				{
-					client_t *client = _client_find(app, ev->client_register.name, JackPortIsInput);
+					client_t *client = _client_find_by_name(app, ev->client_register.name, JackPortIsInput);
 					if(client)
 					{
 						_client_remove(app, client);
 						_client_free(client);
 					}
-					client = _client_find(app, ev->client_register.name, JackPortIsOutput);
+					client = _client_find_by_name(app, ev->client_register.name, JackPortIsOutput);
 					if(client)
 					{
 						_client_remove(app, client);
@@ -1186,7 +1223,7 @@ _jack_anim(app_t *app)
 
 					if(client_name)
 					{
-						client_t *client = _client_find(app, client_name, client_flags);
+						client_t *client = _client_find_by_name(app, client_name, client_flags);
 						if(!client)
 							client = _client_add(app, client_name, client_flags);
 						if(client)
@@ -1200,7 +1237,7 @@ _jack_anim(app_t *app)
 							}
 							else
 							{
-								port_t *port = _port_find(app, port_name);
+								port_t *port = _port_find_by_name(app, port_name);
 								if(port)
 								{
 									_port_remove(app, client, port);
@@ -1225,11 +1262,11 @@ _jack_anim(app_t *app)
 					const char *name_source = jack_port_name(jport_source);
 					const char *name_sink = jack_port_name(jport_sink);
 
-					port_t *port_source = _port_find(app, name_source);
-					port_t *port_sink = _port_find(app, name_sink);
+					port_t *port_source = _port_find_by_name(app, name_source);
+					port_t *port_sink = _port_find_by_name(app, name_sink);
 
-					client_t *client_source = _port_client_find(app, name_source);
-					client_t *client_sink = _port_client_find(app, name_sink);
+					client_t *client_source = _port_client_find_by_name(app, name_source);
+					client_t *client_sink = _port_client_find_by_name(app, name_sink);
 
 					const char *port_type = jack_port_type(jport_source);
 
@@ -1281,9 +1318,9 @@ _jack_anim(app_t *app)
 								{
 									/*
 									int id;
-									if((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									if((id = _db_client_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_client_set_pretty(app, id, value);
-									else if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									else if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_pretty(app, id, value);
 									*/
 								}
@@ -1292,7 +1329,7 @@ _jack_anim(app_t *app)
 									/*
 									int id;
 									int type_id = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
-									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_type(app, id, type_id);
 										*/
 								}
@@ -1301,7 +1338,7 @@ _jack_anim(app_t *app)
 									/*
 									int id;
 									int type_id = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
-									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_type(app, id, type_id);
 									*/
 								}
@@ -1310,7 +1347,7 @@ _jack_anim(app_t *app)
 									/*
 									int id;
 									int position = atoi(value);
-									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_position(app, id, position);
 									*/
 								}
@@ -1319,7 +1356,7 @@ _jack_anim(app_t *app)
 									/*
 									int id;
 									int designation = _designation_get(value);
-									if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+									if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 										_db_port_set_designation(app, id, designation);
 									*/
 								}
@@ -1339,7 +1376,7 @@ _jack_anim(app_t *app)
 						{
 							/*
 							int id;
-							if((id = _db_port_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							if((id = _db_port_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
 								jack_port_t *port = jack_port_by_id(app->client, id);
 								int midi = 0;
@@ -1389,7 +1426,7 @@ _jack_anim(app_t *app)
 								if(needs_pretty_update)
 								{
 									char *short_name = NULL;
-									_db_port_find_by_id(app, id, NULL, &short_name, NULL, NULL);
+									_db_port_find_by_name_by_id(app, id, NULL, &short_name, NULL, NULL);
 									if(short_name)
 									{
 										_db_port_set_pretty(app, id, short_name);
@@ -1407,7 +1444,7 @@ _jack_anim(app_t *app)
 									_db_port_set_designation(app, id, DESIGNATION_NONE);
 								}
 							}
-							else if ((id = _db_client_find_by_uuid(app, ev->property_change.uuid)) != -1)
+							else if ((id = _db_client_find_by_name_by_uuid(app, ev->property_change.uuid)) != -1)
 							{
 								bool needs_pretty_update = false;
 
@@ -1424,7 +1461,7 @@ _jack_anim(app_t *app)
 								if(needs_pretty_update)
 								{
 									char *name = NULL;
-									_db_client_find_by_id(app, id, &name, NULL);
+									_db_client_find_by_name_by_id(app, id, &name, NULL);
 									if(name)
 									{
 										_db_client_set_pretty(app, id, name);
@@ -1516,7 +1553,7 @@ _jack_anim(app_t *app)
 #ifdef JACK_HAS_PORT_RENAME_CALLBACK
 			case EVENT_PORT_RENAME:
 			{
-				port_t *port = _port_find(app, ev->port_rename.old_name);
+				port_t *port = _port_find_by_name(app, ev->port_rename.old_name);
 				if(port)
 				{
 					free(port->name);
@@ -1529,7 +1566,7 @@ _jack_anim(app_t *app)
 
 					if(client_name)
 					{
-						client_t *client = _client_find(app, client_name, JackPortIsInput | JackPortIsOutput); //FIXME
+						client_t *client = _client_find_by_name(app, client_name, JackPortIsInput | JackPortIsOutput); //FIXME
 						if(client)
 						{
 							_hash_sort(&client->sources, _client_port_sort);
@@ -1838,12 +1875,12 @@ _jack_populate(app_t *app)
 					? (is_input ? JackPortIsInput : JackPortIsOutput)
 					: JackPortIsInput | JackPortIsOutput;
 
-				client_t *client = _client_find(app, client_name, client_flags);
+				client_t *client = _client_find_by_name(app, client_name, client_flags);
 				if(!client)
 					client = _client_add(app, client_name, client_flags);
 				if(client)
 				{
-					port_t *port = _client_port_find(client, port_name);
+					port_t *port = _client_port_find_by_name(client, port_name);
 					if(!port)
 					{
 						const char *port_type = jack_port_type(jport);
@@ -1879,9 +1916,9 @@ _jack_populate(app_t *app)
 				{
 					const char *snk_name = *snk_name_ptr;
 
-					port_t *snk_port = _port_find(app, snk_name);
-					client_t *src_client = _port_client_find(app, src_name);
-					client_t *snk_client = _port_client_find(app, snk_name);
+					port_t *snk_port = _port_find_by_name(app, snk_name);
+					client_t *src_client = _port_client_find_by_name(app, src_name);
+					client_t *snk_client = _port_client_find_by_name(app, snk_name);
 
 					if(snk_port && src_client && snk_client)
 					{
@@ -2577,7 +2614,7 @@ _ui_populate(app_t *app)
 
 			if(client_name)
 			{
-				if(_db_client_find_by_name(app, client_name) < 0)
+				if(_db_client_find_by_name_by_name(app, client_name) < 0)
 					_db_client_add(app, client_name);
 
 				_db_port_add(app, client_name, *source, short_name);
@@ -2598,7 +2635,7 @@ _ui_populate(app_t *app)
 
 			if(client_name)
 			{
-				if(_db_client_find_by_name(app, client_name) < 0)
+				if(_db_client_find_by_name_by_name(app, client_name) < 0)
 					_db_client_add(app, client_name);
 
 				_db_port_add(app, client_name, *sink, short_name);
