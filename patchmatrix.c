@@ -51,6 +51,7 @@ typedef struct _port_conn_t port_conn_t;
 typedef struct _client_conn_t client_conn_t;
 typedef struct _port_t port_t;
 typedef struct _mixer_t mixer_t;
+typedef struct _monitor_t monitor_t;
 typedef struct _client_t client_t;
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
@@ -131,6 +132,13 @@ struct _mixer_t {
 	atomic_int jgains [PORT_MAX][PORT_MAX];
 };
 
+struct _monitor_t {
+	jack_client_t *client;
+	unsigned nsources;
+	jack_port_t *jsources [PORT_MAX];
+	atomic_int jgains [PORT_MAX];
+};
+
 struct _port_t {
 	jack_uuid_t uuid;
 	char *name;
@@ -168,6 +176,7 @@ struct _client_t {
 	int moving;
 
 	mixer_t *mixer;
+	monitor_t *monitor; //FIXME use
 	port_type_t sink_type;
 	port_type_t source_type;
 };
@@ -828,6 +837,35 @@ _client_remove(app_t *app, client_t *client)
 }
 
 static int
+_audio_monitor_process(jack_nframes_t nframes, void *arg)
+{
+	monitor_t *monitor = arg;
+
+	const float *psources [PORT_MAX];
+
+	const unsigned nsources = monitor->nsources;
+
+	for(unsigned i = 0; i < nsources; i++)
+	{
+		jack_port_t *jsource = monitor->jsources[i];
+		psources[i] = jack_port_get_buffer(jsource, nframes);
+
+		float peak = 0.f;
+		for(unsigned k = 0; k < nframes; k++)
+		{
+			const float sample = fabsf(psources[i][k]);
+			if(sample > peak)
+				peak = sample;
+		}
+
+		const int32_t dBFS = 20.f*log10f(peak); //FIXME use dBFS+6 instead
+		atomic_store_explicit(&monitor->jgains[i], dBFS, memory_order_relaxed);
+	}
+
+	return 0;
+}
+
+static int
 _audio_mixer_process(jack_nframes_t nframes, void *arg)
 {
 	mixer_t *mixer = arg;
@@ -870,7 +908,7 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 			}
 			else if(jgain > -72) // multiply-add
 			{
-				const float gain = exp10f(jgain/20.f); // jgain = 20*log10(gain/1);
+				const float gain = exp10f(jgain/20.f); // jgain = 20.f*log10f(gain);
 
 				for(unsigned k = 0; k < nframes; k++)
 				{
