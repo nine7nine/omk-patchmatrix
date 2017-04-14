@@ -140,6 +140,7 @@ struct _monitor_t {
 };
 
 struct _port_t {
+	client_t *client;
 	jack_uuid_t uuid;
 	char *name;
 	char *short_name;
@@ -480,27 +481,6 @@ mkdirp(const char* path, mode_t mode)
 	return ret;
 }
 
-static client_t *
-_port_client_find_by_name(app_t *app, const char *port_name)
-{
-	HASH_FOREACH(&app->clients, client_itr)
-	{
-		client_t *client = *client_itr;
-
-		HASH_FOREACH(&client->ports, port_itr)
-		{
-			port_t *port = *port_itr;
-
-			if(!strcmp(port->name, port_name))
-			{
-				return client;
-			}
-		}
-	}
-
-	return NULL;
-}
-
 static port_t *
 _port_find_by_name(app_t *app, const char *port_name)
 {
@@ -736,22 +716,18 @@ _client_port_sort(const void *a, const void *b)
 
 static port_t *
 _port_add(client_t *client, jack_uuid_t port_uuid,
-	const char *port_name, const char *port_short_name, const char *port_type,
+	const char *port_name, const char *port_short_name, port_type_t port_type,
 	bool is_input)
 {
 	port_t *port = calloc(1, sizeof(port_t));
 	if(port)
 	{
+		port->client = client;
 		port->uuid = port_uuid;
 		port->name = strdup(port_name);
 		port->short_name = strdup(port_short_name);
 		port->pretty_name = NULL; //FIXME
-		port->type = TYPE_NONE;
-		if(!strcmp(port_type, JACK_DEFAULT_AUDIO_TYPE))
-			port->type = TYPE_AUDIO;
-		else if(!strcmp(port_type, JACK_DEFAULT_MIDI_TYPE))
-			port->type = TYPE_MIDI;
-		//FIXME we have more types to support
+		port->type = port_type;
 		port->designation = DESIGNATION_NONE;
 		_hash_add(&client->ports, port);
 		if(is_input)
@@ -806,21 +782,16 @@ _client_conn_free(client_conn_t *client_conn)
 	free(client_conn);
 }
 
-typedef struct cong_t {
-	client_t *client;
-	port_t *port;
-} cong_t;
-
 static bool
 _port_remove_cb(void *node, void *data)
 {
 	client_conn_t *client_conn = node;
-	cong_t *cong = data;
+	port_t *port = data;
 
-	if(  (client_conn->source_client == cong->client)
-		|| (client_conn->sink_client == cong->client) )
+	if(  (client_conn->source_client == port->client)
+		|| (client_conn->sink_client == port->client) )
 	{
-		_hash_remove_cb(&client_conn->conns, _port_remove_cb_cb, cong->port);
+		_hash_remove_cb(&client_conn->conns, _port_remove_cb_cb, port);
 	}
 
 	// free when empty
@@ -831,16 +802,14 @@ _port_remove_cb(void *node, void *data)
 }
 
 static void
-_port_remove(app_t *app, client_t *client, port_t *port)
+_port_remove(app_t *app, port_t *port)
 {
-	cong_t cong = {
-		.client = client,
-		.port = port
-	};
+	client_t *client = port->client;
+
 	_hash_remove(&client->ports, port);
 	_hash_remove(&client->sinks, port);
 	_hash_remove(&client->sources, port);
-	_hash_remove_cb(&app->conns, _port_remove_cb, &cong);
+	_hash_remove_cb(&app->conns, _port_remove_cb, port);
 	_client_refresh_type(client);
 }
 
@@ -1243,7 +1212,9 @@ _jack_anim(app_t *app)
 							if(ev->port_register.state)
 							{
 								jack_uuid_t port_uuid = jack_port_uuid(jport);
-								const char *port_type = jack_port_type(jport);
+								port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
+									? TYPE_AUDIO
+									: TYPE_MIDI;
 
 								port_t *port = _port_add(client, port_uuid, port_name, port_short_name, port_type, is_input);
 							}
@@ -1252,7 +1223,7 @@ _jack_anim(app_t *app)
 								port_t *port = _port_find_by_name(app, port_name);
 								if(port)
 								{
-									_port_remove(app, client, port);
+									_port_remove(app, port);
 									_port_free(port);
 								}
 							}
@@ -1277,8 +1248,8 @@ _jack_anim(app_t *app)
 					port_t *port_source = _port_find_by_name(app, name_source);
 					port_t *port_sink = _port_find_by_name(app, name_sink);
 
-					client_t *client_source = _port_client_find_by_name(app, name_source);
-					client_t *client_sink = _port_client_find_by_name(app, name_sink);
+					client_t *client_source = port_source->client;
+					client_t *client_sink = port_sink->client;
 
 					const char *port_type = jack_port_type(jport_source);
 
@@ -1347,7 +1318,7 @@ _jack_anim(app_t *app)
 									if(port)
 									{
 										port->type = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
-										//FIXME update type of client, client_conn
+										_client_refresh_type(port->client);
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE))
@@ -1356,7 +1327,7 @@ _jack_anim(app_t *app)
 									if(port)
 									{
 										port->type = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
-										//FIXME update type of client, client_conn
+										_client_refresh_type(port->client);
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_ORDER))
@@ -1366,12 +1337,9 @@ _jack_anim(app_t *app)
 									{
 										port->order = atoi(value);
 
-										client_t *client = _port_client_find_by_name(app, port->name);
-										if(client)
-										{
-											_hash_sort(&client->sources, _client_port_sort);
-											_hash_sort(&client->sinks, _client_port_sort);
-										}
+										client_t *client = port->client;
+										_hash_sort(&client->sources, _client_port_sort);
+										_hash_sort(&client->sinks, _client_port_sort);
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_DESIGNATION))
@@ -1458,12 +1426,9 @@ _jack_anim(app_t *app)
 								{
 									port->order = 0;
 
-									client_t *client2 = _port_client_find_by_name(app, port->name);
-									if(client2)
-									{
-										_hash_sort(&client2->sources, _client_port_sort);
-										_hash_sort(&client2->sinks, _client_port_sort);
-									}
+									client_t *client2 = port->client;
+									_hash_sort(&client2->sources, _client_port_sort);
+									_hash_sort(&client2->sinks, _client_port_sort);
 								}
 
 								if(needs_designation_update)
@@ -2421,7 +2386,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 		nk_menubar_begin(ctx);
 		{
+#ifdef JACK_HAS_METADATA_API
+			nk_layout_row_dynamic(ctx, dy, 4);
+#else
 			nk_layout_row_dynamic(ctx, dy, 2);
+#endif
 			if(nk_button_label(ctx, "AUDIO"))
 			{
 				app->type = TYPE_AUDIO;
@@ -2430,7 +2399,16 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			{
 				app->type = TYPE_MIDI;
 			}
-			// FIXME more
+#ifdef JACK_HAS_METADATA_API
+			if(nk_button_label(ctx, "CV"))
+			{
+				app->type = TYPE_CV;
+			}
+			if(nk_button_label(ctx, "OSC"))
+			{
+				app->type = TYPE_OSC;
+			}
+#endif
 
 			nk_layout_row_dynamic(ctx, dy, 4);
 			if(nk_button_label(ctx, "Audio Mixer 1x1"))
@@ -2627,9 +2605,43 @@ _ui_populate(app_t *app)
 					port_t *port = _client_port_find_by_name(client, port_name);
 					if(!port)
 					{
-						const char *port_type = jack_port_type(jport);
+						port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
+							? TYPE_AUDIO
+							: TYPE_MIDI;
+
 						port = _port_add(client, port_uuid, port_name, port_short_name,
 							port_type, is_input);
+
+#ifdef JACK_HAS_METADATA_API
+						{
+							char *value = NULL;
+							char *type = NULL;
+							jack_get_property(port->uuid, JACKEY_SIGNAL_TYPE, &value, &type);
+							if(value)
+							{
+								if(!strcmp(value, "CV"))
+									port_type = TYPE_CV;
+								jack_free(value);
+							}
+							if(type)
+								jack_free(type);
+						}
+						{
+							char *value = NULL;
+							char *type = NULL;
+							jack_get_property(port->uuid, JACKEY_EVENT_TYPES, &value, &type);
+							if(value)
+							{
+								if(strstr(value, "OSC"))
+									port_type = TYPE_OSC;
+								jack_free(value);
+							}
+							if(type)
+								jack_free(type);
+						}
+						port->type = port_type;
+						_client_refresh_type(port->client);
+#endif
 					}
 				}
 			}
@@ -2661,8 +2673,8 @@ _ui_populate(app_t *app)
 					const char *snk_name = *snk_name_ptr;
 
 					port_t *snk_port = _port_find_by_name(app, snk_name);
-					client_t *src_client = _port_client_find_by_name(app, src_name);
-					client_t *snk_client = _port_client_find_by_name(app, snk_name);
+					client_t *src_client = src_port->client;
+					client_t *snk_client = snk_port->client;
 
 					if(snk_port && src_client && snk_client)
 					{
