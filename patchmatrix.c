@@ -155,10 +155,8 @@ struct node_linking {
 };
 
 struct node_editor {
-	int initialized;
 	struct nk_rect bounds;
 	struct node *selected;
-	int show_grid;
 	struct nk_vec2 scrolling;
 	struct node_linking linking;
 };
@@ -321,9 +319,55 @@ _hash_size(hash_t *hash)
 static void
 _hash_add(hash_t *hash, void *node)
 {
-	hash->nodes = realloc(hash->nodes, (hash->size + 1)*sizeof(void *));
+	hash->nodes = realloc(hash->nodes, (hash->size + 1)*sizeof(void *)); //TODO check
 	hash->nodes[hash->size] = node;
 	hash->size++;
+}
+
+static void
+_hash_remove(hash_t *hash, void *node)
+{
+	void **nodes = NULL;
+	size_t size = 0;
+
+	HASH_FOREACH(hash, node_itr)
+	{
+		void *node_ptr = *node_itr;
+
+		if(node_ptr != node)
+		{
+			nodes = realloc(nodes, (size + 1)*sizeof(void *)); //TODO check
+			nodes[size] = node_ptr;
+			size++;
+		}
+	}
+
+	free(hash->nodes);
+	hash->nodes = nodes;
+	hash->size = size;
+}
+
+static void
+_hash_remove_cb(hash_t *hash, bool (*cb)(void *node, void *data), void *data)
+{
+	void **nodes = NULL;
+	size_t size = 0;
+
+	HASH_FOREACH(hash, node_itr)
+	{
+		void *node_ptr = *node_itr;
+
+		if(cb(node_ptr, data))
+		{
+			nodes = realloc(nodes, (size + 1)*sizeof(void *)); //TODO check
+			nodes[size] = node_ptr;
+			size++;
+		}
+	}
+
+	free(hash->nodes);
+	hash->nodes = nodes;
+	hash->size = size;
 }
 
 static void
@@ -650,30 +694,31 @@ _port_conn_add(client_conn_t *client_conn, port_t *source_port, port_t *sink_por
 	return port_conn;
 }
 
+static bool
+_port_conn_remove_cb(void *node, void *data)
+{
+	port_conn_t *dst = node;
+	port_conn_t *ref = data;
+
+	if(  (dst->source_port == ref->source_port)
+		&& (dst->sink_port == ref->sink_port) )
+	{
+		free(dst);
+		return false;
+	}
+
+	return true;
+}
+
 static void
 _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_port)
 {
-	hash_t conns;
-	memset(&conns, 0x0, sizeof(hash_t));
+	port_conn_t port_conn = {
+		.source_port = source_port,
+		.sink_port = sink_port
+	};
 
-	HASH_FOREACH(&client_conn->conns, port_conn_itr)
-	{
-		port_conn_t *port_conn = *port_conn_itr;
-
-		if(  (port_conn->source_port == source_port)
-			&& (port_conn->sink_port == sink_port) )
-		{
-			free(port_conn);
-		}
-		else
-		{
-			_hash_add(&conns, port_conn);
-		}
-	}
-
-	_hash_free(&client_conn->conns);
-	client_conn->conns = conns;
-
+	_hash_remove_cb(&client_conn->conns, _port_conn_remove_cb, &port_conn);
 	_client_conn_refresh_type(client_conn);
 }
 
@@ -738,93 +783,64 @@ _port_free(port_t *port)
 	free(port);
 }
 
+static bool
+_port_remove_cb_cb(void *node, void *data)
+{
+	port_conn_t *port_conn = node;
+	port_t *port = data;
+
+	if(  (port_conn->source_port == port)
+		|| (port_conn->sink_port == port) )
+	{
+		free(port_conn);
+		return false;
+	}
+
+	return true;
+}
+
+static void
+_client_conn_free(client_conn_t *client_conn)
+{
+	_hash_free(&client_conn->conns);
+	free(client_conn);
+}
+
+typedef struct cong_t {
+	client_t *client;
+	port_t *port;
+} cong_t;
+
+static bool
+_port_remove_cb(void *node, void *data)
+{
+	client_conn_t *client_conn = node;
+	cong_t *cong = data;
+
+	if(  (client_conn->source_client == cong->client)
+		|| (client_conn->sink_client == cong->client) )
+	{
+		_hash_remove_cb(&client_conn->conns, _port_remove_cb_cb, cong->port);
+	}
+
+	// free when empty
+	if(_hash_size(&client_conn->conns) == 0)
+		_client_conn_free(client_conn);
+
+	return true;
+}
+
 static void
 _port_remove(app_t *app, client_t *client, port_t *port)
 {
-	{
-		hash_t ports;
-		memset(&ports, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&client->ports, port_itr)
-		{
-			port_t *port2 = *port_itr;
-
-			if(port2 != port)
-				_hash_add(&ports, port2);
-		}
-
-		_hash_free(&client->ports);
-		client->ports = ports;
-	}
-
-	{
-		hash_t sinks;
-		memset(&sinks, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&client->sinks, port_itr)
-		{
-			port_t *port2 = *port_itr;
-
-			if(port2 != port)
-				_hash_add(&sinks, port2);
-		}
-
-		_hash_free(&client->sinks);
-		client->sinks = sinks;
-	}
-
-	{
-		hash_t sources;
-		memset(&sources, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&client->sources, port_itr)
-		{
-			port_t *port2 = *port_itr;
-
-			if(port2 != port)
-				_hash_add(&sources, port2);
-		}
-
-		_hash_free(&client->sources);
-		client->sources = sources;
-	}
-
-	{
-		hash_t client_conns;
-		memset(&client_conns, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&app->conns, client_conn_itr)
-		{
-			client_conn_t *client_conn = *client_conn_itr;
-
-			if(  (client_conn->source_client == client)
-				|| (client_conn->sink_client == client) )
-			{
-				hash_t port_conns;
-				memset(&port_conns, 0x0, sizeof(hash_t));
-
-				HASH_FOREACH(&client_conn->conns, port_conn_itr)
-				{
-					port_conn_t *port_conn = *port_conn_itr;
-
-					if(  (port_conn->source_port != port)
-						&& (port_conn->sink_port != port) )
-					{
-						_hash_add(&port_conns, port_conn);
-					}
-				}
-
-				_hash_free(&client_conn->conns);
-				client_conn->conns = port_conns;
-			}
-
-			_hash_add(&client_conns, client_conn);
-		}
-
-		_hash_free(&app->conns);
-		app->conns = client_conns;
-	}
-
+	cong_t cong = {
+		.client = client,
+		.port = port
+	};
+	_hash_remove(&client->ports, port);
+	_hash_remove(&client->sinks, port);
+	_hash_remove(&client->sources, port);
+	_hash_remove_cb(&app->conns, _port_remove_cb, &cong);
 	_client_refresh_type(client);
 }
 
@@ -877,56 +893,27 @@ _client_free(client_t *client)
 	free(client);
 }
 
-static void
-_client_conn_free(client_conn_t *client_conn)
+static bool
+_client_remove_cb(void *node, void *data)
 {
-	_hash_free(&client_conn->conns);
-	free(client_conn);
+	client_conn_t *client_conn;
+	client_t *client = data;
+
+	if(  (client_conn->source_client == client)
+		|| (client_conn->sink_client == client) )
+	{
+		_client_conn_free(client_conn);
+		return false;
+	}
+
+	return true;
 }
 
 static void
 _client_remove(app_t *app, client_t *client)
 {
-	{
-		hash_t conns;
-		memset(&conns, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&app->conns, client_conn_itr)
-		{
-			client_conn_t *client_conn = *client_conn_itr;
-
-			if(  (client_conn->source_client == client)
-				|| (client_conn->sink_client == client) )
-			{
-				_client_conn_free(client_conn);
-			}
-			else
-			{
-				_hash_add(&conns, client_conn);
-			}
-		}
-
-		_hash_free(&app->conns);
-		app->conns = conns;
-	}
-
-	{
-		hash_t clients;
-		memset(&clients, 0x0, sizeof(hash_t));
-
-		HASH_FOREACH(&app->clients, client_itr)
-		{
-			client_t *client2 = *client_itr;
-
-			if(client2 != client)
-			{
-				_hash_add(&clients, client2);
-			}
-		}
-
-		_hash_free(&app->clients);
-		app->clients = clients;
-	}
+	_hash_remove(&app->clients, client);
+	_hash_remove_cb(&app->conns, _client_remove_cb, client);
 }
 
 static int
@@ -1161,19 +1148,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 static void
 _mixer_remove(app_t *app, mixer_t *mixer)
 {
-	hash_t mixers;
-	memset(&mixers, 0x0, sizeof(mixer_t));
-
-	HASH_FOREACH(&app->mixers, mixer_itr)
-	{
-		mixer_t *mixer2 = *mixer_itr;
-
-		if(mixer2 != mixer)
-			_hash_add(&mixers, mixer2);
-	}
-
-	_hash_free(&app->mixers);
-	app->mixers = mixers;
+	_hash_remove(&app->mixers, mixer);
 }
 
 static void
@@ -1344,7 +1319,7 @@ _jack_anim(app_t *app)
 					{
 						char *value = NULL;
 						char *type = NULL;
-						if(!jack_uuid_empty(ev->property_change.uuid))
+						if(!jack_uuid_empty(ev->property_change.uuid) && ev->property_change.key)
 						{
 							jack_get_property(ev->property_change.uuid,
 								ev->property_change.key, &value, &type);
@@ -1523,6 +1498,8 @@ _jack_anim(app_t *app)
 							fprintf(stderr, "all properties in current JACK session deleted\n");
 							//TODO
 						}
+
+						break;
 					}
 				}
 
@@ -1856,138 +1833,6 @@ _jack_session_cb(jack_session_event_t *jev, void *arg)
 	}
 }
 
-static void
-_jack_populate(app_t *app)
-{
-	HASH_FREE(&app->clients, client_ptr)
-	{
-		client_t *client = client_ptr;
-
-		HASH_FREE(&client->ports, port_ptr)
-		{
-			port_t *port = port_ptr;
-
-			free(port->name);
-			free(port->short_name);
-			free(port->pretty_name);
-			free(port);
-		}
-		_hash_free(&client->sources);
-		_hash_free(&client->sinks);
-
-		free(client->name);
-		free(client->pretty_name);
-		free(client);
-	}
-
-	HASH_FREE(&app->conns, client_conn_ptr)
-	{
-		client_conn_t *client_conn = client_conn_ptr;
-
-		HASH_FREE(&client_conn->conns, port_conn_ptr)
-		{
-			port_conn_t *port_conn = port_conn_ptr;
-
-			free(port_conn);
-		}
-
-		free(client_conn);
-	}
-
-	const char **port_names = jack_get_ports(app->client, NULL, NULL, 0);
-	if(port_names)
-	{
-		for(const char **itr = port_names; *itr; itr++)
-		{
-			const char *port_name = *itr;
-			const char *port_short_name = strchr(port_name, ':');
-
-			if(!port_short_name)
-				continue;
-
-			char *client_name = strndup(port_name, port_short_name - port_name);
-			if(!client_name)
-				continue;
-
-			port_short_name++;
-			jack_port_t *jport = jack_port_by_name(app->client, port_name);
-			if(jport)
-			{
-				const int port_flags = jack_port_flags(jport);
-				jack_uuid_t port_uuid = jack_port_uuid(jport);
-
-				const bool is_physical = port_flags & JackPortIsPhysical;
-				const bool is_input = port_flags & JackPortIsInput;
-				const int client_flags = is_physical
-					? (is_input ? JackPortIsInput : JackPortIsOutput)
-					: JackPortIsInput | JackPortIsOutput;
-
-				client_t *client = _client_find_by_name(app, client_name, client_flags);
-				if(!client)
-					client = _client_add(app, client_name, client_flags);
-				if(client)
-				{
-					port_t *port = _client_port_find_by_name(client, port_name);
-					if(!port)
-					{
-						const char *port_type = jack_port_type(jport);
-						port = _port_add(client, port_uuid, port_name, port_short_name,
-							port_type, is_input);
-					}
-				}
-			}
-
-			free(client_name);
-		}
-
-		jack_free(port_names);
-	}
-
-	HASH_FOREACH(&app->clients, client_itr)
-	{
-		client_t *client = *client_itr;
-
-		HASH_FOREACH(&client->sources, src_itr)
-		{
-			port_t *src_port = *src_itr;
-			const char *src_name = src_port->name;
-
-			jack_port_t *src_jport = jack_port_by_name(app->client, src_name);
-			if(!src_jport)
-				continue;
-
-			const char **connections = jack_port_get_all_connections(app->client, src_jport);
-			if(connections)
-			{
-				for(const char **snk_name_ptr = connections; *snk_name_ptr; snk_name_ptr++)
-				{
-					const char *snk_name = *snk_name_ptr;
-
-					port_t *snk_port = _port_find_by_name(app, snk_name);
-					client_t *src_client = _port_client_find_by_name(app, src_name);
-					client_t *snk_client = _port_client_find_by_name(app, snk_name);
-
-					if(snk_port && src_client && snk_client)
-					{
-						client_conn_t *client_conn = _client_conn_find(app, src_client, snk_client);
-
-						if(!client_conn)
-							client_conn = _client_conn_add(app, src_client, snk_client);
-						if(client_conn)
-						{
-							client_conn->type |= src_port->type | snk_port->type;
-
-							_port_conn_add(client_conn, src_port, snk_port);
-						}
-					}
-				}
-
-				jack_free(connections);
-			}
-		}
-	}
-}
-
 static int
 _jack_init(app_t *app)
 {
@@ -2049,8 +1894,6 @@ _jack_init(app_t *app)
 	jack_set_property_change_callback(app->client, _jack_property_change_cb, app);
 #endif
 
-	_jack_populate(app);
-
 	jack_activate(app->client);
 
 	return 0;
@@ -2071,13 +1914,6 @@ _jack_deinit(app_t *app)
 
 	jack_deactivate(app->client);
 	jack_client_close(app->client);
-}
-
-static void
-node_editor_init(struct node_editor *editor)
-{
-	memset(editor, 0, sizeof(*editor));
-	editor->show_grid = nk_true;
 }
 
 static void
@@ -2577,12 +2413,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	client_t *updated = 0;
 	struct node_editor *nodedit = &app->nodedit;
 
-	if(!nodedit->initialized)
-	{
-		node_editor_init(nodedit);
-		nodedit->initialized = 1;
-	}
-
 	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
 		nk_window_set_bounds(ctx, wbounds);
@@ -2628,7 +2458,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		nk_layout_space_begin(ctx, NK_STATIC, total_space.h,
 			_hash_size(&app->clients) + _hash_size(&app->conns));
 		{
-			if(nodedit->show_grid)
 			{
 				/* display grid */
 				struct nk_rect ssize = nk_layout_space_bounds(ctx);
@@ -2727,75 +2556,158 @@ _ui_deinit(app_t *app)
 static void
 _ui_populate(app_t *app)
 {
-	const char **sources = jack_get_ports(app->client, NULL, NULL, JackPortIsOutput);
-	const char **sinks = jack_get_ports(app->client, NULL, NULL, JackPortIsInput);
-
-	app->populating = true;
-
-	/*
-	if(sources)
+	HASH_FREE(&app->clients, client_ptr)
 	{
-		for(const char **source=sources; *source; source++)
+		client_t *client = client_ptr;
+
+		HASH_FREE(&client->ports, port_ptr)
 		{
-			char *sep = strchr(*source, ':');
-			char *client_name = strndup(*source, sep - *source);
-			const char *short_name = sep + 1;
+			port_t *port = port_ptr;
 
-			if(client_name)
-			{
-				if(_db_client_find_by_name_by_name(app, client_name) < 0)
-					_db_client_add(app, client_name);
-
-				_db_port_add(app, client_name, *source, short_name);
-				free(client_name);
-			}
+			free(port->name);
+			free(port->short_name);
+			free(port->pretty_name);
+			free(port);
 		}
+		_hash_free(&client->sources);
+		_hash_free(&client->sinks);
+
+		free(client->name);
+		free(client->pretty_name);
+		free(client);
 	}
-	*/
 
-	/*
-	if(sinks)
+	HASH_FREE(&app->conns, client_conn_ptr)
 	{
-		for(const char **sink=sinks; *sink; sink++)
+		client_conn_t *client_conn = client_conn_ptr;
+
+		HASH_FREE(&client_conn->conns, port_conn_ptr)
 		{
-			char *sep = strchr(*sink, ':');
-			char *client_name = strndup(*sink, sep - *sink);
-			const char *short_name = sep + 1;
+			port_conn_t *port_conn = port_conn_ptr;
 
-			if(client_name)
-			{
-				if(_db_client_find_by_name_by_name(app, client_name) < 0)
-					_db_client_add(app, client_name);
-
-				_db_port_add(app, client_name, *sink, short_name);
-				free(client_name);
-			}
+			free(port_conn);
 		}
-		free(sinks);
-	}
-	*/
 
-	/*
-	if(sources)
+		free(client_conn);
+	}
+
+	const char **port_names = jack_get_ports(app->client, NULL, NULL, 0);
+	if(port_names)
 	{
-		for(const char **source=sources; *source; source++)
+		for(const char **itr = port_names; *itr; itr++)
 		{
-			const jack_port_t *port = jack_port_by_name(app->client, *source);
-			const char **targets = jack_port_get_all_connections(app->client, port);
-			if(targets)
+			const char *port_name = *itr;
+			const char *port_short_name = strchr(port_name, ':');
+
+			if(!port_short_name)
+				continue;
+
+			char *client_name = strndup(port_name, port_short_name - port_name);
+			if(!client_name)
+				continue;
+
+			port_short_name++;
+			jack_port_t *jport = jack_port_by_name(app->client, port_name);
+			if(jport)
 			{
-				for(const char **target=targets; *target; target++)
+				const int port_flags = jack_port_flags(jport);
+				jack_uuid_t port_uuid = jack_port_uuid(jport);
+
+				const bool is_physical = port_flags & JackPortIsPhysical;
+				const bool is_input = port_flags & JackPortIsInput;
+				const int client_flags = is_physical
+					? (is_input ? JackPortIsInput : JackPortIsOutput)
+					: JackPortIsInput | JackPortIsOutput;
+
+				client_t *client = _client_find_by_name(app, client_name, client_flags);
+				if(!client)
+					client = _client_add(app, client_name, client_flags);
+				if(client)
 				{
-					_db_connection_add(app, *source, *target);
+					port_t *port = _client_port_find_by_name(client, port_name);
+					if(!port)
+					{
+						const char *port_type = jack_port_type(jport);
+						port = _port_add(client, port_uuid, port_name, port_short_name,
+							port_type, is_input);
+					}
 				}
-				free(targets);
+			}
+
+			free(client_name);
+		}
+
+		jack_free(port_names);
+	}
+
+	HASH_FOREACH(&app->clients, client_itr)
+	{
+		client_t *client = *client_itr;
+
+		HASH_FOREACH(&client->sources, src_itr)
+		{
+			port_t *src_port = *src_itr;
+			const char *src_name = src_port->name;
+
+			jack_port_t *src_jport = jack_port_by_name(app->client, src_name);
+			if(!src_jport)
+				continue;
+
+			const char **connections = jack_port_get_all_connections(app->client, src_jport);
+			if(connections)
+			{
+				for(const char **snk_name_ptr = connections; *snk_name_ptr; snk_name_ptr++)
+				{
+					const char *snk_name = *snk_name_ptr;
+
+					port_t *snk_port = _port_find_by_name(app, snk_name);
+					client_t *src_client = _port_client_find_by_name(app, src_name);
+					client_t *snk_client = _port_client_find_by_name(app, snk_name);
+
+					if(snk_port && src_client && snk_client)
+					{
+						client_conn_t *client_conn = _client_conn_find(app, src_client, snk_client);
+
+						if(!client_conn)
+							client_conn = _client_conn_add(app, src_client, snk_client);
+						if(client_conn)
+						{
+							client_conn->type |= src_port->type | snk_port->type;
+
+							_port_conn_add(client_conn, src_port, snk_port);
+						}
+					}
+				}
+
+				jack_free(connections);
 			}
 		}
-		free(sources);
 	}
-	*/
+}
 
-	app->populating = false;
+static void
+_ui_depopulate(app_t *app)
+{
+	HASH_FREE(&app->conns, client_conn_ptr)
+	{
+		client_conn_t *client_conn = client_conn_ptr;
+
+		_client_conn_free(client_conn);
+	}
+
+	HASH_FREE(&app->clients, client_ptr)
+	{
+		client_t *client = client_ptr;
+
+		_client_free(client);
+	}
+
+	HASH_FREE(&app->mixers, mixer_ptr)
+	{
+		mixer_t *mixer = mixer_ptr;
+
+		_mixer_free(mixer);
+	}
 }
 
 static void
@@ -2927,10 +2839,14 @@ main(int argc, char **argv)
 	}
 
 cleanup:
+	_ui_depopulate(&app);
 	_ui_deinit(&app);
 	_jack_deinit(&app);
 	if(app.from_jack)
+	{
+		_jack_anim(&app); // drain ringbuffer
 		varchunk_free(app.from_jack);
+	}
 
 	fprintf(stderr, "bye from PatchMatrix\n");
 
