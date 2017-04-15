@@ -26,12 +26,6 @@ _jack_init(app_t *app);
 void
 _jack_deinit(app_t *app);
 
-void
-_jack_populate(app_t *app);
-
-void
-_jack_depopulate(app_t *app);
-
 bool
 _jack_anim(app_t *app);
 

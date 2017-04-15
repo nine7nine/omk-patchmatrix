@@ -264,8 +264,6 @@ struct _app_t {
 	const char *server_name;
 	const char *session_id;
 
-	bool needs_refresh;
-
 	nk_pugl_window_t win;
 
 	int source_n;
@@ -315,9 +313,12 @@ _hash_size(hash_t *hash)
 static void
 _hash_add(hash_t *hash, void *node)
 {
-	hash->nodes = realloc(hash->nodes, (hash->size + 1)*sizeof(void *)); //TODO check
-	hash->nodes[hash->size] = node;
-	hash->size++;
+	hash->nodes = realloc(hash->nodes, (hash->size + 1)*sizeof(void *));
+	if(hash->nodes)
+	{
+		hash->nodes[hash->size] = node;
+		hash->size++;
+	}
 }
 
 static void
@@ -332,9 +333,12 @@ _hash_remove(hash_t *hash, void *node)
 
 		if(node_ptr != node)
 		{
-			nodes = realloc(nodes, (size + 1)*sizeof(void *)); //TODO check
-			nodes[size] = node_ptr;
-			size++;
+			nodes = realloc(nodes, (size + 1)*sizeof(void *));
+			if(nodes)
+			{
+				nodes[size] = node_ptr;
+				size++;
+			}
 		}
 	}
 
@@ -355,9 +359,12 @@ _hash_remove_cb(hash_t *hash, bool (*cb)(void *node, void *data), void *data)
 
 		if(cb(node_ptr, data))
 		{
-			nodes = realloc(nodes, (size + 1)*sizeof(void *)); //TODO check
-			nodes[size] = node_ptr;
-			size++;
+			nodes = realloc(nodes, (size + 1)*sizeof(void *));
+			if(nodes)
+			{
+				nodes[size] = node_ptr;
+				size++;
+			}
 		}
 	}
 

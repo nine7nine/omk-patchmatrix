@@ -107,14 +107,11 @@ main(int argc, char **argv)
 	if(!(app.from_jack = varchunk_new(0x10000, true)))
 		goto cleanup;
 
-	if(_jack_init(&app))
-		goto cleanup;
-
 	if(_ui_init(&app))
 		goto cleanup;
 
-	_jack_populate(&app);
-	app.needs_refresh = true;
+	if(_jack_init(&app))
+		goto cleanup;
 
 	while(!atomic_load_explicit(&app.done, memory_order_acquire))
 	{
@@ -128,14 +125,15 @@ main(int argc, char **argv)
 	}
 
 cleanup:
-	_jack_depopulate(&app);
-	_ui_deinit(&app);
 	_jack_deinit(&app);
+
 	if(app.from_jack)
 	{
 		_jack_anim(&app); // drain ringbuffer
 		varchunk_free(app.from_jack);
 	}
+
+	_ui_deinit(&app);
 
 	fprintf(stderr, "bye from PatchMatrix\n");
 
