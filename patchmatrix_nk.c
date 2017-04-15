@@ -643,7 +643,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				&& nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 			{
 				nodedit->linking.active = nk_false;
-				fprintf(stdout, "linking failed\n");
 			}
 
 			HASH_FOREACH(&app->conns, client_conn_itr)

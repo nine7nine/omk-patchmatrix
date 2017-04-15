@@ -276,17 +276,12 @@ _jack_anim(app_t *app)
 				}
 				else
 				{
-					client_t *client = _client_find_by_name(app, ev->client_register.name, JackPortIsInput);
-					if(client)
+					client_t *client;
+					while((client = _client_find_by_name(app, ev->client_register.name,
+						JackPortIsInput | JackPortIsOutput)))
 					{
 						_client_remove(app, client);
-						_client_free(client);
-					}
-					client = _client_find_by_name(app, ev->client_register.name, JackPortIsOutput);
-					if(client)
-					{
-						_client_remove(app, client);
-						_client_free(client);
+						_client_free(app, client);
 					}
 				}
 
@@ -298,53 +293,23 @@ _jack_anim(app_t *app)
 
 			case EVENT_PORT_REGISTER:
 			{
-				const jack_port_t *jport = jack_port_by_id(app->client, ev->port_register.id);
+				jack_port_t *jport = jack_port_by_id(app->client, ev->port_register.id);
 				if(jport)
 				{
-					const char *port_name = jack_port_name(jport);
-					char *sep = strchr(port_name, ':');
-					char *client_name = strndup(port_name, sep - port_name);
-					const char *port_short_name = sep + 1;
-
-					const int port_flags = jack_port_flags(jport);
-					const bool is_physical = port_flags & JackPortIsPhysical;
-					const bool is_input = port_flags & JackPortIsInput;
-					const int client_flags = is_physical
-						? (is_input ? JackPortIsInput : JackPortIsOutput)
-						: JackPortIsInput | JackPortIsOutput;
-
-					if(client_name)
+					if(ev->port_register.state)
 					{
-						client_t *client = _client_find_by_name(app, client_name, client_flags);
-						if(!client)
-							client = _client_add(app, client_name, client_flags);
-						if(client)
+						port_t *port = _port_find_by_body(app, jport);
+						if(!port)
+							port = _port_add(app, jport);
+					}
+					else
+					{
+						port_t *port = _port_find_by_body(app, jport);
+						if(port)
 						{
-							if(ev->port_register.state)
-							{
-								port_t *port = _port_find_by_name(app, port_name); // e.g. MPlayer reregisters ports without first unregistering them
-								if(!port)
-								{
-									jack_uuid_t port_uuid = jack_port_uuid(jport);
-									port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
-										? TYPE_AUDIO
-										: TYPE_MIDI;
-
-									port = _port_add(client, port_uuid, port_name, port_short_name, port_type, is_input);
-								}
-							}
-							else
-							{
-								port_t *port = _port_find_by_name(app, port_name);
-								if(port)
-								{
-									_port_remove(app, port);
-									_port_free(port);
-								}
-							}
+							_port_remove(app, port);
+							_port_free(port);
 						}
-
-						free(client_name); // strdup
 					}
 				}
 
@@ -353,38 +318,21 @@ _jack_anim(app_t *app)
 
 			case EVENT_PORT_CONNECT:
 			{
-				const jack_port_t *jport_source = jack_port_by_id(app->client, ev->port_connect.id_source);
-				const jack_port_t *jport_sink = jack_port_by_id(app->client, ev->port_connect.id_sink);
-				if(jport_source && jport_sink)
+				jack_port_t *source_jport = jack_port_by_id(app->client, ev->port_connect.id_source);
+				jack_port_t *sink_jport = jack_port_by_id(app->client, ev->port_connect.id_sink);
+				if(source_jport && sink_jport)
 				{
-					const char *name_source = jack_port_name(jport_source);
-					const char *name_sink = jack_port_name(jport_sink);
-
-					port_t *port_source = _port_find_by_name(app, name_source);
-					port_t *port_sink = _port_find_by_name(app, name_sink);
-
-					client_t *client_source = port_source->client;
-					client_t *client_sink = port_sink->client;
-
-					const char *port_type = jack_port_type(jport_source);
-
-					if(port_source && port_sink && client_source && client_sink)
+					port_t *source_port = _port_find_by_body(app, source_jport);
+					port_t *sink_port = _port_find_by_body(app, sink_jport);
+					if(source_port && sink_port)
 					{
-						client_conn_t *client_conn = _client_conn_find(app, client_source, client_sink);
-						if(!client_conn)
-							client_conn = _client_conn_add(app, client_source, client_sink);
+						client_conn_t *client_conn = _client_conn_find_or_add(app, source_port->client, sink_port->client);
 						if(client_conn)
 						{
-							if(!strcmp(port_type, JACK_DEFAULT_AUDIO_TYPE))
-								client_conn->type |= TYPE_AUDIO;
-							else if(!strcmp(port_type, JACK_DEFAULT_MIDI_TYPE))
-								client_conn->type |= TYPE_MIDI;
-							//FIXME more types
-
 							if(ev->port_connect.state)
-								_port_conn_add(client_conn, port_source, port_sink);
+								_port_conn_add(client_conn, source_port, sink_port);
 							else
-								_port_conn_remove(client_conn, port_source, port_sink);
+								_port_conn_remove(client_conn, source_port, sink_port);
 						}
 					}
 				}
@@ -421,7 +369,8 @@ _jack_anim(app_t *app)
 										free(port->pretty_name);
 										port->pretty_name = strdup(value);
 									}
-									else if((client = _client_find_by_uuid(app, ev->property_change.uuid, JackPortIsInput | JackPortIsOutput))) //FIXME
+									else if((client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsInput | JackPortIsOutput)))
 									{
 										free(client->pretty_name);
 										client->pretty_name = strdup(value);
@@ -434,6 +383,12 @@ _jack_anim(app_t *app)
 									{
 										port->type = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
 										_client_refresh_type(port->client);
+										HASH_FOREACH(&app->conns, client_conn_itr)
+										{
+											client_conn_t *client_conn = *client_conn_itr;
+
+											_client_conn_refresh_type(client_conn);
+										}
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_SIGNAL_TYPE))
@@ -443,6 +398,12 @@ _jack_anim(app_t *app)
 									{
 										port->type = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
 										_client_refresh_type(port->client);
+										HASH_FOREACH(&app->conns, client_conn_itr)
+										{
+											client_conn_t *client_conn = *client_conn_itr;
+
+											_client_conn_refresh_type(client_conn);
+										}
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_ORDER))
@@ -451,9 +412,7 @@ _jack_anim(app_t *app)
 									if(port)
 									{
 										port->order = atoi(value);
-
-										client_t *client = port->client;
-										_client_sort(client);
+										_client_sort(port->client);
 									}
 								}
 								else if(!strcmp(ev->property_change.key, JACKEY_DESIGNATION))
@@ -527,7 +486,14 @@ _jack_anim(app_t *app)
 										midi = !strcmp(jack_port_type(jport), JACK_DEFAULT_MIDI_TYPE) ? true : false;
 
 									port->type = midi ? TYPE_MIDI : TYPE_AUDIO;
-									//FIXME adjust types of client, client_conn
+
+									_client_refresh_type(port->client);
+									HASH_FOREACH(&app->conns, client_conn_itr)
+									{
+										client_conn_t *client_conn = *client_conn_itr;
+
+										_client_conn_refresh_type(client_conn);
+									}
 								}
 
 								if(needs_pretty_update)
@@ -550,7 +516,8 @@ _jack_anim(app_t *app)
 									//FIXME do something?
 								}
 							}
-							else if((client = _client_find_by_uuid(app, ev->property_change.uuid, JackPortIsInput | JackPortIsOutput))) //FIXME
+							else if((client = _client_find_by_uuid(app, ev->property_change.uuid,
+								JackPortIsInput | JackPortIsOutput)))
 							{
 								bool needs_pretty_update = false;
 
@@ -663,17 +630,11 @@ _jack_anim(app_t *app)
 
 					const char *name = ev->port_rename.new_name;
 					char *sep = strchr(name, ':');
-					char *client_name = strndup(name, sep - name);
 					const char *short_name = sep + 1;
 
-					if(client_name)
-					{
-						client_t *client = _client_find_by_name(app, client_name, JackPortIsInput | JackPortIsOutput); //FIXME
-						if(client)
-							_client_sort(client);
-
-						free(client_name); // strdup
-					}
+					port->name = strdup(name);
+					port->short_name = strdup(short_name);
+					_client_sort(port->client);
 				}
 
 				if(ev->port_rename.old_name)
@@ -889,7 +850,6 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 }
 #endif
 
-// non-rt
 static void
 _jack_session_cb(jack_session_event_t *jev, void *arg)
 {
@@ -916,77 +876,10 @@ _jack_populate(app_t *app)
 	for(const char **itr = port_names; *itr; itr++)
 	{
 		const char *port_name = *itr;
-		const char *port_short_name = strchr(port_name, ':');
-
-		if(!port_short_name)
-			continue;
-
-		char *client_name = strndup(port_name, port_short_name - port_name);
-		if(!client_name)
-			continue;
-
-		port_short_name++;
 		jack_port_t *jport = jack_port_by_name(app->client, port_name);
+
 		if(jport)
-		{
-			const int port_flags = jack_port_flags(jport);
-			jack_uuid_t port_uuid = jack_port_uuid(jport);
-
-			const bool is_physical = port_flags & JackPortIsPhysical;
-			const bool is_input = port_flags & JackPortIsInput;
-			const int client_flags = is_physical
-				? (is_input ? JackPortIsInput : JackPortIsOutput)
-				: JackPortIsInput | JackPortIsOutput;
-
-			client_t *client = _client_find_by_name(app, client_name, client_flags);
-			if(!client)
-				client = _client_add(app, client_name, client_flags);
-			if(client)
-			{
-				port_t *port = _client_find_port_by_name(client, port_name);
-				if(!port)
-				{
-					port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
-						? TYPE_AUDIO
-						: TYPE_MIDI;
-
-					port = _port_add(client, port_uuid, port_name, port_short_name,
-						port_type, is_input);
-
-#ifdef JACK_HAS_METADATA_API
-					{
-						char *value = NULL;
-						char *type = NULL;
-						jack_get_property(port->uuid, JACKEY_SIGNAL_TYPE, &value, &type);
-						if(value)
-						{
-							if(!strcmp(value, "CV"))
-								port_type = TYPE_CV;
-							jack_free(value);
-						}
-						if(type)
-							jack_free(type);
-					}
-					{
-						char *value = NULL;
-						char *type = NULL;
-						jack_get_property(port->uuid, JACKEY_EVENT_TYPES, &value, &type);
-						if(value)
-						{
-							if(strstr(value, "OSC"))
-								port_type = TYPE_OSC;
-							jack_free(value);
-						}
-						if(type)
-							jack_free(type);
-					}
-					port->type = port_type;
-					_client_refresh_type(port->client);
-#endif
-				}
-			}
-		}
-		free(client_name);
+			_port_add(app, jport);
 	}
 	jack_free(port_names);
 
@@ -994,39 +887,25 @@ _jack_populate(app_t *app)
 	{
 		client_t *client = *client_itr;
 
-		HASH_FOREACH(&client->sources, src_itr)
+		HASH_FOREACH(&client->sources, source_port_itr)
 		{
-			port_t *src_port = *src_itr;
-			const char *src_name = src_port->name;
+			port_t *source_port = *source_port_itr;
 
-			jack_port_t *src_jport = jack_port_by_name(app->client, src_name);
-			if(!src_jport)
-				continue;
-
-			const char **connections = jack_port_get_all_connections(app->client, src_jport);
+			const char **connections = jack_port_get_all_connections(app->client, source_port->body);
 			if(!connections)
 				continue;
 
-			for(const char **snk_name_ptr = connections; *snk_name_ptr; snk_name_ptr++)
+			for(const char **sink_name_ptr = connections; *sink_name_ptr; sink_name_ptr++)
 			{
-				const char *snk_name = *snk_name_ptr;
+				const char *sink_name = *sink_name_ptr;
 
-				port_t *snk_port = _port_find_by_name(app, snk_name);
-				client_t *src_client = src_port->client;
-				client_t *snk_client = snk_port->client;
+				port_t *sink_port = _port_find_by_name(app, sink_name);
+				if(!sink_port)
+					continue;
 
-				if(snk_port && src_client && snk_client)
-				{
-					client_conn_t *client_conn = _client_conn_find(app, src_client, snk_client);
-
-					if(!client_conn)
-						client_conn = _client_conn_add(app, src_client, snk_client);
-					if(client_conn)
-					{
-						_port_conn_add(client_conn, src_port, snk_port);
-						_client_conn_refresh_type(client_conn);
-					}
-				}
+				client_conn_t *client_conn = _client_conn_find_or_add(app, source_port->client,  sink_port->client);
+				if(client_conn)
+					_port_conn_add(client_conn, source_port, sink_port);
 			}
 			jack_free(connections);
 		}
@@ -1047,14 +926,7 @@ _jack_depopulate(app_t *app)
 	{
 		client_t *client = client_ptr;
 
-		_client_free(client);
-	}
-
-	HASH_FREE(&app->mixers, mixer_ptr)
-	{
-		mixer_t *mixer = mixer_ptr;
-
-		_mixer_free(mixer);
+		_client_free(app, client);
 	}
 }
 

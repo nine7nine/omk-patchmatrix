@@ -70,7 +70,7 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 }
 
 void
-_client_free(client_t *client)
+_client_free(app_t *app, client_t *client)
 {
 	HASH_FREE(&client->ports, port_ptr)
 	{
@@ -81,6 +81,12 @@ _client_free(client_t *client)
 
 	_hash_free(&client->sources);
 	_hash_free(&client->sinks);
+
+	if(client->mixer)
+	{
+		_mixer_remove(app, client->mixer);
+		_mixer_free(client->mixer);
+	}
 
 	free(client->name);
 	free(client->pretty_name);
@@ -117,7 +123,7 @@ _client_find_by_name(app_t *app, const char *client_name, int client_flags)
 	{
 		client_t *client = *client_itr;
 
-		if(!strcmp(client->name, client_name) && (client->flags == client_flags))
+		if(!strcmp(client->name, client_name) && (client->flags & client_flags))
 		{
 			return client;
 		}
@@ -133,7 +139,7 @@ _client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags)
 	{
 		client_t *client = *client_itr;
 
-		if(!jack_uuid_compare(client->uuid, client_uuid) && (client->flags == client_flags))
+		if(!jack_uuid_compare(client->uuid, client_uuid) && (client->flags & client_flags))
 		{
 			return client;
 		}
@@ -221,7 +227,13 @@ _client_conn_add(app_t *app, client_t *source_client, client_t *sink_client)
 void
 _client_conn_free(client_conn_t *client_conn)
 {
-	_hash_free(&client_conn->conns);
+	HASH_FREE(&client_conn->conns, port_conn_ptr)
+	{
+		port_conn_t *port_conn = port_conn_ptr;
+
+		_port_conn_free(port_conn);
+	}
+
 	free(client_conn);
 }
 
@@ -247,6 +259,16 @@ _client_conn_find(app_t *app, client_t *source_client, client_t *sink_client)
 	}
 
 	return NULL;
+}
+
+client_conn_t *
+_client_conn_find_or_add(app_t *app, client_t *source_client, client_t *sink_client)
+{
+	client_conn_t *client_conn = _client_conn_find(app, source_client, sink_client);
+	if(!client_conn)
+		client_conn = _client_conn_add(app, source_client, sink_client);
+
+	return client_conn;
 }
 
 void
@@ -276,6 +298,7 @@ _port_conn_add(client_conn_t *client_conn, port_t *source_port, port_t *sink_por
 		_hash_add(&client_conn->conns, port_conn);
 
 		client_conn->type |= source_port->type | sink_port->type;
+		_client_conn_refresh_type(client_conn);
 	}
 
 	return port_conn;
@@ -335,31 +358,94 @@ _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_
 // port
 
 port_t *
-_port_add(client_t *client, jack_uuid_t port_uuid,
-	const char *port_name, const char *port_short_name, port_type_t port_type,
-	bool is_input)
+_port_add(app_t *app, jack_port_t *jport)
 {
+	const int port_flags = jack_port_flags(jport);
+	const bool is_physical = port_flags & JackPortIsPhysical;
+	const bool is_input = port_flags & JackPortIsInput;
+	const int client_flags = is_physical
+		? (is_input ? JackPortIsInput : JackPortIsOutput)
+		: JackPortIsInput | JackPortIsOutput;
+	const port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
+		? TYPE_AUDIO
+		: TYPE_MIDI;
+
+	const char *port_name = jack_port_name(jport);
+	char *sep = strchr(port_name, ':');
+	if(!sep)
+		return NULL;
+
+	const char *port_short_name = sep + 1;
+	char *client_name = strndup(port_name, sep - port_name);
+	if(!client_name)
+		return NULL;
+
+	client_t *client = _client_find_by_name(app, client_name, client_flags);
+	if(!client)
+		client = _client_add(app, client_name, client_flags);
+	free(client_name);
+	if(!client)
+		return NULL;
+
 	port_t *port = calloc(1, sizeof(port_t));
 	if(port)
 	{
+		port->body = jport;
 		port->client = client;
-		port->uuid = port_uuid;
+		port->uuid = jack_port_uuid(jport);
 		port->name = strdup(port_name);
 		port->short_name = strdup(port_short_name);
-		port->pretty_name = NULL; //FIXME
 		port->type = port_type;
 		port->designation = DESIGNATION_NONE;
+
+#ifdef JACK_HAS_METADATA_API
+		{
+			char *value = NULL;
+			char *type = NULL;
+			jack_get_property(port->uuid, JACKEY_SIGNAL_TYPE, &value, &type);
+			if(value)
+			{
+				if(!strcmp(value, "CV"))
+					port->type = TYPE_CV;
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+		{
+			char *value = NULL;
+			char *type = NULL;
+			jack_get_property(port->uuid, JACKEY_EVENT_TYPES, &value, &type);
+			if(value)
+			{
+				if(strstr(value, "OSC"))
+					port->type = TYPE_OSC; //FIXME |=
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+		{
+			char *value = NULL;
+			char *type = NULL;
+			jack_get_property(port->uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+			if(value)
+			{
+				port->pretty_name = strdup(value);
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+#endif
+
 		_hash_add(&client->ports, port);
 		if(is_input)
 			_hash_add(&client->sinks, port);
 		else
 			_hash_add(&client->sources, port);
 		_client_sort(client);
-
-		if(is_input)
-			client->sink_type |= port->type;
-		else
-			client->source_type |= port->type;
+		_client_refresh_type(client);
 	}
 
 	return port;
@@ -457,6 +543,27 @@ _port_find_by_uuid(app_t *app, jack_uuid_t port_uuid)
 			port_t *port = *port_itr;
 
 			if(!jack_uuid_compare(port->uuid, port_uuid))
+			{
+				return port;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+port_t *
+_port_find_by_body(app_t *app, jack_port_t *body)
+{
+	HASH_FOREACH(&app->clients, client_itr)
+	{
+		client_t *client = *client_itr;
+
+		HASH_FOREACH(&client->ports, port_itr)
+		{
+			port_t *port = *port_itr;
+
+			if(port->body == body)
 			{
 				return port;
 			}

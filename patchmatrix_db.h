@@ -25,7 +25,7 @@ client_t *
 _client_add(app_t *app, const char *client_name, int client_flags);
 
 void
-_client_free(client_t *client);
+_client_free(app_t *app, client_t *client);
 
 bool
 _client_remove_cb(void *node, void *data);
@@ -61,6 +61,9 @@ _client_conn_remove(app_t *app, client_conn_t *client_conn);
 client_conn_t *
 _client_conn_find(app_t *app, client_t *source_client, client_t *sink_client);
 
+client_conn_t *
+_client_conn_find_or_add(app_t *app, client_t *source_client, client_t *sink_client);
+
 void
 _client_conn_refresh_type(client_conn_t *client_conn);
 
@@ -79,9 +82,7 @@ _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_
 
 // port
 port_t *
-_port_add(client_t *client, jack_uuid_t port_uuid,
-	const char *port_name, const char *port_short_name, port_type_t port_type,
-	bool is_input);
+_port_add(app_t *app, jack_port_t *jport);
 
 void
 _port_free(port_t *port);
@@ -94,6 +95,9 @@ _port_find_by_name(app_t *app, const char *port_name);
 
 port_t *
 _port_find_by_uuid(app_t *app, jack_uuid_t port_uuid);
+
+port_t *
+_port_find_by_body(app_t *app, jack_port_t *body);
 
 // mixer
 mixer_t *

@@ -144,6 +144,7 @@ struct _monitor_t {
 };
 
 struct _port_t {
+	jack_port_t *body;
 	client_t *client;
 	jack_uuid_t uuid;
 	char *name;
