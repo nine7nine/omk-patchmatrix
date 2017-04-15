@@ -275,6 +275,15 @@ struct _app_t {
 	hash_t mixers;
 
 	struct node_editor nodedit;
+
+	struct {
+		struct nk_image audio;
+		struct nk_image midi;
+#ifdef JACK_HAS_METADATA_API
+		struct nk_image cv;
+		struct nk_image osc;
+#endif
+	} icons;
 };
 
 static atomic_bool done = ATOMIC_VAR_INIT(false);
@@ -2391,20 +2400,20 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #else
 			nk_layout_row_dynamic(ctx, dy, 2);
 #endif
-			if(nk_button_label(ctx, "AUDIO"))
+			if(nk_button_image_label(ctx, app->icons.audio, "AUDIO", NK_TEXT_RIGHT))
 			{
 				app->type = TYPE_AUDIO;
 			}
-			if(nk_button_label(ctx, "MIDI"))
+			if(nk_button_image_label(ctx, app->icons.midi, "MIDI", NK_TEXT_RIGHT))
 			{
 				app->type = TYPE_MIDI;
 			}
 #ifdef JACK_HAS_METADATA_API
-			if(nk_button_label(ctx, "CV"))
+			if(nk_button_image_label(ctx, app->icons.cv, "CV", NK_TEXT_RIGHT))
 			{
 				app->type = TYPE_CV;
 			}
-			if(nk_button_label(ctx, "OSC"))
+			if(nk_button_image_label(ctx, app->icons.osc, "OSC", NK_TEXT_RIGHT))
 			{
 				app->type = TYPE_OSC;
 			}
@@ -2498,6 +2507,18 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	nk_end(ctx);
 }
 
+static struct nk_image
+_icon_load(app_t *app, const char *path)
+{
+	return nk_pugl_icon_load(&app->win, path);
+}
+
+static void
+_icon_unload(app_t *app, struct nk_image img)
+{
+	nk_pugl_icon_unload(&app->win, img);
+}
+
 static int
 _ui_init(app_t *app)
 {
@@ -2521,12 +2542,26 @@ _ui_init(app_t *app)
 	nk_pugl_init(&app->win);
 	nk_pugl_show(&app->win);
 
+	app->icons.audio= _icon_load(app, PATCHMATRIX_DATA_DIR"audio.png");
+	app->icons.midi = _icon_load(app, PATCHMATRIX_DATA_DIR"midi.png");
+#ifdef JACK_HAS_METADATA_API
+	app->icons.cv = _icon_load(app, PATCHMATRIX_DATA_DIR"cv.png");
+	app->icons.osc = _icon_load(app, PATCHMATRIX_DATA_DIR"osc.png");
+#endif
+
 	return 0;
 }
 
 static void
 _ui_deinit(app_t *app)
 {
+	_icon_unload(app, app->icons.audio);
+	_icon_unload(app, app->icons.midi);
+#ifdef JACK_HAS_METADATA_API
+	_icon_unload(app, app->icons.cv);
+	_icon_unload(app, app->icons.osc);
+#endif
+
 	nk_pugl_hide(&app->win);
 	nk_pugl_shutdown(&app->win);
 }
