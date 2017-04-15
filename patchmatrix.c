@@ -1976,7 +1976,7 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	/* output connector */
 	if(client->source_type & app->type)
 	{
-		const float cx = client->pos.x - scrolling.x + dim.x/2;
+		const float cx = client->pos.x - scrolling.x + dim.x/2 + 2*cw;
 		const float cy = client->pos.y - scrolling.y;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
@@ -2011,9 +2011,9 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	{
 		const float cx = client->mixer
 			? client->pos.x - scrolling.x
-			: client->pos.x - scrolling.x - dim.x/2;
+			: client->pos.x - scrolling.x - dim.x/2 - 2*cw;
 		const float cy = client->mixer
-			? client->pos.y - scrolling.y - dim.y/2
+			? client->pos.y - scrolling.y - dim.y/2 - 2*cw
 			: client->pos.y - scrolling.y;
 		const struct nk_rect circle = nk_rect(
 			cx - cw, cy - cw,
@@ -2371,13 +2371,13 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		? nk_rgb(200, 200, 200)
 		: nk_rgb(100, 100, 100);
 
-	const float l0x = src->pos.x - scrolling.x + src->dim.x/2;
+	const float l0x = src->pos.x - scrolling.x + src->dim.x/2 + cs*2;
 	const float l0y = src->pos.y - scrolling.y;
 	const float l1x = snk->mixer
 		? snk->pos.x - scrolling.x
-		: snk->pos.x - scrolling.x - snk->dim.x/2;
+		: snk->pos.x - scrolling.x - snk->dim.x/2 - cs*2;
 	const float l1y = snk->mixer
-		? snk->pos.y - scrolling.y - snk->dim.y/2
+		? snk->pos.y - scrolling.y - snk->dim.y/2 - cs*2
 		: snk->pos.y - scrolling.y;
 
 	const float bend = 50.f;
