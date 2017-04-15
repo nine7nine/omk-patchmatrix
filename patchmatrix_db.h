@@ -106,7 +106,4 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks);
 void
 _mixer_free(mixer_t *mixer);
 
-void
-_mixer_remove(app_t *app, mixer_t *mixer);
-
 #endif

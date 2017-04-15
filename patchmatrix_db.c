@@ -83,10 +83,7 @@ _client_free(app_t *app, client_t *client)
 	_hash_free(&client->sinks);
 
 	if(client->mixer)
-	{
-		_mixer_remove(app, client->mixer);
 		_mixer_free(client->mixer);
-	}
 
 	free(client->name);
 	free(client->pretty_name);
@@ -616,7 +613,6 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 
 		jack_set_process_callback(mixer->client, _audio_mixer_process, mixer);
 		jack_activate(mixer->client);
-		_hash_add(&app->mixers, mixer);
 
 		const char *client_name = jack_get_client_name(mixer->client);
 		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
@@ -649,10 +645,4 @@ _mixer_free(mixer_t *mixer)
 	}
 
 	free(mixer);
-}
-
-void
-_mixer_remove(app_t *app, mixer_t *mixer)
-{
-	_hash_remove(&app->mixers, mixer);
 }

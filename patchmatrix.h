@@ -273,7 +273,6 @@ struct _app_t {
 	float nxt_default;
 	hash_t clients;
 	hash_t conns;
-	hash_t mixers;
 
 	struct node_editor nodedit;
 
