@@ -117,6 +117,9 @@ endif()
 # binary
 add_executable(patchmatrix
 	patchmatrix.c
+	patchmatrix_jack.c
+	patchmatrix_nk.c
+	patchmatrix_db.c
 	${TAR_UI})
 target_link_libraries(patchmatrix ${LIBS})
 install(TARGETS patchmatrix DESTINATION ${PATCHMATRIX_BIN_DIR})
