@@ -260,14 +260,10 @@ struct _app_t {
 	// varchunk
 	varchunk_t *from_jack;
 
-	bool populating;
 	const char *server_name;
 	const char *session_id;
 
 	nk_pugl_window_t win;
-
-	int source_n;
-	int sink_n;
 
 	float dy;
 
