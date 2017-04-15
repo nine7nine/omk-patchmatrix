@@ -807,7 +807,10 @@ _port_remove_cb(void *node, void *data)
 
 	// free when empty
 	if(_hash_size(&client_conn->conns) == 0)
+	{
 		_client_conn_free(client_conn);
+		return false;
+	}
 
 	return true;
 }
