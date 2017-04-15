@@ -1240,12 +1240,16 @@ _jack_anim(app_t *app)
 						{
 							if(ev->port_register.state)
 							{
-								jack_uuid_t port_uuid = jack_port_uuid(jport);
-								port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
-									? TYPE_AUDIO
-									: TYPE_MIDI;
+								port_t *port = _port_find_by_name(app, port_name); // e.g. MPlayer reregisters ports without first unregistering them
+								if(!port)
+								{
+									jack_uuid_t port_uuid = jack_port_uuid(jport);
+									port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
+										? TYPE_AUDIO
+										: TYPE_MIDI;
 
-								port_t *port = _port_add(client, port_uuid, port_name, port_short_name, port_type, is_input);
+									port = _port_add(client, port_uuid, port_name, port_short_name, port_type, is_input);
+								}
 							}
 							else
 							{
