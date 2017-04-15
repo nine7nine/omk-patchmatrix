@@ -84,6 +84,8 @@ _client_free(app_t *app, client_t *client)
 
 	if(client->mixer)
 		_mixer_free(client->mixer);
+	else if(client->monitor)
+		_monitor_free(client->monitor);
 
 	free(client->name);
 	free(client->pretty_name);
@@ -645,4 +647,67 @@ _mixer_free(mixer_t *mixer)
 	}
 
 	free(mixer);
+}
+
+// monitor
+
+monitor_t *
+_monitor_add(app_t *app, unsigned nsources)
+{
+	monitor_t *monitor = calloc(1, sizeof(monitor_t));
+	if(monitor)
+	{
+		monitor->nsources = nsources;
+		monitor->sample_rate = app->sample_rate;
+
+		for(unsigned i = 0; i < nsources; i++)
+		{
+			atomic_init(&monitor->jgains[i], 0);
+			monitor->dBFSs[i] = -64.f;
+		}
+
+		const jack_options_t opts = JackNullOption;
+		jack_status_t status;
+		monitor->client = jack_client_open("monitor", opts, &status);
+
+		for(unsigned i = 0; i < nsources; i++)
+		{
+			char name [32];
+			snprintf(name, 32, "source_%u", i);
+			jack_port_t *jsource = jack_port_register(monitor->client, name,
+				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+			monitor->jsources[i] = jsource;
+		}
+
+		jack_set_process_callback(monitor->client, _audio_monitor_process, monitor);
+		jack_activate(monitor->client);
+
+		const char *client_name = jack_get_client_name(monitor->client);
+		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
+		if(client)
+			client->monitor = monitor;
+	}
+
+	return monitor;
+}
+
+void
+_monitor_free(monitor_t *monitor)
+{
+	if(monitor->client)
+	{
+		jack_deactivate(monitor->client);
+
+		for(unsigned j = 0; j < PORT_MAX; j++)
+		{
+			jack_port_t *jsource = monitor->jsources[j];
+
+			if(jsource)
+				jack_port_unregister(monitor->client, jsource);
+		}
+
+		jack_client_close(monitor->client);
+	}
+
+	free(monitor);
 }

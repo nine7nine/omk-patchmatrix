@@ -106,4 +106,11 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks);
 void
 _mixer_free(mixer_t *mixer);
 
+// monitor
+monitor_t *
+_monitor_add(app_t *app, unsigned nsources);
+
+void
+_monitor_free(monitor_t *monitor);
+
 #endif

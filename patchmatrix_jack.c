@@ -76,7 +76,7 @@ _mkdirp(const char* path, mode_t mode)
 	return ret;
 }
 
-static int
+int
 _audio_monitor_process(jack_nframes_t nframes, void *arg)
 {
 	monitor_t *monitor = arg;
@@ -98,8 +98,20 @@ _audio_monitor_process(jack_nframes_t nframes, void *arg)
 				peak = sample;
 		}
 
-		const int32_t dBFS = 20.f*log10f(peak); //FIXME use dBFS+6 instead
-		atomic_store_explicit(&monitor->jgains[i], dBFS, memory_order_relaxed);
+		const float dBFS = (peak > 0.f)
+			? 6.f + 20.f*log10f(peak / 2.f) // dBFS+6
+			: -64.f;
+
+		if(dBFS > monitor->dBFSs[i])
+		{
+			monitor->dBFSs[i] = dBFS;
+		}
+		else if(monitor->dBFSs[i] > -64.f)
+		{
+			monitor->dBFSs[i] -= (float)nframes * 70.f / monitor->sample_rate * 2; // go to zero in 0.5 s
+		}
+
+		atomic_store_explicit(&monitor->jgains[i], (int32_t)monitor->dBFSs[i], memory_order_relaxed);
 	}
 
 	return 0;

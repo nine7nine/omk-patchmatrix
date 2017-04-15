@@ -140,7 +140,9 @@ struct _monitor_t {
 	jack_client_t *client;
 	unsigned nsources;
 	jack_port_t *jsources [PORT_MAX];
+	float dBFSs [PORT_MAX];
 	atomic_int jgains [PORT_MAX];
+	int32_t sample_rate;
 };
 
 struct _port_t {
@@ -181,7 +183,7 @@ struct _client_t {
 	int moving;
 
 	mixer_t *mixer;
-	monitor_t *monitor; //FIXME use
+	monitor_t *monitor;
 	port_type_t sink_type;
 	port_type_t source_type;
 };
@@ -286,6 +288,7 @@ struct _app_t {
 	} icons;
 
 	atomic_bool done;
+	bool animating;
 };
 
 #define HASH_FOREACH(hash, itr) \

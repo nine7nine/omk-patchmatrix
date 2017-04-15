@@ -115,7 +115,15 @@ main(int argc, char **argv)
 
 	while(!atomic_load_explicit(&app.done, memory_order_acquire))
 	{
-		nk_pugl_wait_for_event(&app.win);
+		if(!app.animating)
+		{
+			nk_pugl_wait_for_event(&app.win);
+		}
+		else
+		{
+			usleep(1000000 / 25); //FIXME
+			nk_pugl_post_redisplay(&app.win);
+		}
 
 		if(  _jack_anim(&app)
 			|| nk_pugl_process_events(&app.win) )

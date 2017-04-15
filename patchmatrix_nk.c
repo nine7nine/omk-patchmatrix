@@ -215,7 +215,6 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		else
 			background = &style->normal;
 
-		//nk_fill_rect(canvas, body, style->rounding, background->data.color);
 		nk_fill_rect(canvas, body, style->rounding, ctx->style.button.hover.data.color);
 		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
 
@@ -304,6 +303,129 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 	}
 
 	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
+}
+
+static void
+node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
+{
+	if(  !(client->source_type & app->type)
+		&& !(client->sink_type & app->type) )
+	{
+		return;
+	}
+
+	struct node_editor *nodedit = &app->nodedit;
+	struct nk_input *in = &ctx->input;
+	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+	const struct nk_vec2 scrolling = nodedit->scrolling;
+
+	monitor_t *monitor = client->monitor;
+
+	const float ps = 24.f;
+	const unsigned ny = monitor->nsources;
+
+	client->dim.x = 6 * ps;
+	client->dim.y = ny * ps;
+
+	struct nk_rect bounds = nk_rect(
+		client->pos.x - client->dim.x/2 - scrolling.x,
+		client->pos.y - client->dim.y/2 - scrolling.y,
+		client->dim.x, client->dim.y);
+
+	_client_moveable(ctx, app, client, &bounds);
+
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
+
+	struct nk_rect body;
+	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
+	if(states != NK_WIDGET_INVALID)
+	{
+		struct nk_style_button *style = &ctx->style.button;
+
+    const struct nk_style_item *background;
+		nk_flags state = 0; //FIXME
+    if(state & NK_WIDGET_STATE_HOVER)
+			background = &style->hover;
+		else if(state & NK_WIDGET_STATE_ACTIVED)
+			background = &style->active;
+		else
+			background = &style->normal;
+
+		nk_fill_rect(canvas, body, style->rounding, ctx->style.button.hover.data.color);
+		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
+
+		for(unsigned j = 0; j < ny; j++)
+		{
+			int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+
+			struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
+			struct nk_rect tile = orig;
+			struct nk_rect outline;
+			const float mx1 = 58.f / 70.f;
+			const float mx2 = 12.f / 70.f;
+			const uint8_t alph = 0x7f;
+			const float e = (jgain + 64.f) / 70.f;
+			const float peak = NK_CLAMP(0.f, e, 1.f);
+
+			{
+				const float dbfs = NK_MIN(peak, mx1);
+				const uint8_t dcol = 0xff * dbfs / mx1;
+				const struct nk_color left = nk_rgba(0x00, 0xff, 0xff, alph);
+				const struct nk_color bottom = left;
+				const struct nk_color right = nk_rgba(dcol, 0xff, 0xff-dcol, alph);
+				const struct nk_color top = right;
+
+				const float ox = ctx->style.font->height/2 + ctx->style.property.border + ctx->style.property.padding.x;
+				const float oy = ctx->style.property.border + ctx->style.property.padding.y;
+				tile.x += ox;
+				tile.y += oy;
+				tile.w -= 2*ox;
+				tile.h -= 2*oy;
+				outline = tile;
+				tile.w *= dbfs;
+
+				nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+			}
+
+			// > 6dBFS
+			if(peak > mx1)
+			{
+				const float dbfs = peak- mx1;
+				const uint8_t dcol = 0xff * dbfs / mx2;
+				const struct nk_color left = nk_rgba(0xff, 0xff, 0x00, alph);
+				const struct nk_color bottom = left;
+				const struct nk_color right = nk_rgba(0xff, 0xff - dcol, 0x00, alph);
+				const struct nk_color top = right;
+
+				tile= outline;
+				tile.x += tile.w * mx1;
+				tile.w *= dbfs;
+				nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+			}
+
+			// draw 6dBFS lines from -60 to +6
+			for(unsigned i = 4; i <= 70; i += 6)
+			{
+				const bool is_zero = (i == 64);
+				const float dx = outline.w * i / 70.f;
+
+				const float x0 = outline.x + dx;
+				const float y0 = is_zero ? orig.y + 2.f : outline.y;
+
+				const float border = (is_zero ? 2.f : 1.f) * ctx->style.window.group_border;
+
+				const float x1 = x0;
+				const float y1 = is_zero ? orig.y + orig.h - 2.f : outline.y + outline.h;
+
+				nk_stroke_line(canvas, x0, y0, x1, y1, border, ctx->style.window.group_border_color);
+			}
+
+			nk_stroke_rect(canvas, outline, 0.f, ctx->style.window.group_border, ctx->style.window.group_border_color);
+		}
+	}
+
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
+	app->animating = true;
 }
 
 static void
@@ -523,6 +645,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 {
 	app_t *app = data;
 
+	app->animating = false;
+
 	const float dy = 20.f * nk_pugl_get_scale(&app->win);
 	app->dy = dy;
 
@@ -578,22 +702,26 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				nk_style_pop_color(ctx);
 #endif
 
-			nk_layout_row_dynamic(ctx, dy, 4);
-			if(nk_button_label(ctx, "Audio Mixer 1x1"))
+			nk_layout_row_dynamic(ctx, dy, 8);
 			{
-				_mixer_add(app, 1, 1);
+				if(nk_button_label(ctx, "Audio Mixer 1x1"))
+					_mixer_add(app, 1, 1);
+				if(nk_button_label(ctx, "Audio Mixer 2x2"))
+					_mixer_add(app, 2, 2);
+				if(nk_button_label(ctx, "Audio Mixer 4x4"))
+					_mixer_add(app, 4, 4);
+				if(nk_button_label(ctx, "Audio Mixer 8x8"))
+					_mixer_add(app, 8, 8);
 			}
-			if(nk_button_label(ctx, "Audio Mixer 2x2"))
 			{
-				_mixer_add(app, 2, 2);
-			}
-			if(nk_button_label(ctx, "Audio Mixer 4x4"))
-			{
-				_mixer_add(app, 4, 4);
-			}
-			if(nk_button_label(ctx, "Audio Mixer 8x8"))
-			{
-				_mixer_add(app, 8, 8);
+				if(nk_button_label(ctx, "Audio Monitor x1"))
+					_monitor_add(app, 1);
+				if(nk_button_label(ctx, "Audio Monitor x2"))
+					_monitor_add(app, 2);
+				if(nk_button_label(ctx, "Audio Monitor x4"))
+					_monitor_add(app, 4);
+				if(nk_button_label(ctx, "Audio Monitor x8"))
+					_monitor_add(app, 8);
 			}
 		}
 		nk_menubar_end(ctx);
@@ -634,6 +762,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				if(client->mixer)
 					node_editor_mixer(ctx, app, client);
+				else if(client->monitor)
+					node_editor_monitor(ctx, app, client);
 				else
 					node_editor_client(ctx, app, client);
 			}
