@@ -2400,23 +2400,38 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #else
 			nk_layout_row_dynamic(ctx, dy, 2);
 #endif
+			const bool is_audio = app->type == TYPE_AUDIO;
+			if(is_audio)
+				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
 			if(nk_button_image_label(ctx, app->icons.audio, "AUDIO", NK_TEXT_RIGHT))
-			{
 				app->type = TYPE_AUDIO;
-			}
+			if(is_audio)
+				nk_style_pop_color(ctx);
+
+			const bool is_midi = app->type == TYPE_MIDI;
+			if(is_midi)
+				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
 			if(nk_button_image_label(ctx, app->icons.midi, "MIDI", NK_TEXT_RIGHT))
-			{
 				app->type = TYPE_MIDI;
-			}
+			if(is_midi)
+				nk_style_pop_color(ctx);
+
 #ifdef JACK_HAS_METADATA_API
+			const bool is_cv = app->type == TYPE_CV;
+			if(is_cv)
+				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
 			if(nk_button_image_label(ctx, app->icons.cv, "CV", NK_TEXT_RIGHT))
-			{
 				app->type = TYPE_CV;
-			}
+			if(is_cv)
+				nk_style_pop_color(ctx);
+
+			const bool is_osc = app->type == TYPE_OSC;
+			if(is_osc)
+				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
 			if(nk_button_image_label(ctx, app->icons.osc, "OSC", NK_TEXT_RIGHT))
-			{
 				app->type = TYPE_OSC;
-			}
+			if(is_osc)
+				nk_style_pop_color(ctx);
 #endif
 
 			nk_layout_row_dynamic(ctx, dy, 4);
