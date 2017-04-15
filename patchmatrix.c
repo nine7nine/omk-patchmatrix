@@ -269,7 +269,9 @@ struct _app_t {
 
 	float dy;
 
-	struct nk_vec2 nxt;
+	float nxt_source;
+	float nxt_sink;
+	float nxt_default;
 	hash_t clients;
 	hash_t conns;
 	hash_t mixers;
@@ -843,9 +845,27 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 
 		const float w = 200;
 		const float h = 25;
-		app->nxt.x += w/2;
-		app->nxt.y += 2*h;
-		client->pos = nk_vec2(app->nxt.x, app->nxt.y);
+		float x;
+		float *nxt;
+		if(client_flags == JackPortIsOutput)
+		{
+			x = w/2 + 10;
+			nxt = &app->nxt_source;
+		}
+		else if(client_flags == JackPortIsInput)
+		{
+			x = app->win.cfg.width - w/2 - 10;
+			nxt = &app->nxt_sink;
+		}
+		else
+		{
+			x = app->win.cfg.width/2;
+			nxt = &app->nxt_default;
+		}
+
+		*nxt = fmodf(*nxt + 2*h, app->win.cfg.height);
+
+		client->pos = nk_vec2(x, *nxt);
 		client->dim = nk_vec2(200.f, 25.f);
 		_hash_add(&app->clients, client);
 	}
@@ -2541,7 +2561,7 @@ _ui_init(app_t *app)
 	nk_pugl_config_t *cfg = &app->win.cfg;
 	cfg->width = 1280;
 	cfg->height = 720;
-	cfg->resizable = false; //FIXME
+	cfg->resizable = true;
 	cfg->ignore = false;
 	cfg->class = "PatchMatrix";
 	cfg->title = "PatchMatrix";
@@ -2811,8 +2831,9 @@ main(int argc, char **argv)
 	static app_t app;
 	app_ptr = &app; // set global pointer
 
-	app.nxt.x = 100;
-	app.nxt.y = 100;
+	app.nxt_source = 30; //FIXME make dependent on widget height
+	app.nxt_sink = 720/2;
+	app.nxt_default = 30;
 
 	app.server_name = NULL;
 	app.session_id = NULL;
