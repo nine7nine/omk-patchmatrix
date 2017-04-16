@@ -199,7 +199,10 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		client->dim.x, client->dim.y);
 
 	if(_client_moveable(ctx, app, client, &bounds))
+	{
 		app->contextual = client;
+		app->contextbounds = bounds;
+	}
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -336,7 +339,10 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		client->dim.x, client->dim.y);
 
 	if(_client_moveable(ctx, app, client, &bounds))
+	{
 		app->contextual = client;
+		app->contextbounds = bounds;
+	}
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -450,7 +456,10 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		client->dim.x, client->dim.y);
 
 	if(_client_moveable(ctx, app, client, &bounds))
+	{
 		app->contextual = client;
+		app->contextbounds = bounds;
+	}
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -792,7 +801,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			{
 				if(app->contextual->mixer || app->contextual->monitor)
 				{
-					if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
+					if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), app->contextbounds))
 					{
 						nk_layout_row_dynamic(ctx, app->dy, 1);
 						if(nk_contextual_item_label(ctx, "Remove", NK_TEXT_LEFT))

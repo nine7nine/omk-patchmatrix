@@ -290,6 +290,7 @@ struct _app_t {
 	atomic_bool done;
 	bool animating;
 	client_t *contextual;
+	struct nk_rect contextbounds;
 };
 
 #define HASH_FOREACH(hash, itr) \
