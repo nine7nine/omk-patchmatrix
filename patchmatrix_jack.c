@@ -102,16 +102,14 @@ _audio_monitor_process(jack_nframes_t nframes, void *arg)
 			? 6.f + 20.f*log10f(peak / 2.f) // dBFS+6
 			: -64.f;
 
-		if(dBFS > monitor->dBFSs[i])
-		{
-			monitor->dBFSs[i] = dBFS;
-		}
-		else if(monitor->dBFSs[i] > -64.f)
-		{
-			monitor->dBFSs[i] -= (float)nframes * 70.f / monitor->sample_rate * 2; // go to zero in 0.5 s
-		}
+		if(monitor->audio.dBFSs[i] > -64.f)
+			monitor->audio.dBFSs[i] -= (float)(nframes * 70 * 2) / monitor->sample_rate; // go to zero in 1/2 s
 
-		atomic_store_explicit(&monitor->jgains[i], (int32_t)monitor->dBFSs[i], memory_order_relaxed);
+		if(dBFS > monitor->audio.dBFSs[i])
+			monitor->audio.dBFSs[i] = dBFS;
+
+		const int32_t dBFS_i32 = monitor->audio.dBFSs[i];
+		atomic_store_explicit(&monitor->jgains[i], dBFS_i32, memory_order_relaxed);
 	}
 
 	return 0;
@@ -174,7 +172,51 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 	return 0;
 }
 
-static int
+int
+_midi_monitor_process(jack_nframes_t nframes, void *arg)
+{
+	monitor_t *monitor = arg;
+
+	void *psources [PORT_MAX];
+
+	const unsigned nsources = monitor->nsources;
+
+	for(unsigned i = 0; i < nsources; i++)
+	{
+		jack_port_t *jsource = monitor->jsources[i];
+		psources[i] = jack_port_get_buffer(jsource, nframes);
+
+		float vel = 0.f;
+		const uint32_t count = jack_midi_get_event_count(psources[i]);
+		for(unsigned k = 0; k < count; k++)
+		{
+			jack_midi_event_t ev;
+			jack_midi_event_get(&ev, psources[i], k);
+
+			if(ev.size != 3)
+				continue;
+
+			if( (ev.buffer[0] & 0xf0) == 0x90)
+			{
+				if(ev.buffer[2] > vel)
+					vel = ev.buffer[2];
+			}
+		}
+
+		if(monitor->midi.vels[i] > 0.f)
+			monitor->midi.vels[i] -= (float)(nframes * 127 * 2) / monitor->sample_rate; // go to zero in 1/2 s
+
+		if(vel > monitor->midi.vels[i])
+			monitor->midi.vels[i] = vel;
+
+		const int32_t vel_i32= monitor->midi.vels[i];
+		atomic_store_explicit(&monitor->jgains[i], vel_i32, memory_order_relaxed);
+	}
+
+	return 0;
+}
+
+int
 _midi_mixer_process(jack_nframes_t nframes, void *arg)
 {
 	mixer_t *mixer = arg;

@@ -627,7 +627,8 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 			char name [32];
 			snprintf(name, 32, "sink_%u", j);
 			jack_port_t *jsink = jack_port_register(mixer->client, name,
-				JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+				JackPortIsOutput, 0);
 			mixer->jsinks[j] = jsink;
 		}
 
@@ -636,11 +637,15 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 			char name [32];
 			snprintf(name, 32, "source_%u", i);
 			jack_port_t *jsource = jack_port_register(mixer->client, name,
-				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+				JackPortIsInput, 0);
 			mixer->jsources[i] = jsource;
 		}
 
-		jack_set_process_callback(mixer->client, _audio_mixer_process, mixer);
+		jack_set_process_callback(mixer->client,
+			app->type == TYPE_AUDIO ? _audio_mixer_process : _midi_mixer_process, mixer);
+		//TODO CV
+
 		jack_activate(mixer->client);
 
 		const char *client_name = jack_get_client_name(mixer->client);
@@ -690,7 +695,10 @@ _monitor_add(app_t *app, unsigned nsources)
 		for(unsigned i = 0; i < nsources; i++)
 		{
 			atomic_init(&monitor->jgains[i], 0);
-			monitor->dBFSs[i] = -64.f;
+			if(app->type == TYPE_AUDIO)
+				monitor->audio.dBFSs[i] = -64.f;
+			else if(app->type == TYPE_MIDI)
+				monitor->midi.vels[i] = 0.f;
 		}
 
 		const jack_options_t opts = JackNullOption;
@@ -702,11 +710,15 @@ _monitor_add(app_t *app, unsigned nsources)
 			char name [32];
 			snprintf(name, 32, "source_%u", i);
 			jack_port_t *jsource = jack_port_register(monitor->client, name,
-				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+				JackPortIsInput | JackPortIsTerminal, 0);
 			monitor->jsources[i] = jsource;
 		}
 
-		jack_set_process_callback(monitor->client, _audio_monitor_process, monitor);
+		jack_set_process_callback(monitor->client,
+			app->type == TYPE_AUDIO ? _audio_monitor_process : _midi_monitor_process, monitor);
+		//TODO CV
+
 		jack_activate(monitor->client);
 
 		const char *client_name = jack_get_client_name(monitor->client);

@@ -140,9 +140,17 @@ struct _monitor_t {
 	jack_client_t *client;
 	unsigned nsources;
 	jack_port_t *jsources [PORT_MAX];
-	float dBFSs [PORT_MAX];
 	atomic_int jgains [PORT_MAX];
 	int32_t sample_rate;
+
+	union {
+		struct {
+			float dBFSs [PORT_MAX];
+		} audio;
+		struct {
+			float vels [PORT_MAX];
+		} midi;
+	};
 };
 
 struct _port_t {

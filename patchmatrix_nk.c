@@ -377,73 +377,129 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
 
-		for(unsigned j = 0; j < ny; j++)
+		if(client->sink_type == TYPE_AUDIO)
 		{
-			int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
-
-			struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
-			struct nk_rect tile = orig;
-			struct nk_rect outline;
-			const float mx1 = 58.f / 70.f;
-			const float mx2 = 12.f / 70.f;
-			const uint8_t alph = 0x7f;
-			const float e = (jgain + 64.f) / 70.f;
-			const float peak = NK_CLAMP(0.f, e, 1.f);
-
+			for(unsigned j = 0; j < ny; j++)
 			{
-				const float dbfs = NK_MIN(peak, mx1);
-				const uint8_t dcol = 0xff * dbfs / mx1;
-				const struct nk_color left = nk_rgba(0x00, 0xff, 0xff, alph);
-				const struct nk_color bottom = left;
-				const struct nk_color right = nk_rgba(dcol, 0xff, 0xff-dcol, alph);
-				const struct nk_color top = right;
+				int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
 
-				const float ox = ctx->style.font->height/2 + ctx->style.property.border + ctx->style.property.padding.x;
-				const float oy = ctx->style.property.border + ctx->style.property.padding.y;
-				tile.x += ox;
-				tile.y += oy;
-				tile.w -= 2*ox;
-				tile.h -= 2*oy;
-				outline = tile;
-				tile.w *= dbfs;
+				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
+				struct nk_rect tile = orig;
+				struct nk_rect outline;
+				const float mx1 = 58.f / 70.f;
+				const float mx2 = 12.f / 70.f;
+				const uint8_t alph = 0x7f;
+				const float e = (jgain + 64.f) / 70.f;
+				const float peak = NK_CLAMP(0.f, e, 1.f);
 
-				nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+				{
+					const float dbfs = NK_MIN(peak, mx1);
+					const uint8_t dcol = 0xff * dbfs / mx1;
+					const struct nk_color left = nk_rgba(0x00, 0xff, 0xff, alph);
+					const struct nk_color bottom = left;
+					const struct nk_color right = nk_rgba(dcol, 0xff, 0xff-dcol, alph);
+					const struct nk_color top = right;
+
+					const float ox = ctx->style.font->height/2 + ctx->style.property.border + ctx->style.property.padding.x;
+					const float oy = ctx->style.property.border + ctx->style.property.padding.y;
+					tile.x += ox;
+					tile.y += oy;
+					tile.w -= 2*ox;
+					tile.h -= 2*oy;
+					outline = tile;
+					tile.w *= dbfs;
+
+					nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+				}
+
+				// > 6dBFS
+				if(peak > mx1)
+				{
+					const float dbfs = peak- mx1;
+					const uint8_t dcol = 0xff * dbfs / mx2;
+					const struct nk_color left = nk_rgba(0xff, 0xff, 0x00, alph);
+					const struct nk_color bottom = left;
+					const struct nk_color right = nk_rgba(0xff, 0xff - dcol, 0x00, alph);
+					const struct nk_color top = right;
+
+					tile= outline;
+					tile.x += tile.w * mx1;
+					tile.w *= dbfs;
+					nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+				}
+
+				// draw 6dBFS lines from -60 to +6
+				for(unsigned i = 4; i <= 70; i += 6)
+				{
+					const bool is_zero = (i == 64);
+					const float dx = outline.w * i / 70.f;
+
+					const float x0 = outline.x + dx;
+					const float y0 = is_zero ? orig.y + 2.f : outline.y;
+
+					const float border = (is_zero ? 2.f : 1.f) * ctx->style.window.group_border;
+
+					const float x1 = x0;
+					const float y1 = is_zero ? orig.y + orig.h - 2.f : outline.y + outline.h;
+
+					nk_stroke_line(canvas, x0, y0, x1, y1, border, ctx->style.window.group_border_color);
+				}
+
+				nk_stroke_rect(canvas, outline, 0.f, ctx->style.window.group_border, ctx->style.window.group_border_color);
 			}
-
-			// > 6dBFS
-			if(peak > mx1)
+		}
+		else if(client->sink_type == TYPE_MIDI)
+		{
+			for(unsigned j = 0; j < ny; j++)
 			{
-				const float dbfs = peak- mx1;
-				const uint8_t dcol = 0xff * dbfs / mx2;
-				const struct nk_color left = nk_rgba(0xff, 0xff, 0x00, alph);
-				const struct nk_color bottom = left;
-				const struct nk_color right = nk_rgba(0xff, 0xff - dcol, 0x00, alph);
-				const struct nk_color top = right;
+				int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
 
-				tile= outline;
-				tile.x += tile.w * mx1;
-				tile.w *= dbfs;
-				nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
+				struct nk_rect tile = orig;
+				struct nk_rect outline;
+				const float mx1 = 1.f;
+				const uint8_t alph = 0x7f;
+				const float e = jgain / 127.f;
+				const float peak = NK_CLAMP(0.f, e, 1.f);
+
+				{
+					const float dbfs = NK_MIN(peak, mx1);
+					const uint8_t dcol = 0xff * dbfs / mx1;
+					const struct nk_color left = nk_rgba(0x00, 0xff, 0xff, alph);
+					const struct nk_color bottom = left;
+					const struct nk_color right = nk_rgba(dcol, 0xff, 0xff-dcol, alph);
+					const struct nk_color top = right;
+
+					const float ox = ctx->style.font->height/2 + ctx->style.property.border + ctx->style.property.padding.x;
+					const float oy = ctx->style.property.border + ctx->style.property.padding.y;
+					tile.x += ox;
+					tile.y += oy;
+					tile.w -= 2*ox;
+					tile.h -= 2*oy;
+					outline = tile;
+					tile.w *= dbfs;
+
+					nk_fill_rect_multi_color(canvas, tile, left, top, right, bottom);
+				}
+
+				// draw lines
+				for(unsigned i = 0; i <= 127; i += 16)
+				{
+					const float dx = outline.w * i / 127.f;
+
+					const float x0 = outline.x + dx;
+					const float y0 = outline.y;
+
+					const float border = 1.f * ctx->style.window.group_border;
+
+					const float x1 = x0;
+					const float y1 = outline.y + outline.h;
+
+					nk_stroke_line(canvas, x0, y0, x1, y1, border, ctx->style.window.group_border_color);
+				}
+
+				nk_stroke_rect(canvas, outline, 0.f, ctx->style.window.group_border, ctx->style.window.group_border_color);
 			}
-
-			// draw 6dBFS lines from -60 to +6
-			for(unsigned i = 4; i <= 70; i += 6)
-			{
-				const bool is_zero = (i == 64);
-				const float dx = outline.w * i / 70.f;
-
-				const float x0 = outline.x + dx;
-				const float y0 = is_zero ? orig.y + 2.f : outline.y;
-
-				const float border = (is_zero ? 2.f : 1.f) * ctx->style.window.group_border;
-
-				const float x1 = x0;
-				const float y1 = is_zero ? orig.y + orig.h - 2.f : outline.y + outline.h;
-
-				nk_stroke_line(canvas, x0, y0, x1, y1, border, ctx->style.window.group_border_color);
-			}
-
-			nk_stroke_rect(canvas, outline, 0.f, ctx->style.window.group_border, ctx->style.window.group_border_color);
 		}
 
 		nk_stroke_rect(canvas, body, style->rounding, style->border,
@@ -840,7 +896,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				nk_contextual_end(ctx);
 			}
-			else if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
+			else if(
+#ifdef JACK_HAS_METADATA_API
+				(app->type != TYPE_OSC) && (app->type != TYPE_CV) &&
+#endif
+				nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
 			{
 				nk_layout_row_dynamic(ctx, app->dy, 1);
 				if(nk_contextual_item_label(ctx, "Mixer 1x1", NK_TEXT_LEFT))
