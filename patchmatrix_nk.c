@@ -19,6 +19,14 @@
 #include <patchmatrix_db.h>
 #include <patchmatrix_nk.h>
 
+const struct nk_color grid_line_color = {40, 40, 40, 255};
+const struct nk_color grid_background_color = {30, 30, 30, 255};
+const struct nk_color hilight_color = {200, 100, 0, 255};
+const struct nk_color button_border_color = {100, 100, 100, 255};
+const struct nk_color wire_color = {100, 100, 100, 255};
+const struct nk_color grab_handle_color = {100, 100, 100, 255};
+const struct nk_color toggle_color = {150, 150, 150, 255};
+
 static struct nk_rect
 nk_shrink_rect(struct nk_rect r, float amount)
 {
@@ -38,7 +46,7 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 {
 	const struct nk_input *in = &ctx->input;
 	
-	const int is_hovering = nk_input_is_mouse_hovering_rect(in, *bounds);
+	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, *bounds);
 
 	if(client->moving)
 	{
@@ -76,7 +84,7 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 		&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
 		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
-		client->moving = 1;
+		client->moving = true;
 	}
 
 	return is_hovering
@@ -85,7 +93,7 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 
 static void
 _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
-	struct nk_vec2 dim)
+	struct nk_vec2 dim, int is_hilighted)
 {
 	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_input *in = &ctx->input;
@@ -94,7 +102,7 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 
 	const float cw = 4.f;
 
-	/* output connector */
+	// output connector
 	if(client->source_type & app->type)
 	{
 		const float cx = client->pos.x - scrolling.x + dim.x/2 + 2*cw;
@@ -104,30 +112,31 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			2*cw, 2*cw
 		);
 
-		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI, nk_rgb(100, 100, 100));
+		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
+			is_hilighted ? hilight_color : grab_handle_color);
 		if(  nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw))
 			&& !nodedit->linking.active)
 		{
-			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, nk_rgb(100, 100, 100));
+			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
-		/* start linking process */
+		// start linking process
 		if(nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, circle, nk_true)) {
 			nodedit->linking.active = nk_true;
 			nodedit->linking.source_client = client;
 		}
 
-		/* draw curve from linked node slot to mouse position */
+		// draw ilne from linked node slot to mouse position
 		if(  nodedit->linking.active
 			&& (nodedit->linking.source_client == client) )
 		{
 			struct nk_vec2 m = in->mouse.pos;
 
-			nk_stroke_line(canvas, cx, cy, m.x, m.y, 1.f, nk_rgb(200, 200, 200));
+			nk_stroke_line(canvas, cx, cy, m.x, m.y, 1.f, hilight_color);
 		}
 	}
 
-	/* input connector */
+	// input connector
 	if(client->sink_type & app->type)
 	{
 		const float cx = client->mixer
@@ -141,11 +150,12 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			2*cw, 2*cw
 		);
 
-		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI, nk_rgb(100, 100, 100));
+		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
+			is_hilighted ? hilight_color : grab_handle_color);
 		if(  nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw))
 			&& nodedit->linking.active)
 		{
-			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, nk_rgb(200, 200, 200));
+			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
 		if(  nk_input_is_mouse_released(in, NK_BUTTON_LEFT)
@@ -229,6 +239,10 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		app->contextbounds = bounds;
 	}
 
+	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
+	client->hovered = is_hovering;
+	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
 	struct nk_rect body;
@@ -237,17 +251,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 	{
 		struct nk_style_button *style = &ctx->style.button;
 
-    const struct nk_style_item *background;
-		nk_flags state = 0; //FIXME
-    if(state & NK_WIDGET_STATE_HOVER)
-			background = &style->hover;
-		else if(state & NK_WIDGET_STATE_ACTIVED)
-			background = &style->active;
-		else
-			background = &style->normal;
-
-		nk_fill_rect(canvas, body, style->rounding, ctx->style.button.hover.data.color);
-		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
+		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
 
 		for(float x = ps; x < body.w; x += ps)
 		{
@@ -318,12 +322,12 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 						x, y, 10.f,
 						beta + 0.2f*NK_PI, beta + 1.8f*NK_PI,
 						1.f,
-						nk_rgb(100, 100, 100));
+						wire_color);
 					nk_stroke_arc(canvas,
 						x, y, 7.f,
 						beta + 0.2f*NK_PI, beta + (0.2f + alpha*1.6f)*NK_PI,
 						2.f,
-						nk_rgb(200, 200, 200));
+						toggle_color);
 				}
 
 				y += ps;
@@ -331,9 +335,12 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 			x += ps;
 		}
+
+		nk_stroke_rect(canvas, body, style->rounding, style->border,
+			is_hilighted ? hilight_color : style->border_color);
 	}
 
-	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h), is_hilighted);
 }
 
 static void
@@ -369,6 +376,10 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		app->contextbounds = bounds;
 	}
 
+	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
+	client->hovered = is_hovering;
+	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
 	struct nk_rect body;
@@ -377,17 +388,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 	{
 		struct nk_style_button *style = &ctx->style.button;
 
-    const struct nk_style_item *background;
-		nk_flags state = 0; //FIXME
-    if(state & NK_WIDGET_STATE_HOVER)
-			background = &style->hover;
-		else if(state & NK_WIDGET_STATE_ACTIVED)
-			background = &style->active;
-		else
-			background = &style->normal;
-
-		nk_fill_rect(canvas, body, style->rounding, ctx->style.button.hover.data.color);
-		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
+		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
 
 		for(unsigned j = 0; j < ny; j++)
 		{
@@ -457,9 +458,12 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 			nk_stroke_rect(canvas, outline, 0.f, ctx->style.window.group_border, ctx->style.window.group_border_color);
 		}
+
+		nk_stroke_rect(canvas, body, style->rounding, style->border,
+			is_hilighted ? hilight_color : style->border_color);
 	}
 
-	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h), is_hilighted);
 	app->animating = true;
 }
 
@@ -473,6 +477,8 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	}
 
 	struct node_editor *nodedit = &app->nodedit;
+	const struct nk_input *in = &ctx->input;
+	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	struct nk_rect bounds = nk_rect(
@@ -486,11 +492,32 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		app->contextbounds = bounds;
 	}
 
+	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
+	client->hovered = is_hovering;
+	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
-	nk_button_label(ctx, client->name);
+	struct nk_rect body;
+	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
+	if(states != NK_WIDGET_INVALID)
+	{
+		struct nk_style_button *style = &ctx->style.button;
+		const struct nk_user_font *font = ctx->style.font;
 
-	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h));
+		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
+		nk_stroke_rect(canvas, body, style->rounding, style->border,
+			is_hilighted ? hilight_color : style->border_color);
+
+		const float fw = font->width(font->userdata, font->height, client->name, strlen(client->name));
+		const float fh = font->height;
+		body.x += (body.w - fw)/2;
+		body.y += (body.h - fh)/2;
+		nk_draw_text(canvas, body, client->name, strlen(client->name), font,
+			style->normal.data.color, style->text_normal);
+	}
+
+	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h), is_hilighted);
 }
 
 static void
@@ -546,6 +573,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	);
 
 	const int is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
+
 	if(client_conn->moving)
 	{
 		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
@@ -564,9 +592,19 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
 		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
-		client_conn->moving = 1;
+		client_conn->moving = true;
 	}
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
+
+	const bool is_hilighted = client_conn->source_client->hovered
+		|| client_conn->sink_client->hovered
+		|| is_hovering || client_conn->moving;
+
+	if(is_hilighted)
+	{
+		client_conn->source_client->hilighted = true;
+		client_conn->sink_client->hilighted = true;
+	}
 
 	struct nk_rect body;
 	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
@@ -574,17 +612,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	{
 		struct nk_style_button *style = &ctx->style.button;
 
-    const struct nk_style_item *background;
-		nk_flags state = 0; //FIXME
-    if(state & NK_WIDGET_STATE_HOVER)
-			background = &style->hover;
-		else if(state & NK_WIDGET_STATE_ACTIVED)
-			background = &style->active;
-		else
-			background = &style->normal;
-
-		nk_fill_rect(canvas, body, style->rounding, background->data.color);
-		nk_stroke_rect(canvas, body, style->rounding, style->border, style->border_color);
+		nk_fill_rect(canvas, body, style->rounding, style->normal.data.color);
 
 		for(float x = ps; x < body.w; x += ps)
 		{
@@ -601,6 +629,9 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 				body.x + body.w, body.y + y,
 				style->border, style->border_color);
 		}
+
+		nk_stroke_rect(canvas, body, style->rounding, style->border,
+			is_hilighted ? hilight_color : style->border_color);
 
 		float x = body.x + ps/2;
 		HASH_FOREACH(&client_conn->source_client->sources, source_port_itr)
@@ -621,7 +652,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 				port_conn_t *port_conn = _port_conn_find(client_conn, source_port, sink_port);
 
 				if(port_conn)
-					nk_fill_arc(canvas, x, y, 4.f, 0.f, 2*NK_PI, nk_rgb(100, 100, 100));
+					nk_fill_arc(canvas, x, y, 4.f, 0.f, 2*NK_PI, toggle_color);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 				if(  nk_input_is_mouse_hovering_rect(in, tile)
@@ -646,9 +677,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	const float cxr = cx + pw/2;
 	const float cy = client_conn->pos.y - scrolling.y;
 	const float cyl = cy - ph/2;
-	const struct nk_color col = is_hovering || client_conn->moving
-		? nk_rgb(200, 200, 200)
-		: nk_rgb(100, 100, 100);
+	const struct nk_color col = is_hilighted ? hilight_color : grab_handle_color;
 
 	const float l0x = src->pos.x - scrolling.x + src->dim.x/2 + cs*2;
 	const float l0y = src->pos.y - scrolling.y;
@@ -699,6 +728,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 		nk_menubar_begin(ctx);
 		{
+			struct nk_style_button *style = &ctx->style.button;
+
 #ifdef JACK_HAS_METADATA_API
 			nk_layout_row_dynamic(ctx, dy, 4);
 #else
@@ -706,7 +737,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #endif
 			const bool is_audio = app->type == TYPE_AUDIO;
 			if(is_audio)
-				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
+				nk_style_push_color(ctx, &style->border_color, hilight_color);
 			if(nk_button_image_label(ctx, app->icons.audio, "AUDIO", NK_TEXT_RIGHT))
 				app->type = TYPE_AUDIO;
 			if(is_audio)
@@ -714,7 +745,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 			const bool is_midi = app->type == TYPE_MIDI;
 			if(is_midi)
-				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
+				nk_style_push_color(ctx, &style->border_color, hilight_color);
 			if(nk_button_image_label(ctx, app->icons.midi, "MIDI", NK_TEXT_RIGHT))
 				app->type = TYPE_MIDI;
 			if(is_midi)
@@ -723,7 +754,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #ifdef JACK_HAS_METADATA_API
 			const bool is_cv = app->type == TYPE_CV;
 			if(is_cv)
-				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
+				nk_style_push_color(ctx, &style->border_color, hilight_color);
 			if(nk_button_image_label(ctx, app->icons.cv, "CV", NK_TEXT_RIGHT))
 				app->type = TYPE_CV;
 			if(is_cv)
@@ -731,7 +762,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 			const bool is_osc = app->type == TYPE_OSC;
 			if(is_osc)
-				nk_style_push_color(ctx, &ctx->style.button.border_color, nk_rgb(200, 200, 200));
+				nk_style_push_color(ctx, &style->border_color, hilight_color);
 			if(nk_button_image_label(ctx, app->icons.osc, "OSC", NK_TEXT_RIGHT))
 				app->type = TYPE_OSC;
 			if(is_osc)
@@ -753,15 +784,17 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			{
 				/* display grid */
 				struct nk_rect ssize = nk_layout_space_bounds(ctx);
+				ssize.h -= ctx->style.window.group_padding.y;
 				const float grid_size = 28.0f;
-				const struct nk_color grid_color = nk_rgb(50, 50, 50);
+
+				nk_fill_rect(canvas, ssize, 0.f, grid_background_color);
 
 				for(float x = fmod(ssize.x - scrolling.x, grid_size);
 					x < ssize.w;
 					x += grid_size)
 				{
 					nk_stroke_line(canvas, x + ssize.x, ssize.y, x + ssize.x, ssize.y + ssize.h,
-						1.0f, grid_color);
+						1.0f, grid_line_color);
 				}
 
 				for(float y = fmod(ssize.y - scrolling.y, grid_size);
@@ -769,11 +802,17 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					y += grid_size)
 				{
 					nk_stroke_line(canvas, ssize.x, y + ssize.y, ssize.x + ssize.w, y + ssize.y,
-						1.0f, grid_color);
+						1.0f, grid_line_color);
 				}
 			}
 
-			/* execute each node as a movable group */
+			HASH_FOREACH(&app->conns, client_conn_itr)
+			{
+				client_conn_t *client_conn = *client_conn_itr;
+
+				node_editor_client_conn(ctx, app, client_conn, app->type);
+			}
+
 			HASH_FOREACH(&app->clients, client_itr)
 			{
 				client_t *client = *client_itr;
@@ -784,6 +823,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					node_editor_monitor(ctx, app, client);
 				else
 					node_editor_client(ctx, app, client);
+
+				client->hilighted = false;
 			}
 
 			/* reset linking connection */
@@ -791,13 +832,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				&& nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 			{
 				nodedit->linking.active = nk_false;
-			}
-
-			HASH_FOREACH(&app->conns, client_conn_itr)
-			{
-				client_conn_t *client_conn = *client_conn_itr;
-
-				node_editor_client_conn(ctx, app, client_conn, app->type);
 			}
 
 			// contextual menu
@@ -923,6 +957,10 @@ _ui_init(app_t *app)
 
 	nk_pugl_init(&app->win);
 	nk_pugl_show(&app->win);
+
+	// adjust styling
+	struct nk_style *style = &app->win.ctx.style;
+	style->button.border_color = button_border_color;
 
 	app->icons.audio= _icon_load(app, PATCHMATRIX_DATA_DIR"audio.png");
 	app->icons.midi = _icon_load(app, PATCHMATRIX_DATA_DIR"midi.png");

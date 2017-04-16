@@ -124,7 +124,7 @@ struct _client_conn_t {
 	port_type_t type;
 
 	struct nk_vec2 pos;
-	int moving;
+	bool moving;
 };
 
 struct _mixer_t {
@@ -159,7 +159,7 @@ struct _port_t {
 
 struct node_linking {
 	client_t *source_client;
-	int active;
+	bool active;
 };
 
 struct node_editor {
@@ -180,7 +180,9 @@ struct _client_t {
 	int flags;
 	struct nk_vec2 pos;
 	struct nk_vec2 dim;
-	int moving;
+	bool moving;
+	bool hilighted;
+	bool hovered;
 
 	mixer_t *mixer;
 	monitor_t *monitor;
