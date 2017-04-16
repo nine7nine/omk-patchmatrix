@@ -714,28 +714,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			if(is_osc)
 				nk_style_pop_color(ctx);
 #endif
-
-			nk_layout_row_dynamic(ctx, dy, 8);
-			{
-				if(nk_button_label(ctx, "Audio Mixer 1x1"))
-					_mixer_add(app, 1, 1);
-				if(nk_button_label(ctx, "Audio Mixer 2x2"))
-					_mixer_add(app, 2, 2);
-				if(nk_button_label(ctx, "Audio Mixer 4x4"))
-					_mixer_add(app, 4, 4);
-				if(nk_button_label(ctx, "Audio Mixer 8x8"))
-					_mixer_add(app, 8, 8);
-			}
-			{
-				if(nk_button_label(ctx, "Audio Monitor x1"))
-					_monitor_add(app, 1);
-				if(nk_button_label(ctx, "Audio Monitor x2"))
-					_monitor_add(app, 2);
-				if(nk_button_label(ctx, "Audio Monitor x4"))
-					_monitor_add(app, 4);
-				if(nk_button_label(ctx, "Audio Monitor x8"))
-					_monitor_add(app, 8);
-			}
 		}
 		nk_menubar_end(ctx);
 
@@ -796,23 +774,41 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 
 			// contextual menu
-			if(app->contextual)
+			if(  app->contextual
+				&& (app->contextual->mixer || app->contextual->monitor)
+				&& nk_contextual_begin(ctx, 0, nk_vec2(100, 220), app->contextbounds) )
 			{
-				if(app->contextual->mixer || app->contextual->monitor)
+				nk_layout_row_dynamic(ctx, app->dy, 1);
+				if(nk_contextual_item_label(ctx, "Remove", NK_TEXT_LEFT))
 				{
-					if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), app->contextbounds))
-					{
-						nk_layout_row_dynamic(ctx, app->dy, 1);
-						if(nk_contextual_item_label(ctx, "Remove", NK_TEXT_LEFT))
-						{
-							_client_remove(app, app->contextual);
-							_client_free(app, app->contextual);
-							app->contextual = NULL;
-						}
-
-						nk_contextual_end(ctx);
-					}
+					_client_remove(app, app->contextual);
+					_client_free(app, app->contextual);
+					app->contextual = NULL;
 				}
+
+				nk_contextual_end(ctx);
+			}
+			else if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
+			{
+				nk_layout_row_dynamic(ctx, app->dy, 1);
+				if(nk_contextual_item_label(ctx, "Mixer 1x1", NK_TEXT_LEFT))
+					_mixer_add(app, 1, 1);
+				if(nk_contextual_item_label(ctx, "Mixer 2x2", NK_TEXT_LEFT))
+					_mixer_add(app, 2, 2);
+				if(nk_contextual_item_label(ctx, "Mixer 4x4", NK_TEXT_LEFT))
+					_mixer_add(app, 4, 4);
+				if(nk_contextual_item_label(ctx, "Mixer 8x8", NK_TEXT_LEFT))
+					_mixer_add(app, 8, 8);
+				if(nk_contextual_item_label(ctx, "Monitor x1", NK_TEXT_LEFT))
+					_monitor_add(app, 1);
+				if(nk_contextual_item_label(ctx, "Monitor x2", NK_TEXT_LEFT))
+					_monitor_add(app, 2);
+				if(nk_contextual_item_label(ctx, "Monitor x4", NK_TEXT_LEFT))
+					_monitor_add(app, 4);
+				if(nk_contextual_item_label(ctx, "Monitor x8", NK_TEXT_LEFT))
+					_monitor_add(app, 8);
+
+				nk_contextual_end(ctx);
 			}
 		}
 		nk_layout_space_end(ctx);
