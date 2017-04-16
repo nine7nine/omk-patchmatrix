@@ -19,8 +19,6 @@
 #include <patchmatrix_db.h>
 #include <patchmatrix_nk.h>
 
-//#define LEN(x) sizeof(x)
-
 static struct nk_rect
 nk_shrink_rect(struct nk_rect r, float amount)
 {
@@ -698,7 +696,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	{
 		nk_window_set_bounds(ctx, wbounds);
 		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
-		const struct nk_rect total_space = nk_window_get_content_region(ctx);
 
 		nk_menubar_begin(ctx);
 		{
@@ -744,9 +741,13 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		nk_menubar_end(ctx);
 
 		const struct nk_vec2 scrolling = nodedit->scrolling;
+		const struct nk_rect total_space = nk_window_get_content_region(ctx);
+		const float total_h = total_space.h
+			- dy
+			- 2*ctx->style.window.group_padding.y;
 
 		/* allocate complete window space */
-		nk_layout_space_begin(ctx, NK_STATIC, total_space.h,
+		nk_layout_space_begin(ctx, NK_STATIC, total_h,
 			_hash_size(&app->clients) + _hash_size(&app->conns));
 		{
 			{
@@ -838,6 +839,44 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 		}
 		nk_layout_space_end(ctx);
+
+		{
+			nk_layout_row_dynamic(ctx, dy, 6);
+			const int32_t buffer_size = nk_propertyi(ctx, "BufferSize: ", 1, app->buffer_size, 48000, 1, 0);
+			if(buffer_size != app->buffer_size)
+			{
+				const bool lower = buffer_size < app->buffer_size;
+
+				int32_t bufsz = 1;
+
+				while(bufsz < buffer_size)
+					bufsz <<= 1;
+
+				if(lower)
+					bufsz >>= 1;
+
+				jack_set_buffer_size (app->client, bufsz);
+			}
+
+			nk_labelf(ctx, NK_TEXT_CENTERED, "SampleRate: %"PRIi32, app->sample_rate);
+
+			if(nk_button_label(ctx,
+				app->freewheel ? "FreeWheel: true" : "FreeWheel: false"))
+			{
+				jack_set_freewheel(app->client, !app->freewheel);
+			}
+
+			nk_labelf(ctx, NK_TEXT_CENTERED, "RealTime: %s", app->realtime? "true" : "false");
+
+			char tmp [32];
+			snprintf(tmp, 32, "XRuns: %"PRIi32, app->xruns);
+			if(nk_button_label(ctx, tmp))
+			{
+				app->xruns = 0;
+			}
+
+			nk_label(ctx, "PatchMatrix: "PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
+		}
 
 		/* window content scrolling */
 		if(  nk_input_is_mouse_hovering_rect(in, nk_window_get_bounds(ctx))

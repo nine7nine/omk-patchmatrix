@@ -612,7 +612,7 @@ _jack_anim(app_t *app)
 
 			case EVENT_BUFFER_SIZE:
 			{
-				app->buffer_size = log2(ev->buffer_size.nframes);
+				app->buffer_size = ev->buffer_size.nframes;
 
 				realize = true;
 			} break;
@@ -979,7 +979,7 @@ _jack_init(app_t *app)
 #endif
 
 	app->sample_rate = jack_get_sample_rate(app->client);
-	app->buffer_size = log2(jack_get_buffer_size(app->client));
+	app->buffer_size = jack_get_buffer_size(app->client);
 	app->xruns = 0;
 	app->freewheel = false;
 	app->realtime = jack_is_realtime(app->client);
