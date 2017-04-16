@@ -595,7 +595,6 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	{
 		client_conn->moving = true;
 	}
-	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
 	const bool is_hilighted = client_conn->source_client->hovered
 		|| client_conn->sink_client->hovered
@@ -606,6 +605,43 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		client_conn->source_client->hilighted = true;
 		client_conn->sink_client->hilighted = true;
 	}
+
+	{
+		const float cs = 4.f;
+		const float cx = client_conn->pos.x - scrolling.x;
+		const float cxr = cx + pw/2;
+		const float cy = client_conn->pos.y - scrolling.y;
+		const float cyl = cy - ph/2;
+		const struct nk_color col = is_hilighted ? hilight_color : grab_handle_color;
+
+		const float l0x = src->pos.x - scrolling.x + src->dim.x/2 + cs*2;
+		const float l0y = src->pos.y - scrolling.y;
+		const float l1x = snk->mixer
+			? snk->pos.x - scrolling.x
+			: snk->pos.x - scrolling.x - snk->dim.x/2 - cs*2;
+		const float l1y = snk->mixer
+			? snk->pos.y - scrolling.y - snk->dim.y/2 - cs*2
+			: snk->pos.y - scrolling.y;
+
+		const float bend = 50.f;
+		nk_stroke_curve(canvas,
+			l0x, l0y,
+			l0x + bend, l0y,
+			cx, cyl - bend,
+			cx, cyl,
+			1.f, col);
+		nk_stroke_curve(canvas,
+			cxr, cy,
+			cxr + bend, cy,
+			snk->mixer ? l1x : l1x - bend, snk->mixer ? l1y - bend : l1y,
+			l1x, l1y,
+			1.f, col);
+
+		nk_fill_arc(canvas, cx, cyl, cs, 2*M_PI/2, 4*M_PI/2, col);
+		nk_fill_arc(canvas, cxr, cy, cs, 3*M_PI/2, 5*M_PI/2, col);
+	}
+
+	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
 	struct nk_rect body;
 	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
@@ -672,39 +708,6 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 			x += ps;
 		}
 	}
-
-	const float cs = 4.f;
-	const float cx = client_conn->pos.x - scrolling.x;
-	const float cxr = cx + pw/2;
-	const float cy = client_conn->pos.y - scrolling.y;
-	const float cyl = cy - ph/2;
-	const struct nk_color col = is_hilighted ? hilight_color : grab_handle_color;
-
-	const float l0x = src->pos.x - scrolling.x + src->dim.x/2 + cs*2;
-	const float l0y = src->pos.y - scrolling.y;
-	const float l1x = snk->mixer
-		? snk->pos.x - scrolling.x
-		: snk->pos.x - scrolling.x - snk->dim.x/2 - cs*2;
-	const float l1y = snk->mixer
-		? snk->pos.y - scrolling.y - snk->dim.y/2 - cs*2
-		: snk->pos.y - scrolling.y;
-
-	const float bend = 50.f;
-	nk_stroke_curve(canvas,
-		l0x, l0y,
-		l0x + bend, l0y,
-		cx, cyl - bend,
-		cx, cyl,
-		1.f, col);
-	nk_stroke_curve(canvas,
-		cxr, cy,
-		cxr + bend, cy,
-		snk->mixer ? l1x : l1x - bend, snk->mixer ? l1y - bend : l1y,
-		l1x, l1y,
-		1.f, col);
-
-	nk_fill_arc(canvas, cx, cyl, cs, 2*M_PI/2, 4*M_PI/2, col);
-	nk_fill_arc(canvas, cxr, cy, cs, 3*M_PI/2, 5*M_PI/2, col);
 }
 
 static inline void
