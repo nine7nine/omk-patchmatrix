@@ -39,10 +39,12 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 	struct nk_rect *bounds)
 {
 	const struct nk_input *in = &ctx->input;
+	
+	const int is_hovering = nk_input_is_mouse_hovering_rect(in, *bounds);
 
 	if(client->moving)
 	{
-		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
+		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 		{
 			client->moving = false;
 		}
@@ -72,15 +74,14 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 			}
 		}
 	}
-	else if(nk_input_is_mouse_hovering_rect(in, *bounds))
+	else if(is_hovering
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
+		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
-		if(nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
-		{
-			client->moving = 1;
-		}
+		client->moving = 1;
 	}
 
-	return nk_input_is_mouse_hovering_rect(in, *bounds)
+	return is_hovering
 		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT);
 }
 
@@ -256,7 +257,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 					NK_BUTTON_LEFT, tile, nk_true);
 
 				int32_t dd = 0;
-				if(left_mouse_down && left_mouse_click_in_cursor)
+				if(left_mouse_down && left_mouse_click_in_cursor && !client->moving)
 				{
 					const float dx = in->mouse.delta.x;
 					const float dy = in->mouse.delta.y;
@@ -277,7 +278,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 					atomic_store_explicit(&mixer->jgains[i][j], jgain, memory_order_release);
 				}
 
-				if( (left_mouse_down && left_mouse_click_in_cursor) || (dd != 0) )
+				if( (left_mouse_down && left_mouse_click_in_cursor && !client->moving) || (dd != 0) )
 				{
 					char tooltip [32];
 					snprintf(tooltip, 32, "%+2"PRIi32" dBFS", jgain);
@@ -520,10 +521,10 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		pw, ph
 	);
 
-	int hovers = 0;
+	const int is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
 	if(client_conn->moving)
 	{
-		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
+		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 		{
 			client_conn->moving = false;
 		}
@@ -535,14 +536,11 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 			bounds.y += in->mouse.delta.y;
 		}
 	}
-	else if(nk_input_is_mouse_hovering_rect(in, bounds))
+	else if(is_hovering
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
+		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
-		hovers = 1;
-
-		if(nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
-		{
-			client_conn->moving = 1;
-		}
+		client_conn->moving = 1;
 	}
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -603,7 +601,8 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 				if(  nk_input_is_mouse_hovering_rect(in, tile)
-					&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) )
+					&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
+					&& !client_conn->moving )
 				{
 					if(port_conn)
 						jack_disconnect(app->client, source_port->name, sink_port->name);
@@ -623,7 +622,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	const float cxr = cx + pw/2;
 	const float cy = client_conn->pos.y - scrolling.y;
 	const float cyl = cy - ph/2;
-	const struct nk_color col = hovers || client_conn->moving
+	const struct nk_color col = is_hovering || client_conn->moving
 		? nk_rgb(200, 200, 200)
 		: nk_rgb(100, 100, 100);
 

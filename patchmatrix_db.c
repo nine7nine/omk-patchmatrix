@@ -95,7 +95,7 @@ _client_free(app_t *app, client_t *client)
 bool
 _client_remove_cb(void *node, void *data)
 {
-	client_conn_t *client_conn;
+	client_conn_t *client_conn = node;
 	client_t *client = data;
 
 	if(  (client_conn->source_client == client)
