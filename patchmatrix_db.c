@@ -36,8 +36,23 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		}
 
 		client->name = strdup(client_name);
-		client->pretty_name = NULL; //FIXME
+		client->pretty_name = NULL;
 		client->flags = client_flags;
+
+#ifdef JACK_HAS_METADATA_API
+		{
+			char *value = NULL;
+			char *type = NULL;
+			jack_get_property(client->uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
+			if(value)
+			{
+				client->pretty_name = strdup(value);
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+#endif
 
 		const float w = 200;
 		const float h = 25;
@@ -419,6 +434,18 @@ _port_add(app_t *app, jack_port_t *jport)
 			{
 				if(strstr(value, "OSC"))
 					port->type = TYPE_OSC; //FIXME |=
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+		{
+			char *value = NULL;
+			char *type = NULL;
+			jack_get_property(port->uuid, JACKEY_ORDER, &value, &type);
+			if(value)
+			{
+				port->order = atoi(value);
 				jack_free(value);
 			}
 			if(type)

@@ -509,11 +509,12 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		nk_stroke_rect(canvas, body, style->rounding, style->border,
 			is_hilighted ? hilight_color : style->border_color);
 
-		const float fw = font->width(font->userdata, font->height, client->name, strlen(client->name));
+		const char *client_name = client->pretty_name ? client->pretty_name : client->name;
+		const float fw = font->width(font->userdata, font->height, client_name, strlen(client_name));
 		const float fh = font->height;
 		body.x += (body.w - fw)/2;
 		body.y += (body.h - fh)/2;
-		nk_draw_text(canvas, body, client->name, strlen(client->name), font,
+		nk_draw_text(canvas, body, client_name, strlen(client_name), font,
 			style->normal.data.color, style->text_normal);
 	}
 
