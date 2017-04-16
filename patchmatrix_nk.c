@@ -27,19 +27,6 @@ const struct nk_color wire_color = {100, 100, 100, 255};
 const struct nk_color grab_handle_color = {100, 100, 100, 255};
 const struct nk_color toggle_color = {150, 150, 150, 255};
 
-static struct nk_rect
-nk_shrink_rect(struct nk_rect r, float amount)
-{
-    struct nk_rect res;
-    r.w = NK_MAX(r.w, 2 * amount);
-    r.h = NK_MAX(r.h, 2 * amount);
-    res.x = r.x + amount;
-    res.y = r.y + amount;
-    res.w = r.w - 2 * amount;
-    res.h = r.h - 2 * amount;
-    return res;
-}
-
 static int
 _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 	struct nk_rect *bounds)
@@ -107,21 +94,21 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	{
 		const float cx = client->pos.x - scrolling.x + dim.x/2 + 2*cw;
 		const float cy = client->pos.y - scrolling.y;
-		const struct nk_rect circle = nk_rect(
+		const struct nk_rect outer = nk_rect(
 			cx - cw, cy - cw,
-			2*cw, 2*cw
+			4*cw, 4*cw
 		);
 
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
 			is_hilighted ? hilight_color : grab_handle_color);
-		if(  nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw))
-			&& !nodedit->linking.active)
+		if(  (nk_input_is_mouse_hovering_rect(in, outer) && !nodedit->linking.active)
+			|| (nodedit->linking.active && (nodedit->linking.source_client == client)) )
 		{
 			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
 		// start linking process
-		if(nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, circle, nk_true)) {
+		if(nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, outer, nk_true)) {
 			nodedit->linking.active = nk_true;
 			nodedit->linking.source_client = client;
 		}
@@ -145,21 +132,21 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 		const float cy = client->mixer
 			? client->pos.y - scrolling.y - dim.y/2 - 2*cw
 			: client->pos.y - scrolling.y;
-		const struct nk_rect circle = nk_rect(
+		const struct nk_rect outer = nk_rect(
 			cx - cw, cy - cw,
-			2*cw, 2*cw
+			4*cw, 4*cw
 		);
 
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
 			is_hilighted ? hilight_color : grab_handle_color);
-		if(  nk_input_is_mouse_hovering_rect(in, nk_shrink_rect(circle, -cw))
+		if(  nk_input_is_mouse_hovering_rect(in, outer)
 			&& nodedit->linking.active)
 		{
 			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
 		if(  nk_input_is_mouse_released(in, NK_BUTTON_LEFT)
-			&& nk_input_is_mouse_hovering_rect(in, circle)
+			&& nk_input_is_mouse_hovering_rect(in, outer)
 			&& nodedit->linking.active)
 		{
 			nodedit->linking.active = nk_false;
