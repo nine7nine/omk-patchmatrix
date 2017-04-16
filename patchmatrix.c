@@ -143,7 +143,5 @@ cleanup:
 
 	_ui_deinit(&app);
 
-	fprintf(stderr, "bye from PatchMatrix\n");
-
 	return 0;
 }
