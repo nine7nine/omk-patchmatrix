@@ -34,13 +34,12 @@ nk_shrink_rect(struct nk_rect r, float amount)
     return res;
 }
 
-static void
+static int
 _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 	struct nk_rect *bounds)
 {
 	const struct nk_input *in = &ctx->input;
 
-	/* node connector and linking */
 	if(client->moving)
 	{
 		if(nk_input_is_mouse_released(in, NK_BUTTON_RIGHT))
@@ -80,6 +79,9 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 			client->moving = 1;
 		}
 	}
+
+	return nk_input_is_mouse_hovering_rect(in, *bounds)
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT);
 }
 
 static void
@@ -196,7 +198,8 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		client->pos.y - client->dim.y/2 - scrolling.y,
 		client->dim.x, client->dim.y);
 
-	_client_moveable(ctx, app, client, &bounds);
+	if(_client_moveable(ctx, app, client, &bounds))
+		app->contextual = client;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -332,7 +335,8 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		client->pos.y - client->dim.y/2 - scrolling.y,
 		client->dim.x, client->dim.y);
 
-	_client_moveable(ctx, app, client, &bounds);
+	if(_client_moveable(ctx, app, client, &bounds))
+		app->contextual = client;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -445,7 +449,8 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		client->pos.y - client->dim.y/2 - scrolling.y,
 		client->dim.x, client->dim.y);
 
-	_client_moveable(ctx, app, client, &bounds);
+	if(_client_moveable(ctx, app, client, &bounds))
+		app->contextual = client;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -780,6 +785,26 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				client_conn_t *client_conn = *client_conn_itr;
 
 				node_editor_client_conn(ctx, app, client_conn, app->type);
+			}
+
+			// contextual menu
+			if(app->contextual)
+			{
+				if(app->contextual->mixer || app->contextual->monitor)
+				{
+					if(nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
+					{
+						nk_layout_row_dynamic(ctx, app->dy, 1);
+						if(nk_contextual_item_label(ctx, "Remove", NK_TEXT_LEFT))
+						{
+							_client_remove(app, app->contextual);
+							_client_free(app, app->contextual);
+							app->contextual = NULL;
+						}
+
+						nk_contextual_end(ctx);
+					}
+				}
 			}
 		}
 		nk_layout_space_end(ctx);
