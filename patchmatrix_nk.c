@@ -165,6 +165,32 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 				if(client_conn)
 				{
 					client_conn->type |= app->type;
+
+					if(nk_input_is_key_down(in, NK_KEY_CTRL)) // automatic connection
+					{
+						unsigned i = 0;
+						HASH_FOREACH(&src->sources, source_port_itr)
+						{
+							port_t *source_port = *source_port_itr;
+							if(source_port->type != app->type)
+								continue;
+
+							unsigned j = 0;
+							HASH_FOREACH(&client->sinks, sink_port_itr)
+							{
+								port_t *sink_port = *sink_port_itr;
+								if(sink_port->type != app->type)
+									continue;
+
+								if(i == j)
+									jack_connect(app->client, source_port->name, sink_port->name);
+
+								j++;
+							}
+
+							i++;
+						}
+					}
 				}
 			}
 		}
