@@ -21,10 +21,13 @@ stages:
   script:
     - mkdir build
     - pushd build
-    - cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX=${CI_PROJECT_DIR} -DPLUGIN_DEST="${BASE_NAME}-$(cat ../VERSION)/${CI_BUILD_NAME}/${BASE_NAME}/" -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} ..
+    - cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX="/opt/${BASE_NAME}" -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} ..
     - cmake .. # needed for darwin
     - make
     - make install
+    - popd
+    - mkdir -p "${BASE_NAME}-$(cat VERSION)/${CI_BUILD_NAME}/opt"
+    - cp -r "/opt/${BASE_NAME}" "${BASE_NAME}-$(cat VERSION)/${CI_BUILD_NAME}/opt/${BASE_NAME}"
 
 .universal_linux_template: &universal_linux_definition
   image: ventosus/universal-linux-gnu

@@ -13,16 +13,12 @@ include_directories(${PROJECT_SOURCE_DIR}/jackey)
 include_directories(${PROJECT_SOURCE_DIR}/varchunk)
 include_directories(${PROJECT_SOURCE_DIR}/pugl)
 
-if(NOT DEFINED PLUGIN_DEST)
-	set(PLUGIN_DEST "")
-endif()
-
 # paths
-set(PATCHMATRIX_BIN_DIR "${PLUGIN_DEST}bin")
-set(PATCHMATRIX_ICON_DIR "${PLUGIN_DEST}share/icons/hicolor/256x256/apps")
-set(PATCHMATRIX_DESKTOP_DIR "${PLUGIN_DEST}share/applications")
-set(PATCHMATRIX_DATA_DIR "${PLUGIN_DEST}share/patchmatrix")
-set(PATCHMATRIX_MAN_DIR "${PLUGIN_DEST}share/man/man1")
+set(PATCHMATRIX_BIN_DIR bin)
+set(PATCHMATRIX_ICON_DIR share/icons/hicolor/256x256/apps)
+set(PATCHMATRIX_DESKTOP_DIR share/applications)
+set(PATCHMATRIX_DATA_DIR share/patchmatrix)
+set(PATCHMATRIX_MAN_DIR share/man/man1)
 add_definitions("-DPATCHMATRIX_DATA_DIR=\"${CMAKE_INSTALL_PREFIX}/${PATCHMATRIX_DATA_DIR}/\"")
 
 # version
