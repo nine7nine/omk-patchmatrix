@@ -873,13 +873,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				}
 			}
 
-			HASH_FOREACH(&app->conns, client_conn_itr)
-			{
-				client_conn_t *client_conn = *client_conn_itr;
-
-				node_editor_client_conn(ctx, app, client_conn, app->type);
-			}
-
 			HASH_FOREACH(&app->clients, client_itr)
 			{
 				client_t *client = *client_itr;
@@ -892,6 +885,13 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					node_editor_client(ctx, app, client);
 
 				client->hilighted = false;
+			}
+
+			HASH_FOREACH(&app->conns, client_conn_itr)
+			{
+				client_conn_t *client_conn = *client_conn_itr;
+
+				node_editor_client_conn(ctx, app, client_conn, app->type);
 			}
 
 			/* reset linking connection */
