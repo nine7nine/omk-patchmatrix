@@ -26,6 +26,11 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 	client_t *client = calloc(1, sizeof(client_t));
 	if(client)
 	{
+		client->name = strdup(client_name);
+		client->pretty_name = NULL;
+		client->flags = client_flags;
+
+#ifdef JACK_HAS_METADATA_API
 		char *client_uuid_str = jack_get_uuid_for_client_name(app->client, client_name);
 		if(client_uuid_str)
 		{
@@ -35,11 +40,6 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 			jack_free(client_uuid_str);
 		}
 
-		client->name = strdup(client_name);
-		client->pretty_name = NULL;
-		client->flags = client_flags;
-
-#ifdef JACK_HAS_METADATA_API
 		{
 			char *value = NULL;
 			char *type = NULL;
@@ -146,6 +146,7 @@ _client_find_by_name(app_t *app, const char *client_name, int client_flags)
 	return NULL;
 }
 
+#ifdef JACK_HAS_METADATA_API
 client_t *
 _client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags)
 {
@@ -161,6 +162,7 @@ _client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags)
 
 	return NULL;
 }
+#endif
 
 port_t *
 _client_find_port_by_name(client_t *client, const char *port_name)
@@ -557,6 +559,7 @@ _port_find_by_name(app_t *app, const char *port_name)
 	return NULL;
 }
 
+#ifdef JACK_HAS_METADATA_API
 port_t *
 _port_find_by_uuid(app_t *app, jack_uuid_t port_uuid)
 {
@@ -577,6 +580,7 @@ _port_find_by_uuid(app_t *app, jack_uuid_t port_uuid)
 
 	return NULL;
 }
+#endif
 
 port_t *
 _port_find_by_body(app_t *app, jack_port_t *body)

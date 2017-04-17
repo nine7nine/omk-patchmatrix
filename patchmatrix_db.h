@@ -36,8 +36,10 @@ _client_remove(app_t *app, client_t *client);
 client_t *
 _client_find_by_name(app_t *app, const char *client_name, int client_flags);
 
+#ifdef JACK_HAS_METADATA_API
 client_t *
 _client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags);
+#endif
 
 port_t *
 _client_find_port_by_name(client_t *client, const char *port_name);
@@ -93,8 +95,10 @@ _port_remove(app_t *app, port_t *port);
 port_t *
 _port_find_by_name(app_t *app, const char *port_name);
 
+#ifdef JACK_HAS_METADATA_API
 port_t *
 _port_find_by_uuid(app_t *app, jack_uuid_t port_uuid);
+#endif
 
 port_t *
 _port_find_by_body(app_t *app, jack_port_t *body);
