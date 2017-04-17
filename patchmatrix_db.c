@@ -629,7 +629,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 		for(unsigned j = 0; j < nsinks; j++)
 		{
 			char name [32];
-			snprintf(name, 32, "sink_%u", j);
+			snprintf(name, 32, "source_%u", j);
 			jack_port_t *jsink = jack_port_register(mixer->client, name,
 				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 				JackPortIsOutput, 0);
@@ -639,7 +639,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 		for(unsigned i = 0; i < nsources; i++)
 		{
 			char name [32];
-			snprintf(name, 32, "source_%u", i);
+			snprintf(name, 32, "sink_%u", i);
 			jack_port_t *jsource = jack_port_register(mixer->client, name,
 				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 				JackPortIsInput, 0);
@@ -712,7 +712,7 @@ _monitor_add(app_t *app, unsigned nsources)
 		for(unsigned i = 0; i < nsources; i++)
 		{
 			char name [32];
-			snprintf(name, 32, "source_%u", i);
+			snprintf(name, 32, "sink_%u", i);
 			jack_port_t *jsource = jack_port_register(monitor->client, name,
 				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 				JackPortIsInput | JackPortIsTerminal, 0);

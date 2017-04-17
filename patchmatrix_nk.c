@@ -740,14 +740,29 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 					nk_fill_arc(canvas, x, y, 4.f, 0.f, 2*NK_PI, toggle_color);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
+
 				if(  nk_input_is_mouse_hovering_rect(in, tile)
-					&& nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT)
-					&& !client_conn->moving )
+					&& !client_conn->moving)
 				{
-					if(port_conn)
-						jack_disconnect(app->client, source_port->name, sink_port->name);
-					else
-						jack_connect(app->client, source_port->name, sink_port->name);
+					const char *source_name = source_port->pretty_name
+						? source_port->pretty_name
+						: source_port->short_name;
+
+					const char *sink_name = sink_port->pretty_name
+						? sink_port->pretty_name
+						: sink_port->short_name;
+
+					char tmp [128];
+					snprintf(tmp, 128, "%s || %s", source_name, sink_name);
+					nk_tooltip(ctx, tmp);
+
+					if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT))
+					{
+						if(port_conn)
+							jack_disconnect(app->client, source_port->name, sink_port->name);
+						else
+							jack_connect(app->client, source_port->name, sink_port->name);
+					}
 				}
 
 				y += ps;
