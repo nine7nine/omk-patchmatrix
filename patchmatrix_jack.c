@@ -98,18 +98,19 @@ _audio_monitor_process(jack_nframes_t nframes, void *arg)
 				peak = sample;
 		}
 
+		// go to zero in 1/2 s
+		if(monitor->audio.dBFSs[i] > -64.f)
+			monitor->audio.dBFSs[i] -= nframes * 70.f * 2.f * monitor->sample_rate_1;
+
 		const float dBFS = (peak > 0.f)
 			? 6.f + 20.f*log10f(peak / 2.f) // dBFS+6
 			: -64.f;
 
-		if(monitor->audio.dBFSs[i] > -64.f)
-			monitor->audio.dBFSs[i] -= (float)(nframes * 70 * 2) / monitor->sample_rate; // go to zero in 1/2 s
-
 		if(dBFS > monitor->audio.dBFSs[i])
 			monitor->audio.dBFSs[i] = dBFS;
 
-		const int32_t dBFS_i32 = monitor->audio.dBFSs[i];
-		atomic_store_explicit(&monitor->jgains[i], dBFS_i32, memory_order_relaxed);
+		const int32_t mBFS = rintf(monitor->audio.dBFSs[i] * 100.f);
+		atomic_store_explicit(&monitor->jgains[i], mBFS, memory_order_relaxed);
 	}
 
 	return 0;
@@ -148,17 +149,19 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 	{
 		for(unsigned i = 0; i < nsinks; i++)
 		{
-			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][j], memory_order_relaxed);
-			if(jgain == 0) // just add
+			const int32_t mBFS = atomic_load_explicit(&mixer->jgains[i][j], memory_order_relaxed);
+			const float dBFS = mBFS / 100.f;
+
+			if(dBFS == 0.f) // just add
 			{
 				for(unsigned k = 0; k < nframes; k++)
 				{
 					psinks[j][k] += psources[i][k];
 				}
 			}
-			else if(jgain > -36) // multiply-add
+			else if(dBFS > -36.f) // multiply-add
 			{
-				const float gain = exp10f(jgain/20.f); // jgain = 20.f*log10f(gain);
+				const float gain = exp10f(dBFS / 20.f); // jgain = 20.f*log10f(gain);
 
 				for(unsigned k = 0; k < nframes; k++)
 				{
@@ -203,14 +206,15 @@ _midi_monitor_process(jack_nframes_t nframes, void *arg)
 			}
 		}
 
+		// go to zero in 1/2 s
 		if(monitor->midi.vels[i] > 0.f)
-			monitor->midi.vels[i] -= (float)(nframes * 127 * 2) / monitor->sample_rate; // go to zero in 1/2 s
+			monitor->midi.vels[i] -= nframes * 127.f * 2.f * monitor->sample_rate_1;
 
 		if(vel > monitor->midi.vels[i])
 			monitor->midi.vels[i] = vel;
 
-		const int32_t vel_i32= monitor->midi.vels[i];
-		atomic_store_explicit(&monitor->jgains[i], vel_i32, memory_order_relaxed);
+		const int32_t cvel = rintf(monitor->midi.vels[i] * 100.f);
+		atomic_store_explicit(&monitor->jgains[i], cvel, memory_order_relaxed);
 	}
 
 	return 0;
@@ -276,9 +280,10 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 
 		for(unsigned i = 0; i < nsinks; i++)
 		{
-			const int32_t jgain = atomic_load_explicit(&mixer->jgains[i][J], memory_order_relaxed);
+			const int32_t mBFS = atomic_load_explicit(&mixer->jgains[i][J], memory_order_relaxed);
+			const float dBFS = mBFS / 100.f;
 
-			if(jgain > -36) // connection to be mixed
+			if(dBFS > -36.f) // connection to be mixed
 			{
 				uint8_t *msg = jack_midi_event_reserve(psinks[i], ev.time, ev.size);
 				if(!msg)
@@ -286,12 +291,12 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 
 				memcpy(msg, ev.buffer, ev.size);
 
-				if( (jgain != 0) && (ev.size == 3) ) // multiply-add
+				if( (dBFS != 0.f) && (ev.size == 3) ) // multiply-add
 				{
 					const uint8_t cmd = msg[0] & 0xf0;
 					if( (cmd == 0x90) || (cmd == 0x80) ) // noteOn or noteOff
 					{
-						const float gain = exp10f(jgain/20.f); // jgain = 20*log10(gain/1);
+						const float gain = exp10f(dBFS / 20.f); // jgain = 20*log10(gain/1);
 
 						const float vel = msg[2] * gain; // velocity
 						msg[2] = vel < 0 ? 0 : (vel > 0x7f ? 0x7f : vel);

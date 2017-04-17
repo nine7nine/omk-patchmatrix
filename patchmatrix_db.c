@@ -614,7 +614,7 @@ _mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
 		{
 			for(unsigned i = 0; i < nsources; i++)
 			{
-				atomic_init(&mixer->jgains[i][j], (i == j) ? 0 : -36);
+				atomic_init(&mixer->jgains[i][j], (i == j) ? 0 : -3600);
 			}
 		}
 
@@ -690,7 +690,7 @@ _monitor_add(app_t *app, unsigned nsources)
 	if(monitor)
 	{
 		monitor->nsources = nsources;
-		monitor->sample_rate = app->sample_rate;
+		monitor->sample_rate_1 = 1.f / app->sample_rate;
 
 		for(unsigned i = 0; i < nsources; i++)
 		{

@@ -262,7 +262,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 			float y = body.y + ps/2;
 			for(unsigned j = 0; j < ny; j++)
 			{
-				int32_t jgain = atomic_load_explicit(&mixer->jgains[i][j], memory_order_acquire);
+				int32_t mBFS = atomic_load_explicit(&mixer->jgains[i][j], memory_order_acquire);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 
@@ -289,20 +289,23 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 				if(dd != 0)
 				{
-					jgain = NK_CLAMP(-36, jgain + dd, 36);
-					atomic_store_explicit(&mixer->jgains[i][j], jgain, memory_order_release);
+					const float mul = 10.f; //FIXME make this configurable
+					mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
+					atomic_store_explicit(&mixer->jgains[i][j], mBFS, memory_order_release);
 				}
+
+				const float dBFS = mBFS / 100.f;
 
 				if( (left_mouse_down && left_mouse_click_in_cursor && !client->moving) || (dd != 0) )
 				{
 					char tooltip [32];
-					snprintf(tooltip, 32, "%+2"PRIi32" dBFS", jgain);
+					snprintf(tooltip, 32, "%+2.2f dBFS", dBFS);
 					nk_tooltip(ctx, tooltip);
 				}
 
-				if(jgain > -36)
+				if(mBFS > -3600)
 				{
-					const float alpha = (jgain + 36) / 72.f;
+					const float alpha = (dBFS + 36.f) / 72.f;
 					const float beta = NK_PI/2;
 
 					nk_stroke_arc(canvas,
@@ -381,7 +384,8 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		{
 			for(unsigned j = 0; j < ny; j++)
 			{
-				int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const int32_t mBFS = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const float dBFS = mBFS / 100.f;
 
 				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
 				struct nk_rect tile = orig;
@@ -389,7 +393,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 				const float mx1 = 58.f / 70.f;
 				const float mx2 = 12.f / 70.f;
 				const uint8_t alph = 0x7f;
-				const float e = (jgain + 64.f) / 70.f;
+				const float e = (dBFS + 64.f) / 70.f;
 				const float peak = NK_CLAMP(0.f, e, 1.f);
 
 				{
@@ -452,14 +456,15 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		{
 			for(unsigned j = 0; j < ny; j++)
 			{
-				int32_t jgain = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const int32_t cvel = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const float vel = cvel / 100.f;
 
 				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
 				struct nk_rect tile = orig;
 				struct nk_rect outline;
 				const float mx1 = 1.f;
 				const uint8_t alph = 0x7f;
-				const float e = jgain / 127.f;
+				const float e = cvel / 127.f;
 				const float peak = NK_CLAMP(0.f, e, 1.f);
 
 				{

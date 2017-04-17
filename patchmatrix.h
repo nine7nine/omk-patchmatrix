@@ -141,7 +141,7 @@ struct _monitor_t {
 	unsigned nsources;
 	jack_port_t *jsources [PORT_MAX];
 	atomic_int jgains [PORT_MAX];
-	int32_t sample_rate;
+	float sample_rate_1;
 
 	union {
 		struct {
