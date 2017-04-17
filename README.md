@@ -1,18 +1,17 @@
 # PatchMatrix
 
-## a JACK Patchbay
+## a JACK patchbay in flow matrix style
 
 ### Build status
 
 [![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix/commits/master)
 
 ### Screenshot
-![Screenshot](https://raw.githubusercontent.com/OpenMusicKontrollers/patchmatrix/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
+![Screenshot](https://gitlab.com/OpenMusicKontrollers/patchmatrix/raw/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
 
 ### Dependencies
 
 * [JACK](http://jackaudio.org/) (JACK audio connection kit)
-* [SQLite3](https://www.sqlite.org/) (SQL database engine)
 * [LV2](http://lv2plug.in) (LV2 Plugin Specification)
 
 ### Build / install
@@ -27,7 +26,7 @@
 
 ### License
 
-Copyright (c) 2016 Hanspeter Portner (dev@open-music-kontrollers.ch)
+Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
 
 This is free software: you can redistribute it and/or modify
 it under the terms of the Artistic License 2.0 as published by
