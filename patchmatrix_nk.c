@@ -87,7 +87,7 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
-	const float cw = 4.f;
+	const float cw = 4.f * app->scale;
 
 	// output connector
 	if(client->source_type & app->type)
@@ -208,7 +208,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 	mixer_t *mixer = client->mixer;
 
-	const float ps = 32.f;
+	const float ps = 32.f * app->scale;
 	const unsigned nx = mixer->nsinks;
 	const unsigned ny = mixer->nsources;
 
@@ -309,12 +309,12 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 					const float beta = NK_PI/2;
 
 					nk_stroke_arc(canvas,
-						x, y, 10.f,
+						x, y, 10.f * app->scale,
 						beta + 0.2f*NK_PI, beta + 1.8f*NK_PI,
 						1.f,
 						wire_color);
 					nk_stroke_arc(canvas,
-						x, y, 7.f,
+						x, y, 7.f * app->scale,
 						beta + 0.2f*NK_PI, beta + (0.2f + alpha*1.6f)*NK_PI,
 						2.f,
 						toggle_color);
@@ -349,7 +349,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 	monitor_t *monitor = client->monitor;
 
-	const float ps = 24.f;
+	const float ps = 24.f * app->scale;
 	const unsigned ny = monitor->nsources;
 
 	client->dim.x = 6 * ps;
@@ -529,6 +529,9 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
+	client->dim.x = 200.f * app->scale;
+	client->dim.y = app->dy * app->scale;
+
 	struct nk_rect bounds = nk_rect(
 		client->pos.x - client->dim.x/2 - scrolling.x,
 		client->pos.y - client->dim.y/2 - scrolling.y,
@@ -612,7 +615,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		ny += 1;
 	}
 
-	const float ps = 16.f;
+	const float ps = 16.f * app->scale;
 	const float pw = nx * ps;
 	const float ph = ny * ps;
 	struct nk_rect bounds = nk_rect(
@@ -654,8 +657,9 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		client_conn->sink_client->hilighted = true;
 	}
 
+	const float cs = 4.f * app->scale;
+
 	{
-		const float cs = 4.f;
 		const float cx = client_conn->pos.x - scrolling.x;
 		const float cxr = cx + pw/2;
 		const float cy = client_conn->pos.y - scrolling.y;
@@ -671,7 +675,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 			? snk->pos.y - scrolling.y - snk->dim.y/2 - cs*2
 			: snk->pos.y - scrolling.y;
 
-		const float bend = 50.f;
+		const float bend = 50.f * app->scale;
 		nk_stroke_curve(canvas,
 			l0x, l0y,
 			l0x + bend, l0y,
@@ -737,7 +741,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 				port_conn_t *port_conn = _port_conn_find(client_conn, source_port, sink_port);
 
 				if(port_conn)
-					nk_fill_arc(canvas, x, y, 4.f, 0.f, 2*NK_PI, toggle_color);
+					nk_fill_arc(canvas, x, y, cs, 0.f, 2*NK_PI, toggle_color);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 
@@ -780,8 +784,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 	app->animating = false;
 
-	const float dy = 20.f * nk_pugl_get_scale(&app->win);
-	app->dy = dy;
+	app->scale = nk_pugl_get_scale(&app->win);
+	app->dy = 20.f * app->scale;
 
 	int n = 0;
 	const struct nk_input *in = &ctx->input;
@@ -798,9 +802,9 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			struct nk_style_button *style = &ctx->style.button;
 
 #ifdef JACK_HAS_METADATA_API
-			nk_layout_row_dynamic(ctx, dy, 4);
+			nk_layout_row_dynamic(ctx, app->dy, 4);
 #else
-			nk_layout_row_dynamic(ctx, dy, 2);
+			nk_layout_row_dynamic(ctx, app->dy, 2);
 #endif
 			const bool is_audio = app->type == TYPE_AUDIO;
 			if(is_audio)
@@ -841,7 +845,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		const struct nk_vec2 scrolling = nodedit->scrolling;
 		const struct nk_rect total_space = nk_window_get_content_region(ctx);
 		const float total_h = total_space.h
-			- dy
+			- app->dy
 			- 2*ctx->style.window.group_padding.y;
 
 		/* allocate complete window space */
@@ -852,7 +856,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				/* display grid */
 				struct nk_rect ssize = nk_layout_space_bounds(ctx);
 				ssize.h -= ctx->style.window.group_padding.y;
-				const float grid_size = 28.0f;
+				const float grid_size = 28.0f * app->scale;
 
 				nk_fill_rect(canvas, ssize, 0.f, grid_background_color);
 
@@ -946,7 +950,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		nk_layout_space_end(ctx);
 
 		{
-			nk_layout_row_dynamic(ctx, dy, 6);
+			nk_layout_row_dynamic(ctx, app->dy, 6);
 			const int32_t buffer_size = nk_propertyi(ctx, "BufferSize: ", 1, app->buffer_size, 48000, 1, 0);
 			if(buffer_size != app->buffer_size)
 			{

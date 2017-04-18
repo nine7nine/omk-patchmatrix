@@ -54,8 +54,8 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		}
 #endif
 
-		const float w = 200;
-		const float h = 25;
+		const float w = 200.f * app->scale;
+		const float h = 25.f * app->scale;
 		float x;
 		float *nxt;
 		if(client_flags == JackPortIsOutput)
@@ -77,7 +77,7 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		*nxt = fmodf(*nxt + 2*h, app->win.cfg.height);
 
 		client->pos = nk_vec2(x, *nxt);
-		client->dim = nk_vec2(200.f, 25.f);
+		client->dim = nk_vec2(w, h);
 		_hash_add(&app->clients, client);
 	}
 

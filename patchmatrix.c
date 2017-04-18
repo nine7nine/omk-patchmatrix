@@ -37,6 +37,7 @@ main(int argc, char **argv)
 {
 	atomic_init(&app.done, false);
 
+	app.scale = 1.f;
 	app.nxt_source = 30; //FIXME make dependent on widget height
 	app.nxt_sink = 720/2;
 	app.nxt_default = 30;

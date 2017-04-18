@@ -278,6 +278,7 @@ struct _app_t {
 
 	nk_pugl_window_t win;
 
+	float scale;
 	float dy;
 
 	float nxt_source;
