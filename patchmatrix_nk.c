@@ -530,7 +530,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	client->dim.x = 200.f * app->scale;
-	client->dim.y = app->dy * app->scale;
+	client->dim.y = app->dy;
 
 	struct nk_rect bounds = nk_rect(
 		client->pos.x - client->dim.x/2 - scrolling.x,
