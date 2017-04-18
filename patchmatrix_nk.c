@@ -842,7 +842,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		}
 		nk_menubar_end(ctx);
 
-		const struct nk_vec2 scrolling = nodedit->scrolling;
 		const struct nk_rect total_space = nk_window_get_content_region(ctx);
 		const float total_h = total_space.h
 			- app->dy
@@ -852,6 +851,20 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		nk_layout_space_begin(ctx, NK_STATIC, total_h,
 			_hash_size(&app->clients) + _hash_size(&app->conns));
 		{
+			const struct nk_rect old_clip = canvas->clip;
+			const struct nk_rect space_bounds= nk_layout_space_bounds(ctx);
+			nk_push_scissor(canvas, space_bounds);
+
+			// window content scrolling
+			if(  nk_input_is_mouse_hovering_rect(in, space_bounds)
+				&& nk_input_is_mouse_down(in, NK_BUTTON_MIDDLE))
+			{
+				nodedit->scrolling.x -= in->mouse.delta.x;
+				nodedit->scrolling.y -= in->mouse.delta.y;
+			}
+
+			const struct nk_vec2 scrolling = nodedit->scrolling;
+
 			{
 				/* display grid */
 				struct nk_rect ssize = nk_layout_space_bounds(ctx);
@@ -946,6 +959,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				nk_contextual_end(ctx);
 			}
+
+			nk_push_scissor(canvas, old_clip);
 		}
 		nk_layout_space_end(ctx);
 
@@ -985,14 +1000,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 
 			nk_label(ctx, "PatchMatrix: "PATCHMATRIX_VERSION, NK_TEXT_RIGHT);
-		}
-
-		/* window content scrolling */
-		if(  nk_input_is_mouse_hovering_rect(in, nk_window_get_bounds(ctx))
-			&& nk_input_is_mouse_down(in, NK_BUTTON_MIDDLE))
-		{
-			nodedit->scrolling.x -= in->mouse.delta.x;
-			nodedit->scrolling.y -= in->mouse.delta.y;
 		}
 	}
 	nk_end(ctx);
