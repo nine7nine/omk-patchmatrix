@@ -247,9 +247,9 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 		app->closing = true;
 	}
 
-	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
-	client->hovered = is_hovering;
-	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
+		&& !nodedit->linking.active;
+	const bool is_hilighted = client->hilighted || client->hovered || client->moving;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -387,9 +387,9 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		app->closing = true;
 	}
 
-	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
-	client->hovered = is_hovering;
-	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
+		&& !nodedit->linking.active;
+	const bool is_hilighted = client->hilighted || client->hovered || client->moving;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -563,9 +563,9 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		// nothing
 	}
 
-	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
-	client->hovered = is_hovering;
-	const bool is_hilighted = client->hilighted || is_hovering || client->moving;
+	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
+		&& !nodedit->linking.active;
+	const bool is_hilighted = client->hilighted || client->hovered || client->moving;
 
 	nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, bounds));
 
@@ -644,7 +644,8 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		pw, ph
 	);
 
-	const int is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
+	const int is_hovering = nk_input_is_mouse_hovering_rect(in, bounds)
+		&& !nodedit->linking.active;
 
 	if(client_conn->moving)
 	{
@@ -788,6 +789,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 
 				if(  nk_input_is_mouse_hovering_rect(in, tile)
+					&& is_hovering
 					&& !client_conn->moving)
 				{
 					const char *source_name = source_port->pretty_name
