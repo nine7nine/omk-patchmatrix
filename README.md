@@ -9,14 +9,44 @@
 ### Screenshot
 ![Screenshot](https://gitlab.com/OpenMusicKontrollers/patchmatrix/raw/master/patchmatrix_screeny.png "PatchMatrix Screenshot")
 
+### Mouse actions
+
+#### Canvas
+* Middle button + move: _move canvas_
+* Right button: _open context menu_
+
+#### Client
+* Left button + Ctrl + move: _move client_
+
+#### Grab handle
+* Left button: _connect clients w/o connecting ports within_
+* Left button + Ctrl: _connect clients and ports automagically_
+
+#### Mixer
+* Left button + move: _change gain_
+* Wheel: _change gain_
+* Right button: _remove_
+
+#### Monitor
+* Rigth button: _remove_
+
+#### Matrix
+* Left button: _toggle port connection_
+* Left button + Ctrl + move: _move matrix_
+* Wheel: _toggle port connection_
+* Right button: _remove and disconnect all ports_
+
 ### Dependencies
 
+#### Runtime
 * [JACK](http://jackaudio.org/) (JACK audio connection kit)
+
+#### Buildtime
 * [LV2](http://lv2plug.in) (LV2 Plugin Specification)
 
 ### Build / install
 
-	git clone https://github.com/OpenMusicKontrollers/patchmatrix.git
+	git clone https://gitlab.com/OpenMusicKontrollers/patchmatrix.git
 	cd patchmatrix 
 	mkdir build
 	cd build

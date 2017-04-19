@@ -191,6 +191,7 @@ struct _client_t {
 	bool moving;
 	bool hilighted;
 	bool hovered;
+	bool closing;
 
 	mixer_t *mixer;
 	monitor_t *monitor;
@@ -300,7 +301,7 @@ struct _app_t {
 
 	atomic_bool done;
 	bool animating;
-	client_t *contextual;
+	bool closing;
 	struct nk_rect contextbounds;
 };
 

@@ -31,7 +31,7 @@ static int
 _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 	struct nk_rect *bounds)
 {
-	const struct nk_input *in = &ctx->input;
+	struct nk_input *in = &ctx->input;
 	
 	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, *bounds);
 
@@ -74,8 +74,17 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 		client->moving = true;
 	}
 
-	return is_hovering
-		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT);
+	if  (is_hovering
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
+	{
+		// consume mouse event
+		in->mouse.buttons[NK_BUTTON_RIGHT].down = nk_false;
+		in->mouse.buttons[NK_BUTTON_RIGHT].clicked = nk_false;
+
+		return true;
+	}
+
+	return false;
 }
 
 static void
@@ -222,8 +231,8 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		app->contextual = client;
-		app->contextbounds = bounds;
+		client->closing = true;
+		app->closing = true;
 	}
 
 	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
@@ -362,8 +371,8 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		app->contextual = client;
-		app->contextbounds = bounds;
+		client->closing = true;
+		app->closing = true;
 	}
 
 	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
@@ -539,8 +548,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		app->contextual = client;
-		app->contextbounds = bounds;
+		// nothing
 	}
 
 	const bool is_hovering = nk_input_is_mouse_hovering_rect(in, bounds);
@@ -583,7 +591,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	}
 
 	struct node_editor *nodedit = &app->nodedit;
-	const struct nk_input *in = &ctx->input;
+	struct nk_input *in = &ctx->input;
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
@@ -645,6 +653,21 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
 		client_conn->moving = true;
+	}
+	else if(is_hovering
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
+	{
+		// consume mouse event
+		in->mouse.buttons[NK_BUTTON_RIGHT].down = nk_false;
+		in->mouse.buttons[NK_BUTTON_RIGHT].clicked = nk_false;
+
+		HASH_FOREACH(&client_conn->conns, port_conn_itr)
+		{
+			port_conn_t *port_conn = *port_conn_itr;
+
+			if( (port_conn->source_port->type & app->type) && (port_conn->sink_port->type & app->type) )
+				jack_disconnect(app->client, port_conn->source_port->name, port_conn->sink_port->name);
+		}
 	}
 
 	const bool is_hilighted = client_conn->source_client->hovered
@@ -760,7 +783,14 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 					snprintf(tmp, 128, "%s || %s", source_name, sink_name);
 					nk_tooltip(ctx, tmp);
 
-					if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT))
+					float dd = 0.f;
+					if(in->mouse.scroll_delta != 0.f) // has scrolling
+					{
+						dd = in->mouse.scroll_delta;
+						in->mouse.scroll_delta = 0.f;
+					}
+
+					if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) || (dd != 0.f) )
 					{
 						if(port_conn)
 							jack_disconnect(app->client, source_port->name, sink_port->name);
@@ -890,6 +920,8 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				}
 			}
 
+			app->closing = false;
+
 			HASH_FOREACH(&app->clients, client_itr)
 			{
 				client_t *client = *client_itr;
@@ -902,6 +934,33 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					node_editor_client(ctx, app, client);
 
 				client->hilighted = false;
+			}
+
+			if(app->closing)
+			{
+				client_t *dst;
+
+				do {
+					dst = NULL;
+
+					HASH_FOREACH(&app->clients, client_itr)
+					{
+						client_t *client = *client_itr;
+
+						if(client->closing)
+						{
+							dst = client;
+							break;
+						}
+					}
+
+					if(dst)
+					{
+						_client_remove(app, dst);
+						_client_free(app, dst);
+					}
+
+				} while(dst);
 			}
 
 			HASH_FOREACH(&app->conns, client_conn_itr)
@@ -919,21 +978,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			}
 
 			// contextual menu
-			if(  app->contextual
-				&& (app->contextual->mixer || app->contextual->monitor)
-				&& nk_contextual_begin(ctx, 0, nk_vec2(100, 220), app->contextbounds) )
-			{
-				nk_layout_row_dynamic(ctx, app->dy, 1);
-				if(nk_contextual_item_label(ctx, "Remove", NK_TEXT_LEFT))
-				{
-					_client_remove(app, app->contextual);
-					_client_free(app, app->contextual);
-					app->contextual = NULL;
-				}
-
-				nk_contextual_end(ctx);
-			}
-			else if(
+			if(
 #ifdef JACK_HAS_METADATA_API
 				(app->type != TYPE_OSC) && (app->type != TYPE_CV) &&
 #endif
