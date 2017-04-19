@@ -98,6 +98,11 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 
 	const float cw = 4.f * app->scale;
 
+	const struct nk_rect bounds = nk_rect(
+		client->pos.x - dim.x/2, client->pos.y - dim.y/2,
+		dim.x, dim.y
+	);
+
 	// output connector
 	if(client->source_type & app->type)
 	{
@@ -108,21 +113,26 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			4*cw, 4*cw
 		);
 
+		// start linking process
+		const bool has_click_body = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, bounds, nk_true);
+		const bool has_click_handle = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, outer, nk_true);
+		if( (has_click_body && !client->mixer) || has_click_handle)
+		{
+			nodedit->linking.active = true;
+			nodedit->linking.source_client = client;
+		}
+
+		const bool is_hovering_body = nk_input_is_mouse_hovering_rect(in, bounds);
+		const bool is_hovering_handle= nk_input_is_mouse_hovering_rect(in, outer);
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
 			is_hilighted ? hilight_color : grab_handle_color);
-		if(  (nk_input_is_mouse_hovering_rect(in, outer) && !nodedit->linking.active)
+		if(  (is_hovering_handle && !nodedit->linking.active)
 			|| (nodedit->linking.active && (nodedit->linking.source_client == client)) )
 		{
 			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
-		// start linking process
-		if(nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, outer, nk_true)) {
-			nodedit->linking.active = nk_true;
-			nodedit->linking.source_client = client;
-		}
-
-		// draw ilne from linked node slot to mouse position
+		// draw line from linked node slot to mouse position
 		if(  nodedit->linking.active
 			&& (nodedit->linking.source_client == client) )
 		{
@@ -146,19 +156,21 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			4*cw, 4*cw
 		);
 
+		const bool is_hovering_body = nk_input_is_mouse_hovering_rect(in, bounds);
+		const bool is_hovering_handle = nk_input_is_mouse_hovering_rect(in, outer);
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
 			is_hilighted ? hilight_color : grab_handle_color);
-		if(  nk_input_is_mouse_hovering_rect(in, outer)
+		if(  (is_hovering_handle || is_hovering_body)
 			&& nodedit->linking.active)
 		{
 			nk_stroke_arc(canvas, cx, cy, 2*cw, 0.f, 2*NK_PI, 1.f, hilight_color);
 		}
 
 		if(  nk_input_is_mouse_released(in, NK_BUTTON_LEFT)
-			&& nk_input_is_mouse_hovering_rect(in, outer)
+			&& (is_hovering_handle || is_hovering_body)
 			&& nodedit->linking.active)
 		{
-			nodedit->linking.active = nk_false;
+			nodedit->linking.active = false;
 
 			client_t *src = nodedit->linking.source_client;
 			if(src)
@@ -980,7 +992,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			if(  nodedit->linking.active
 				&& nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 			{
-				nodedit->linking.active = nk_false;
+				nodedit->linking.active = false;
 			}
 
 			// contextual menu
