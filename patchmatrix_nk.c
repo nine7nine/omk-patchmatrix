@@ -661,12 +661,22 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		in->mouse.buttons[NK_BUTTON_RIGHT].down = nk_false;
 		in->mouse.buttons[NK_BUTTON_RIGHT].clicked = nk_false;
 
+		unsigned count = 0;
 		HASH_FOREACH(&client_conn->conns, port_conn_itr)
 		{
 			port_conn_t *port_conn = *port_conn_itr;
 
 			if( (port_conn->source_port->type & app->type) && (port_conn->sink_port->type & app->type) )
+			{
 				jack_disconnect(app->client, port_conn->source_port->name, port_conn->sink_port->name);
+				count += 1;
+			}
+		}
+
+		if(count == 0) // is empty matrix, mark for removal
+		{
+			client_conn->closing = true;
+			app->closing = true;
 		}
 	}
 
@@ -939,7 +949,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			if(app->closing)
 			{
 				client_t *dst;
-
 				do {
 					dst = NULL;
 
@@ -963,11 +972,37 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				} while(dst);
 			}
 
+			app->closing = false;
+
 			HASH_FOREACH(&app->conns, client_conn_itr)
 			{
 				client_conn_t *client_conn = *client_conn_itr;
 
 				node_editor_client_conn(ctx, app, client_conn, app->type);
+			}
+
+			if(app->closing)
+			{
+				client_conn_t *dst;
+				do {
+					dst = NULL;
+
+					HASH_FOREACH(&app->conns, client_conn_itr)
+					{
+						client_conn_t *client_conn = *client_conn_itr;
+
+						if(client_conn->closing)
+						{
+							dst = client_conn;
+							break;
+						}
+					}
+
+					if(dst)
+					{
+						_client_conn_remove(app, dst);
+					}
+				} while(dst);
 			}
 
 			/* reset linking connection */
