@@ -116,7 +116,8 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 		// start linking process
 		const bool has_click_body = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, bounds, nk_true);
 		const bool has_click_handle = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, outer, nk_true);
-		if( (has_click_body && !client->mixer) || has_click_handle)
+		if(  ((has_click_body && !client->mixer) || has_click_handle)
+			&& !nk_input_is_key_down(in, NK_KEY_CTRL))
 		{
 			nodedit->linking.active = true;
 			nodedit->linking.source_client = client;
