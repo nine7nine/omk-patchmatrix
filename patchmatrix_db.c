@@ -137,7 +137,7 @@ _client_find_by_name(app_t *app, const char *client_name, int client_flags)
 	{
 		client_t *client = *client_itr;
 
-		if(!strcmp(client->name, client_name) && (client->flags & client_flags))
+		if(!strcmp(client->name, client_name) && (client->flags == client_flags))
 		{
 			return client;
 		}
@@ -154,7 +154,7 @@ _client_find_by_uuid(app_t *app, jack_uuid_t client_uuid, int client_flags)
 	{
 		client_t *client = *client_itr;
 
-		if(!jack_uuid_compare(client->uuid, client_uuid) && (client->flags & client_flags))
+		if(!jack_uuid_compare(client->uuid, client_uuid) && (client->flags == client_flags))
 		{
 			return client;
 		}
