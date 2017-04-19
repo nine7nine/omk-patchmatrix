@@ -80,7 +80,7 @@ port_conn_t *
 _port_conn_find(client_conn_t *client_conn, port_t *source_port, port_t *sink_port);
 
 void
-_port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_port);
+_port_conn_remove(app_t *app, client_conn_t *client_conn, port_t *source_port, port_t *sink_port);
 
 // port
 port_t *

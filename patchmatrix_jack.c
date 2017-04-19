@@ -391,7 +391,7 @@ _jack_anim(app_t *app)
 							if(ev->port_connect.state)
 								_port_conn_add(client_conn, source_port, sink_port);
 							else
-								_port_conn_remove(client_conn, source_port, sink_port);
+								_port_conn_remove(app, client_conn, source_port, sink_port);
 						}
 					}
 				}

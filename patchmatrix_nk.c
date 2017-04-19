@@ -673,11 +673,8 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 			}
 		}
 
-		if(count == 0) // is empty matrix, mark for removal
-		{
-			client_conn->closing = true;
-			app->closing = true;
-		}
+		if(count == 0) // is empty matrix, demask for current type
+			client_conn->type &= ~(app->type);
 	}
 
 	const bool is_hilighted = client_conn->source_client->hovered
@@ -972,37 +969,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				} while(dst);
 			}
 
-			app->closing = false;
-
 			HASH_FOREACH(&app->conns, client_conn_itr)
 			{
 				client_conn_t *client_conn = *client_conn_itr;
 
 				node_editor_client_conn(ctx, app, client_conn, app->type);
-			}
-
-			if(app->closing)
-			{
-				client_conn_t *dst;
-				do {
-					dst = NULL;
-
-					HASH_FOREACH(&app->conns, client_conn_itr)
-					{
-						client_conn_t *client_conn = *client_conn_itr;
-
-						if(client_conn->closing)
-						{
-							dst = client_conn;
-							break;
-						}
-					}
-
-					if(dst)
-					{
-						_client_conn_remove(app, dst);
-					}
-				} while(dst);
 			}
 
 			/* reset linking connection */

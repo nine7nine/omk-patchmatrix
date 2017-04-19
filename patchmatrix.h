@@ -125,7 +125,6 @@ struct _client_conn_t {
 
 	struct nk_vec2 pos;
 	bool moving;
-	bool closing;
 };
 
 struct _mixer_t {

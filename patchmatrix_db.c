@@ -360,7 +360,7 @@ _port_conn_remove_cb(void *node, void *data)
 }
 
 void
-_port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_port)
+_port_conn_remove(app_t *app, client_conn_t *client_conn, port_t *source_port, port_t *sink_port)
 {
 	port_conn_t port_conn = {
 		.source_port = source_port,
@@ -369,6 +369,9 @@ _port_conn_remove(client_conn_t *client_conn, port_t *source_port, port_t *sink_
 
 	_hash_remove_cb(&client_conn->conns, _port_conn_remove_cb, &port_conn);
 	_client_conn_refresh_type(client_conn);
+
+	if(_hash_size(&client_conn->conns) == 0)
+		_client_conn_remove(app, client_conn);
 }
 
 // port
@@ -514,6 +517,7 @@ _port_remove_cb(void *node, void *data)
 		|| (client_conn->sink_client == port->client) )
 	{
 		_hash_remove_cb(&client_conn->conns, _port_remove_cb_cb, port);
+		_client_conn_refresh_type(client_conn);
 	}
 
 	// free when empty
