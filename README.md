@@ -23,8 +23,10 @@
 * Left button + Ctrl: _connect clients and ports automagically_
 
 #### Mixer
-* Left button + move: _change gain_
-* Wheel: _change gain_
+* Left button + move: _change gain coarse_
+* Wheel: _change gain coarse_
+* Left button + Shift + move: _change gain fine_
+* Wheel + Shift: _change gain fine_
 * Right button: _remove_
 
 #### Monitor

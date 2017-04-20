@@ -290,11 +290,11 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 				const struct nk_mouse_button *btn = &in->mouse.buttons[NK_BUTTON_LEFT];;
 				const bool left_mouse_down = btn->down;
-				const bool left_mouse_click_in_cursor = nk_input_has_mouse_click_down_in_rect(in,
+				const bool left_mouse_click_in_tile = nk_input_has_mouse_click_down_in_rect(in,
 					NK_BUTTON_LEFT, tile, nk_true);
 
 				int32_t dd = 0;
-				if(left_mouse_down && left_mouse_click_in_cursor && !client->moving)
+				if(left_mouse_down && left_mouse_click_in_tile && !client->moving)
 				{
 					const float dx = in->mouse.delta.x;
 					const float dy = in->mouse.delta.y;
@@ -311,14 +311,25 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 				if(dd != 0)
 				{
-					const float mul = 10.f; //FIXME make this configurable
-					mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
+#if 0
+					if( (dd > 0) && (mBFS == -3600) ) // disabled
+					{
+						mBFS = 0; // jump to 0 dBFS
+					}
+					else
+#endif
+					{
+						const bool has_shift = nk_input_is_key_down(in, NK_KEY_SHIFT);
+						const float mul = has_shift ? 10.f : 100.f;
+						mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
+					}
+
 					atomic_store_explicit(&mixer->jgains[i][j], mBFS, memory_order_release);
 				}
 
 				const float dBFS = mBFS / 100.f;
 
-				if( (left_mouse_down && left_mouse_click_in_cursor && !client->moving) || (dd != 0) )
+				if( (left_mouse_down && left_mouse_click_in_tile && !client->moving) || (dd != 0) )
 				{
 					char tooltip [32];
 					snprintf(tooltip, 32, "%+2.2f dBFS", dBFS);
