@@ -548,6 +548,48 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 	app->animating = true;
 }
 
+static unsigned
+_client_num_sources(client_t *client, port_type_t type)
+{
+	if(client->source_type & type)
+	{
+		unsigned num = 0;
+
+		HASH_FOREACH(&client->sources, port_itr)
+		{
+			port_t *port = *port_itr;
+
+			if(port->type & type)
+				num += 1;
+		}
+
+		return num;
+	}
+
+	return 0;
+}
+
+static unsigned
+_client_num_sinks(client_t *client, port_type_t type)
+{
+	if(client->sink_type & type)
+	{
+		unsigned num = 0;
+
+		HASH_FOREACH(&client->sinks, port_itr)
+		{
+			port_t *port = *port_itr;
+
+			if(port->type & type)
+				num += 1;
+		}
+
+		return num;
+	}
+
+	return 0;
+}
+
 static void
 node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 {
@@ -592,13 +634,58 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		nk_stroke_rect(canvas, body, style->rounding, style->border,
 			is_hilighted ? hilight_color : style->border_color);
 
-		const char *client_name = client->pretty_name ? client->pretty_name : client->name;
-		const float fw = font->width(font->userdata, font->height, client_name, strlen(client_name));
 		const float fh = font->height;
-		body.x += (body.w - fw)/2;
-		body.y += (body.h - fh)/2;
-		nk_draw_text(canvas, body, client_name, strlen(client_name), font,
-			style->normal.data.color, style->text_normal);
+		const float fy = body.y + (body.h - fh)/2;
+		{
+			const char *client_name = client->pretty_name ? client->pretty_name : client->name;
+			const size_t client_name_len = strlen(client_name);
+			const float fw = font->width(font->userdata, font->height, client_name, client_name_len);
+			const struct nk_rect body2 = {
+				.x = body.x + (body.w - fw)/2,
+				.y = fy,
+				.w = fw,
+				.h = fh
+			};
+			nk_draw_text(canvas, body2, client_name, client_name_len, font,
+				style->normal.data.color, style->text_normal);
+		}
+
+		const unsigned nsources = _client_num_sources(client, app->type);
+		const unsigned nsinks = _client_num_sinks(client, app->type);
+
+		if(nsources)
+		{
+			char nums [32];
+			snprintf(nums, 32, "%u", nsources);
+
+			const size_t nums_len = strlen(nums);
+			const float fw = font->width(font->userdata, font->height, nums, nums_len);
+			const struct nk_rect body2 = {
+				.x = body.x + body.w - fw - 4.f,
+				.y = fy,
+				.w = fw,
+				.h = fh
+			};
+			nk_draw_text(canvas, body2, nums, nums_len, font,
+				style->normal.data.color, style->text_normal);
+		}
+
+		if(nsinks)
+		{
+			char nums [32];
+			snprintf(nums, 32, "%u", nsinks);
+
+			const size_t nums_len = strlen(nums);
+			const float fw = font->width(font->userdata, font->height, nums, nums_len);
+			const struct nk_rect body2 = {
+				.x = body.x + 4.f,
+				.y = fy,
+				.w = fw,
+				.h = fh
+			};
+			nk_draw_text(canvas, body2, nums, nums_len, font,
+				style->normal.data.color, style->text_normal);
+		}
 	}
 
 	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h), is_hilighted);
@@ -625,27 +712,8 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	if(!src || !snk)
 		return;
 
-	int nx = 0;
-	HASH_FOREACH(&client_conn->source_client->sources, source_port_itr)
-	{
-		port_t *source_port = *source_port_itr;
-
-		if(!(source_port->type & port_type))
-			continue;
-
-		nx += 1;
-	}
-
-	int ny = 0;
-	HASH_FOREACH(&client_conn->sink_client->sinks, sink_port_itr)
-	{
-		port_t *sink_port = *sink_port_itr;
-
-		if(!(sink_port->type & port_type))
-			continue;
-
-		ny += 1;
-	}
+	const unsigned nx = _client_num_sources(client_conn->source_client, port_type);
+	const unsigned ny = _client_num_sinks(client_conn->sink_client, port_type);
 
 	const float ps = 16.f * app->scale;
 	const float pw = nx * ps;
