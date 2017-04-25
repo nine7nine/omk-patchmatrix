@@ -687,7 +687,7 @@ _mixer_spawn(app_t *app, unsigned nsources, unsigned nsinks)
 		snprintf(sink_nums, 32, "%u", nsources);
 
 		char *const argv [] = {
-			"/usr/local/bin/patchmatrix_mixer", //FIXME
+			PATCHMATRIX_BIN_DIR"patchmatrix_mixer",
 			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
 			source_nums,
 			sink_nums,
@@ -738,7 +738,7 @@ _monitor_spawn(app_t *app, unsigned nsources)
 		snprintf(source_nums, 32, "%u", nsources);
 
 		char *const argv [] = {
-			"/usr/local/bin/patchmatrix_monitor", //FIXME
+			PATCHMATRIX_BIN_DIR"patchmatrix_monitor",
 			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
 			source_nums,
 			NULL

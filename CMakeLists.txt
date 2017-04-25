@@ -35,6 +35,7 @@ set(PATCHMATRIX_ICON_DIR share/icons/hicolor/256x256/apps)
 set(PATCHMATRIX_DESKTOP_DIR share/applications)
 set(PATCHMATRIX_DATA_DIR share/patchmatrix)
 set(PATCHMATRIX_MAN_DIR share/man/man1)
+add_definitions("-DPATCHMATRIX_BIN_DIR=\"${CMAKE_INSTALL_PREFIX}/${PATCHMATRIX_BIN_DIR}/\"")
 add_definitions("-DPATCHMATRIX_DATA_DIR=\"${CMAKE_INSTALL_PREFIX}/${PATCHMATRIX_DATA_DIR}/\"")
 
 add_definitions("-DNK_PUGL_ALWAYS_RENDER")
