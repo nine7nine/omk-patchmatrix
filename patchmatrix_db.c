@@ -19,6 +19,47 @@
 #include <patchmatrix_jack.h>
 
 // client
+static void
+_client_get_or_set_pos_x(app_t *app, client_t *client, const char *property)
+{
+	char *value = NULL;
+	char *type = NULL;
+	jack_get_property(client->uuid, property, &value, &type);
+	if(value)
+	{
+		client->pos.x = atof(value);
+		jack_free(value);
+	}
+	else // set, if not already set
+	{
+		char val [32];
+		snprintf(val, 32, "%f", client->pos.x);
+		jack_set_property(app->client, client->uuid, property, val, XSD__float);
+	}
+	if(type)
+		jack_free(type);
+}
+
+static void
+_client_get_or_set_pos_y(app_t *app, client_t *client, const char *property)
+{
+	char *value = NULL;
+	char *type = NULL;
+	jack_get_property(client->uuid, property, &value, &type);
+	if(value)
+	{
+		client->pos.y = atof(value);
+		jack_free(value);
+	}
+	else // set, if not already set
+	{
+		char val [32];
+		snprintf(val, 32, "%f", client->pos.y);
+		jack_set_property(app->client, client->uuid, property, val, XSD__float);
+	}
+	if(type)
+		jack_free(type);
+}
 
 client_t *
 _client_add(app_t *app, const char *client_name, int client_flags)
@@ -29,6 +70,31 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		client->name = strdup(client_name);
 		client->pretty_name = NULL;
 		client->flags = client_flags;
+
+		const float w = 200.f * app->scale;
+		const float h = 25.f * app->scale;
+		float x;
+		float *nxt;
+		if(client->flags == JackPortIsOutput)
+		{
+			x = w/2 + 10;
+			nxt = &app->nxt_source;
+		}
+		else if(client->flags == JackPortIsInput)
+		{
+			x = app->win.cfg.width - w/2 - 10;
+			nxt = &app->nxt_sink;
+		}
+		else
+		{
+			x = app->win.cfg.width/2;
+			nxt = &app->nxt_default;
+		}
+
+		*nxt = fmodf(*nxt + 2*h, app->win.cfg.height);
+
+		client->pos = nk_vec2(x, *nxt);
+		client->dim = nk_vec2(w, h);
 
 #ifdef JACK_HAS_METADATA_API
 		char *client_uuid_str = jack_get_uuid_for_client_name(app->client, client_name);
@@ -52,32 +118,24 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 			if(type)
 				jack_free(type);
 		}
+
+		if(client->flags == (JackPortIsInput | JackPortIsOutput) )
+		{
+			_client_get_or_set_pos_x(app, client, PATCHMATRIX__mainPositionX);
+			_client_get_or_set_pos_y(app, client, PATCHMATRIX__mainPositionY);
+		}
+		else if(client->flags == JackPortIsInput)
+		{
+			_client_get_or_set_pos_x(app, client, PATCHMATRIX__sinkPositionX);
+			_client_get_or_set_pos_y(app, client, PATCHMATRIX__sinkPositionY);
+		}
+		else if(client->flags == JackPortIsOutput)
+		{
+			_client_get_or_set_pos_x(app, client, PATCHMATRIX__sourcePositionX);
+			_client_get_or_set_pos_y(app, client, PATCHMATRIX__sourcePositionY);
+		}
 #endif
 
-		const float w = 200.f * app->scale;
-		const float h = 25.f * app->scale;
-		float x;
-		float *nxt;
-		if(client_flags == JackPortIsOutput)
-		{
-			x = w/2 + 10;
-			nxt = &app->nxt_source;
-		}
-		else if(client_flags == JackPortIsInput)
-		{
-			x = app->win.cfg.width - w/2 - 10;
-			nxt = &app->nxt_sink;
-		}
-		else
-		{
-			x = app->win.cfg.width/2;
-			nxt = &app->nxt_default;
-		}
-
-		*nxt = fmodf(*nxt + 2*h, app->win.cfg.height);
-
-		client->pos = nk_vec2(x, *nxt);
-		client->dim = nk_vec2(w, h);
 		_hash_add(&app->clients, client);
 	}
 

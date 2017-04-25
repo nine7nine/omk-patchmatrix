@@ -483,6 +483,48 @@ _jack_anim(app_t *app)
 										//FIXME do something?
 									}
 								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__mainPositionX))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsInput | JackPortIsOutput);
+									if(client)
+										client->pos.x = atof(value);
+								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__mainPositionY))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsInput | JackPortIsOutput);
+									if(client)
+										client->pos.y = atof(value);
+								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__sourcePositionX))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsOutput);
+									if(client)
+										client->pos.x = atof(value);
+								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__sourcePositionY))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsOutput);
+									if(client)
+										client->pos.y = atof(value);
+								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__sinkPositionX))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsInput);
+									if(client)
+										client->pos.x = atof(value);
+								}
+								else if(!strcmp(ev->property_change.key, PATCHMATRIX__sinkPositionY))
+								{
+									client_t *client = _client_find_by_uuid(app, ev->property_change.uuid,
+										JackPortIsInput);
+									if(client)
+										client->pos.y = atof(value);
+								}
 
 								free(value);
 							}

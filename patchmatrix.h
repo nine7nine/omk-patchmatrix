@@ -44,6 +44,21 @@
 #define NK_PUGL_API
 #include <nk_pugl/nk_pugl.h>
 
+#define PATCHMATRIX_URI              "http://open-music-kontrollers.ch/patchmatrix"
+#define PATCHMATRIX_PREFIX           PATCHMATRIX_URI"#"
+#define PATCHMATRIX__mainPositionX   PATCHMATRIX_PREFIX"mainPositionX"
+#define PATCHMATRIX__mainPositionY   PATCHMATRIX_PREFIX"mainPositionY"
+#define PATCHMATRIX__sourcePositionX PATCHMATRIX_PREFIX"sourcePositionX"
+#define PATCHMATRIX__sourcePositionY PATCHMATRIX_PREFIX"sourcePositionY"
+#define PATCHMATRIX__sinkPositionX   PATCHMATRIX_PREFIX"sinkPositionX"
+#define PATCHMATRIX__sinkPositionY   PATCHMATRIX_PREFIX"sinkPositionY"
+
+#define XSD_URI                      "http://www.w3.org/2001/XMLSchema"
+#define XSD_PREFIX                   XSD_URI"#"
+#define XSD__integer                 XSD_PREFIX"integer"
+#define XSD__float                   XSD_PREFIX"float"
+
+
 #define PORT_MAX 8 //FIXME
 
 typedef enum _event_type_t event_type_t;

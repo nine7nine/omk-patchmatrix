@@ -40,6 +40,39 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 		if(nk_input_is_mouse_released(in, NK_BUTTON_LEFT))
 		{
 			client->moving = false;
+
+#ifdef JACK_HAS_METADATA_API
+			if(client->flags == (JackPortIsInput | JackPortIsOutput) )
+			{
+				char val [32];
+
+				snprintf(val, 32, "%f", client->pos.x);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__mainPositionX, val, XSD__float);
+
+				snprintf(val, 32, "%f", client->pos.y);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__mainPositionY, val, XSD__float);
+			}
+			else if(client->flags == JackPortIsInput)
+			{
+				char val [32];
+
+				snprintf(val, 32, "%f", client->pos.x);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__sinkPositionX, val, XSD__float);
+
+				snprintf(val, 32, "%f", client->pos.y);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__sinkPositionY, val, XSD__float);
+			}
+			else if(client->flags == JackPortIsOutput)
+			{
+				char val [32];
+
+				snprintf(val, 32, "%f", client->pos.x);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__sourcePositionX, val, XSD__float);
+
+				snprintf(val, 32, "%f", client->pos.y);
+				jack_set_property(app->client, client->uuid, PATCHMATRIX__sourcePositionY, val, XSD__float);
+			}
+#endif
 		}
 		else
 		{
