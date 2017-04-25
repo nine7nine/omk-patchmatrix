@@ -77,46 +77,6 @@ _mkdirp(const char* path, mode_t mode)
 }
 
 int
-_audio_monitor_process(jack_nframes_t nframes, void *arg)
-{
-	monitor_t *monitor = arg;
-
-	const float *psources [PORT_MAX];
-
-	const unsigned nsources = monitor->nsources;
-
-	for(unsigned i = 0; i < nsources; i++)
-	{
-		jack_port_t *jsource = monitor->jsources[i];
-		psources[i] = jack_port_get_buffer(jsource, nframes);
-
-		float peak = 0.f;
-		for(unsigned k = 0; k < nframes; k++)
-		{
-			const float sample = fabsf(psources[i][k]);
-			if(sample > peak)
-				peak = sample;
-		}
-
-		// go to zero in 1/2 s
-		if(monitor->audio.dBFSs[i] > -64.f)
-			monitor->audio.dBFSs[i] -= nframes * 70.f * 2.f * monitor->sample_rate_1;
-
-		const float dBFS = (peak > 0.f)
-			? 6.f + 20.f*log10f(peak / 2.f) // dBFS+6
-			: -64.f;
-
-		if(dBFS > monitor->audio.dBFSs[i])
-			monitor->audio.dBFSs[i] = dBFS;
-
-		const int32_t mBFS = rintf(monitor->audio.dBFSs[i] * 100.f);
-		atomic_store_explicit(&monitor->jgains[i], mBFS, memory_order_relaxed);
-	}
-
-	return 0;
-}
-
-int
 _audio_mixer_process(jack_nframes_t nframes, void *arg)
 {
 	mixer_t *mixer = arg;
@@ -170,51 +130,6 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 			}
 			// else connection not to be mixed
 		}
-	}
-
-	return 0;
-}
-
-int
-_midi_monitor_process(jack_nframes_t nframes, void *arg)
-{
-	monitor_t *monitor = arg;
-
-	void *psources [PORT_MAX];
-
-	const unsigned nsources = monitor->nsources;
-
-	for(unsigned i = 0; i < nsources; i++)
-	{
-		jack_port_t *jsource = monitor->jsources[i];
-		psources[i] = jack_port_get_buffer(jsource, nframes);
-
-		float vel = 0.f;
-		const uint32_t count = jack_midi_get_event_count(psources[i]);
-		for(unsigned k = 0; k < count; k++)
-		{
-			jack_midi_event_t ev;
-			jack_midi_event_get(&ev, psources[i], k);
-
-			if(ev.size != 3)
-				continue;
-
-			if( (ev.buffer[0] & 0xf0) == 0x90)
-			{
-				if(ev.buffer[2] > vel)
-					vel = ev.buffer[2];
-			}
-		}
-
-		// go to zero in 1/2 s
-		if(monitor->midi.vels[i] > 0.f)
-			monitor->midi.vels[i] -= nframes * 127.f * 2.f * monitor->sample_rate_1;
-
-		if(vel > monitor->midi.vels[i])
-			monitor->midi.vels[i] = vel;
-
-		const int32_t cvel = rintf(monitor->midi.vels[i] * 100.f);
-		atomic_store_explicit(&monitor->jgains[i], cvel, memory_order_relaxed);
 	}
 
 	return 0;

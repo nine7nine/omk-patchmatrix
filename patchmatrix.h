@@ -26,6 +26,7 @@
 #include <errno.h> // mkdir
 #include <signal.h>
 #include <string.h>
+#include <semaphore.h>
 
 #include <jack/jack.h>
 #include <jack/session.h>
@@ -70,7 +71,7 @@ typedef struct _port_conn_t port_conn_t;
 typedef struct _client_conn_t client_conn_t;
 typedef struct _port_t port_t;
 typedef struct _mixer_t mixer_t;
-typedef struct _monitor_t monitor_t;
+typedef struct _monitor_shm_t monitor_shm_t;
 typedef struct _client_t client_t;
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
@@ -151,21 +152,11 @@ struct _mixer_t {
 	atomic_int jgains [PORT_MAX][PORT_MAX];
 };
 
-struct _monitor_t {
-	jack_client_t *client;
+struct _monitor_shm_t {
+	sem_t done;
+	atomic_bool closing;
 	unsigned nsources;
-	jack_port_t *jsources [PORT_MAX];
 	atomic_int jgains [PORT_MAX];
-	float sample_rate_1;
-
-	union {
-		struct {
-			float dBFSs [PORT_MAX];
-		} audio;
-		struct {
-			float vels [PORT_MAX];
-		} midi;
-	};
 };
 
 struct _port_t {
@@ -209,7 +200,7 @@ struct _client_t {
 	bool closing;
 
 	mixer_t *mixer;
-	monitor_t *monitor;
+	monitor_shm_t *monitor_shm;
 	port_type_t sink_type;
 	port_type_t source_type;
 };

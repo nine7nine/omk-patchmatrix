@@ -413,10 +413,12 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
-	monitor_t *monitor = client->monitor;
+	monitor_shm_t *shm = client->monitor_shm;
+	if(atomic_load(&shm->closing))
+		return;
 
 	const float ps = 24.f * app->scale;
-	const unsigned ny = monitor->nsources;
+	const unsigned ny = shm->nsources;
 
 	client->dim.x = 6 * ps;
 	client->dim.y = ny * ps;
@@ -428,8 +430,12 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
+		atomic_store(&shm->closing, true);
+		sem_post(&shm->done);
+		/*
 		client->closing = true;
 		app->closing = true;
+		*/
 	}
 
 	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
@@ -450,7 +456,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		{
 			for(unsigned j = 0; j < ny; j++)
 			{
-				const int32_t mBFS = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const int32_t mBFS = atomic_load_explicit(&shm->jgains[j], memory_order_relaxed);
 				const float dBFS = mBFS / 100.f;
 
 				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
@@ -522,7 +528,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		{
 			for(unsigned j = 0; j < ny; j++)
 			{
-				const int32_t cvel = atomic_load_explicit(&monitor->jgains[j], memory_order_relaxed);
+				const int32_t cvel = atomic_load_explicit(&shm->jgains[j], memory_order_relaxed);
 				const float vel = cvel / 100.f;
 
 				struct nk_rect orig = nk_rect(body.x, body.y + j*ps, body.w, ps);
@@ -1062,7 +1068,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 				if(client->mixer)
 					node_editor_mixer(ctx, app, client);
-				else if(client->monitor)
+				else if(client->monitor_shm)
 					node_editor_monitor(ctx, app, client);
 				else
 					node_editor_client(ctx, app, client);
@@ -1127,13 +1133,13 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				if(nk_contextual_item_label(ctx, "Mixer 8x8", NK_TEXT_LEFT))
 					_mixer_add(app, 8, 8);
 				if(nk_contextual_item_label(ctx, "Monitor x1", NK_TEXT_LEFT))
-					_monitor_add(app, 1);
+					_monitor_spawn(app, 1);
 				if(nk_contextual_item_label(ctx, "Monitor x2", NK_TEXT_LEFT))
-					_monitor_add(app, 2);
+					_monitor_spawn(app, 2);
 				if(nk_contextual_item_label(ctx, "Monitor x4", NK_TEXT_LEFT))
-					_monitor_add(app, 4);
+					_monitor_spawn(app, 4);
 				if(nk_contextual_item_label(ctx, "Monitor x8", NK_TEXT_LEFT))
-					_monitor_add(app, 8);
+					_monitor_spawn(app, 8);
 
 				nk_contextual_end(ctx);
 			}

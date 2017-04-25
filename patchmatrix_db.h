@@ -111,10 +111,13 @@ void
 _mixer_free(mixer_t *mixer);
 
 // monitor
-monitor_t *
-_monitor_add(app_t *app, unsigned nsources);
+void
+_monitor_spawn(app_t *app, unsigned nsources);
+
+monitor_shm_t *
+_monitor_add(const char *client_name);
 
 void
-_monitor_free(monitor_t *monitor);
+_monitor_free(monitor_shm_t *monitor);
 
 #endif

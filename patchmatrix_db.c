@@ -15,6 +15,10 @@
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <patchmatrix_db.h>
 #include <patchmatrix_jack.h>
 
@@ -136,6 +140,9 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		}
 #endif
 
+		if(!strncmp(client_name, "/patchmatrix_monitor", 20))
+			client->monitor_shm = _monitor_add(client_name);
+
 		_hash_add(&app->clients, client);
 	}
 
@@ -157,8 +164,8 @@ _client_free(app_t *app, client_t *client)
 
 	if(client->mixer)
 		_mixer_free(client->mixer);
-	else if(client->monitor)
-		_monitor_free(client->monitor);
+	else if(client->monitor_shm)
+		_monitor_free(client->monitor_shm);
 
 	free(client->name);
 	free(client->pretty_name);
@@ -748,71 +755,51 @@ _mixer_free(mixer_t *mixer)
 }
 
 // monitor
-
-monitor_t *
-_monitor_add(app_t *app, unsigned nsources)
+void
+_monitor_spawn(app_t *app, unsigned nsources)
 {
-	monitor_t *monitor = calloc(1, sizeof(monitor_t));
-	if(monitor)
+	pthread_t pid = fork();
+	if(pid == 0) // child
 	{
-		monitor->nsources = nsources;
-		monitor->sample_rate_1 = 1.f / app->sample_rate;
+		char nums [32];
+		snprintf(nums, 32, "%u", nsources);
 
-		for(unsigned i = 0; i < nsources; i++)
-		{
-			atomic_init(&monitor->jgains[i], 0);
-			if(app->type == TYPE_AUDIO)
-				monitor->audio.dBFSs[i] = -64.f;
-			else if(app->type == TYPE_MIDI)
-				monitor->midi.vels[i] = 0.f;
-		}
+		char *const argv [] = {
+			"/usr/local/bin/patchmatrix_monitor", //FIXME
+			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
+			nums,
+			NULL
+		};
 
-		const jack_options_t opts = JackNullOption;
-		jack_status_t status;
-		monitor->client = jack_client_open("monitor", opts, &status);
-
-		for(unsigned i = 0; i < nsources; i++)
-		{
-			char name [32];
-			snprintf(name, 32, "sink_%u", i);
-			jack_port_t *jsource = jack_port_register(monitor->client, name,
-				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
-				JackPortIsInput | JackPortIsTerminal, 0);
-			monitor->jsources[i] = jsource;
-		}
-
-		jack_set_process_callback(monitor->client,
-			app->type == TYPE_AUDIO ? _audio_monitor_process : _midi_monitor_process, monitor);
-		//TODO CV
-
-		jack_activate(monitor->client);
-
-		const char *client_name = jack_get_client_name(monitor->client);
-		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
-		if(client)
-			client->monitor = monitor;
+		execvp(argv[0], argv);
 	}
+}
 
-	return monitor;
+monitor_shm_t *
+_monitor_add(const char *client_name)
+{
+	const size_t total_size = sizeof(monitor_shm_t);
+
+	const int fd = shm_open(client_name, O_RDWR, S_IRUSR | S_IWUSR);
+	if(fd == -1)
+		return NULL;
+
+	monitor_shm_t *monitor_shm;
+	if(  (ftruncate(fd, total_size) == -1)
+		|| ((monitor_shm = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) )
+	{
+		close(fd);
+		return NULL;
+	}
+	close(fd);
+
+	return monitor_shm;
 }
 
 void
-_monitor_free(monitor_t *monitor)
+_monitor_free(monitor_shm_t *monitor_shm)
 {
-	if(monitor->client)
-	{
-		jack_deactivate(monitor->client);
+	const size_t total_size = sizeof(monitor_shm_t);
 
-		for(unsigned j = 0; j < PORT_MAX; j++)
-		{
-			jack_port_t *jsource = monitor->jsources[j];
-
-			if(jsource)
-				jack_port_unregister(monitor->client, jsource);
-		}
-
-		jack_client_close(monitor->client);
-	}
-
-	free(monitor);
+	munmap(monitor_shm, total_size);
 }
