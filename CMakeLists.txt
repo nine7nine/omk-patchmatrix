@@ -143,6 +143,11 @@ add_executable(patchmatrix_monitor
 target_link_libraries(patchmatrix_monitor ${LIBS})
 install(TARGETS patchmatrix_monitor DESTINATION ${PATCHMATRIX_BIN_DIR})
 
+add_executable(patchmatrix_mixer
+	patchmatrix_mixer.c)
+target_link_libraries(patchmatrix_mixer ${LIBS})
+install(TARGETS patchmatrix_mixer DESTINATION ${PATCHMATRIX_BIN_DIR})
+
 # desktop 
 configure_file(${PROJECT_SOURCE_DIR}/patchmatrix.desktop.in ${PROJECT_BINARY_DIR}/patchmatrix.desktop @ONLY)
 install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.desktop DESTINATION ${PATCHMATRIX_DESKTOP_DIR})

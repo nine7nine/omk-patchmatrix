@@ -104,11 +104,14 @@ port_t *
 _port_find_by_body(app_t *app, jack_port_t *body);
 
 // mixer
-mixer_t *
-_mixer_add(app_t *app, unsigned nsources, unsigned nsinks);
+void
+_mixer_spawn(app_t *app, unsigned nsources, unsigned nsinks);
+
+mixer_shm_t *
+_mixer_add(const char *client_name);
 
 void
-_mixer_free(mixer_t *mixer);
+_mixer_free(mixer_shm_t *mixer_shm);
 
 // monitor
 void
@@ -118,6 +121,6 @@ monitor_shm_t *
 _monitor_add(const char *client_name);
 
 void
-_monitor_free(monitor_shm_t *monitor);
+_monitor_free(monitor_shm_t *monitor_shm);
 
 #endif

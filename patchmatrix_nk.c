@@ -149,7 +149,7 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 		// start linking process
 		const bool has_click_body = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, bounds, nk_true);
 		const bool has_click_handle = nk_input_has_mouse_click_down_in_rect(in, NK_BUTTON_LEFT, outer, nk_true);
-		if(  ((has_click_body && !client->mixer) || has_click_handle)
+		if(  ((has_click_body && !client->mixer_shm) || has_click_handle)
 			&& !nk_input_is_key_down(in, NK_KEY_CTRL))
 		{
 			nodedit->linking.active = true;
@@ -179,10 +179,10 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 	// input connector
 	if(client->sink_type & app->type)
 	{
-		const float cx = client->mixer
+		const float cx = client->mixer_shm
 			? client->pos.x - scrolling.x
 			: client->pos.x - scrolling.x - dim.x/2 - 2*cw;
-		const float cy = client->mixer
+		const float cy = client->mixer_shm
 			? client->pos.y - scrolling.y - dim.y/2 - 2*cw
 			: client->pos.y - scrolling.y;
 		const struct nk_rect outer = nk_rect(
@@ -261,11 +261,13 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 	struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
-	mixer_t *mixer = client->mixer;
+	mixer_shm_t *shm = client->mixer_shm;
+	if(atomic_load_explicit(&shm->closing, memory_order_acquire))
+		return;
 
 	const float ps = 32.f * app->scale;
-	const unsigned nx = mixer->nsinks;
-	const unsigned ny = mixer->nsources;
+	const unsigned nx = shm->nsinks;
+	const unsigned ny = shm->nsources;
 
 	client->dim.x = nx * ps;
 	client->dim.y = ny * ps;
@@ -277,8 +279,8 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		client->closing = true;
-		app->closing = true;
+		atomic_store_explicit(&shm->closing, true, memory_order_release);
+		sem_post(&shm->done);
 	}
 
 	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
@@ -317,7 +319,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 			float y = body.y + ps/2;
 			for(unsigned j = 0; j < ny; j++)
 			{
-				int32_t mBFS = atomic_load_explicit(&mixer->jgains[i][j], memory_order_acquire);
+				int32_t mBFS = atomic_load_explicit(&shm->jgains[i][j], memory_order_acquire);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 
@@ -357,7 +359,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 						mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
 					}
 
-					atomic_store_explicit(&mixer->jgains[i][j], mBFS, memory_order_release);
+					atomic_store_explicit(&shm->jgains[i][j], mBFS, memory_order_release);
 				}
 
 				const float dBFS = mBFS / 100.f;
@@ -414,7 +416,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 	const struct nk_vec2 scrolling = nodedit->scrolling;
 
 	monitor_shm_t *shm = client->monitor_shm;
-	if(atomic_load(&shm->closing))
+	if(atomic_load_explicit(&shm->closing, memory_order_acquire))
 		return;
 
 	const float ps = 24.f * app->scale;
@@ -430,12 +432,8 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		atomic_store(&shm->closing, true);
+		atomic_store_explicit(&shm->closing, true, memory_order_release);
 		sem_post(&shm->done);
-		/*
-		client->closing = true;
-		app->closing = true;
-		*/
 	}
 
 	client->hovered = nk_input_is_mouse_hovering_rect(in, bounds)
@@ -830,10 +828,10 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 
 		const float l0x = src->pos.x - scrolling.x + src->dim.x/2 + cs*2;
 		const float l0y = src->pos.y - scrolling.y;
-		const float l1x = snk->mixer
+		const float l1x = snk->mixer_shm
 			? snk->pos.x - scrolling.x
 			: snk->pos.x - scrolling.x - snk->dim.x/2 - cs*2;
-		const float l1y = snk->mixer
+		const float l1y = snk->mixer_shm
 			? snk->pos.y - scrolling.y - snk->dim.y/2 - cs*2
 			: snk->pos.y - scrolling.y;
 
@@ -847,7 +845,7 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		nk_stroke_curve(canvas,
 			cxr, cy,
 			cxr + bend, cy,
-			snk->mixer ? l1x : l1x - bend, snk->mixer ? l1y - bend : l1y,
+			snk->mixer_shm ? l1x : l1x - bend, snk->mixer_shm ? l1y - bend : l1y,
 			l1x, l1y,
 			1.f, col);
 
@@ -1060,13 +1058,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 				}
 			}
 
-			app->closing = false;
-
 			HASH_FOREACH(&app->clients, client_itr)
 			{
 				client_t *client = *client_itr;
 
-				if(client->mixer)
+				if(client->mixer_shm)
 					node_editor_mixer(ctx, app, client);
 				else if(client->monitor_shm)
 					node_editor_monitor(ctx, app, client);
@@ -1074,32 +1070,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 					node_editor_client(ctx, app, client);
 
 				client->hilighted = false;
-			}
-
-			if(app->closing)
-			{
-				client_t *dst;
-				do {
-					dst = NULL;
-
-					HASH_FOREACH(&app->clients, client_itr)
-					{
-						client_t *client = *client_itr;
-
-						if(client->closing)
-						{
-							dst = client;
-							break;
-						}
-					}
-
-					if(dst)
-					{
-						_client_remove(app, dst);
-						_client_free(app, dst);
-					}
-
-				} while(dst);
 			}
 
 			HASH_FOREACH(&app->conns, client_conn_itr)
@@ -1125,13 +1095,13 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			{
 				nk_layout_row_dynamic(ctx, app->dy, 1);
 				if(nk_contextual_item_label(ctx, "Mixer 1x1", NK_TEXT_LEFT))
-					_mixer_add(app, 1, 1);
+					_mixer_spawn(app, 1, 1);
 				if(nk_contextual_item_label(ctx, "Mixer 2x2", NK_TEXT_LEFT))
-					_mixer_add(app, 2, 2);
+					_mixer_spawn(app, 2, 2);
 				if(nk_contextual_item_label(ctx, "Mixer 4x4", NK_TEXT_LEFT))
-					_mixer_add(app, 4, 4);
+					_mixer_spawn(app, 4, 4);
 				if(nk_contextual_item_label(ctx, "Mixer 8x8", NK_TEXT_LEFT))
-					_mixer_add(app, 8, 8);
+					_mixer_spawn(app, 8, 8);
 				if(nk_contextual_item_label(ctx, "Monitor x1", NK_TEXT_LEFT))
 					_monitor_spawn(app, 1);
 				if(nk_contextual_item_label(ctx, "Monitor x2", NK_TEXT_LEFT))

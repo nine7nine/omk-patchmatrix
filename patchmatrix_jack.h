@@ -29,16 +29,4 @@ _jack_deinit(app_t *app);
 bool
 _jack_anim(app_t *app);
 
-int
-_audio_mixer_process(jack_nframes_t nframes, void *arg);
-
-int
-_midi_mixer_process(jack_nframes_t nframes, void *arg);
-
-int
-_audio_monitor_process(jack_nframes_t nframes, void *arg);
-
-int
-_midi_monitor_process(jack_nframes_t nframes, void *arg);
-
 #endif

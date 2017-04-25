@@ -70,7 +70,7 @@ typedef struct _hash_t hash_t;
 typedef struct _port_conn_t port_conn_t;
 typedef struct _client_conn_t client_conn_t;
 typedef struct _port_t port_t;
-typedef struct _mixer_t mixer_t;
+typedef struct _mixer_shm_t mixer_shm_t;
 typedef struct _monitor_shm_t monitor_shm_t;
 typedef struct _client_t client_t;
 typedef struct _app_t app_t;
@@ -143,12 +143,11 @@ struct _client_conn_t {
 	bool moving;
 };
 
-struct _mixer_t {
-	jack_client_t *client;
+struct _mixer_shm_t {
+	sem_t done;
+	atomic_bool closing;
 	unsigned nsinks;
 	unsigned nsources;
-	jack_port_t *jsinks [PORT_MAX];
-	jack_port_t *jsources [PORT_MAX];
 	atomic_int jgains [PORT_MAX][PORT_MAX];
 };
 
@@ -197,9 +196,8 @@ struct _client_t {
 	bool moving;
 	bool hilighted;
 	bool hovered;
-	bool closing;
 
-	mixer_t *mixer;
+	mixer_shm_t *mixer_shm;
 	monitor_shm_t *monitor_shm;
 	port_type_t sink_type;
 	port_type_t source_type;
@@ -307,7 +305,6 @@ struct _app_t {
 
 	atomic_bool done;
 	bool animating;
-	bool closing;
 	struct nk_rect contextbounds;
 };
 

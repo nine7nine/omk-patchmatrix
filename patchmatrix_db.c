@@ -142,6 +142,8 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 
 		if(!strncmp(client_name, "/patchmatrix_monitor", 20))
 			client->monitor_shm = _monitor_add(client_name);
+		else if(!strncmp(client_name, "/patchmatrix_mixer", 20))
+			client->mixer_shm = _mixer_add(client_name);
 
 		_hash_add(&app->clients, client);
 	}
@@ -162,8 +164,8 @@ _client_free(app_t *app, client_t *client)
 	_hash_free(&client->sources);
 	_hash_free(&client->sinks);
 
-	if(client->mixer)
-		_mixer_free(client->mixer);
+	if(client->mixer_shm)
+		_mixer_free(client->mixer_shm);
 	else if(client->monitor_shm)
 		_monitor_free(client->monitor_shm);
 
@@ -673,85 +675,56 @@ _port_find_by_body(app_t *app, jack_port_t *body)
 }
 
 // mixer
-
-mixer_t *
-_mixer_add(app_t *app, unsigned nsources, unsigned nsinks)
+void
+_mixer_spawn(app_t *app, unsigned nsources, unsigned nsinks)
 {
-	mixer_t *mixer = calloc(1, sizeof(mixer_t));
-	if(mixer)
+	pthread_t pid = fork();
+	if(pid == 0) // child
 	{
-		mixer->nsources = nsources;
-		mixer->nsinks = nsinks;
+		char source_nums [32];
+		char sink_nums[32];
+		snprintf(source_nums, 32, "%u", nsources);
+		snprintf(sink_nums, 32, "%u", nsources);
 
-		for(unsigned j = 0; j < nsinks; j++)
-		{
-			for(unsigned i = 0; i < nsources; i++)
-			{
-				atomic_init(&mixer->jgains[i][j], (i == j) ? 0 : -3600);
-			}
-		}
+		char *const argv [] = {
+			"/usr/local/bin/patchmatrix_mixer", //FIXME
+			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
+			source_nums,
+			sink_nums,
+			NULL
+		};
 
-		const jack_options_t opts = JackNullOption;
-		jack_status_t status;
-		mixer->client = jack_client_open("mixer", opts, &status);
-
-		for(unsigned j = 0; j < nsinks; j++)
-		{
-			char name [32];
-			snprintf(name, 32, "source_%u", j);
-			jack_port_t *jsink = jack_port_register(mixer->client, name,
-				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
-				JackPortIsOutput, 0);
-			mixer->jsinks[j] = jsink;
-		}
-
-		for(unsigned i = 0; i < nsources; i++)
-		{
-			char name [32];
-			snprintf(name, 32, "sink_%u", i);
-			jack_port_t *jsource = jack_port_register(mixer->client, name,
-				app->type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
-				JackPortIsInput, 0);
-			mixer->jsources[i] = jsource;
-		}
-
-		jack_set_process_callback(mixer->client,
-			app->type == TYPE_AUDIO ? _audio_mixer_process : _midi_mixer_process, mixer);
-		//TODO CV
-
-		jack_activate(mixer->client);
-
-		const char *client_name = jack_get_client_name(mixer->client);
-		client_t *client = _client_add(app, client_name, JackPortIsInput | JackPortIsOutput);
-		if(client)
-			client->mixer = mixer;
+		execvp(argv[0], argv);
 	}
+}
 
-	return mixer;
+mixer_shm_t *
+_mixer_add(const char *client_name)
+{
+	const size_t total_size = sizeof(mixer_shm_t);
+
+	const int fd = shm_open(client_name, O_RDWR, S_IRUSR | S_IWUSR);
+	if(fd == -1)
+		return NULL;
+
+	mixer_shm_t *mixer_shm;
+	if(  (ftruncate(fd, total_size) == -1)
+		|| ((mixer_shm = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) )
+	{
+		close(fd);
+		return NULL;
+	}
+	close(fd);
+
+	return mixer_shm;
 }
 
 void
-_mixer_free(mixer_t *mixer)
+_mixer_free(mixer_shm_t *mixer_shm)
 {
-	if(mixer->client)
-	{
-		jack_deactivate(mixer->client);
+	const size_t total_size = sizeof(mixer_shm_t);
 
-		for(unsigned j = 0; j < PORT_MAX; j++)
-		{
-			jack_port_t *jsink = mixer->jsinks[j];
-			jack_port_t *jsource = mixer->jsources[j];
-
-			if(jsink)
-				jack_port_unregister(mixer->client, jsink);
-			if(jsource)
-				jack_port_unregister(mixer->client, jsource);
-		}
-
-		jack_client_close(mixer->client);
-	}
-
-	free(mixer);
+	munmap(mixer_shm, total_size);
 }
 
 // monitor
@@ -761,13 +734,13 @@ _monitor_spawn(app_t *app, unsigned nsources)
 	pthread_t pid = fork();
 	if(pid == 0) // child
 	{
-		char nums [32];
-		snprintf(nums, 32, "%u", nsources);
+		char source_nums [32];
+		snprintf(source_nums, 32, "%u", nsources);
 
 		char *const argv [] = {
 			"/usr/local/bin/patchmatrix_monitor", //FIXME
 			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
-			nums,
+			source_nums,
 			NULL
 		};
 
