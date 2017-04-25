@@ -161,7 +161,9 @@ main(int argc, char **argv)
 		port_type = TYPE_OSC;
 #endif
 
-	const unsigned nsources = atoi(argv[2]);
+	unsigned nsources = atoi(argv[2]);
+	if(nsources > PORT_MAX)
+		nsources = 1;
 
 	const jack_options_t opts = JackNullOption;
 	jack_status_t status;

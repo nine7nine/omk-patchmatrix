@@ -60,7 +60,7 @@
 #define XSD__float                   XSD_PREFIX"float"
 
 
-#define PORT_MAX 8 //FIXME
+#define PORT_MAX 16
 
 typedef enum _event_type_t event_type_t;
 typedef enum _port_type_t port_type_t;
