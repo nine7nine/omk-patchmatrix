@@ -15,6 +15,8 @@
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
+#include <sys/wait.h>
+
 #include <patchmatrix.h>
 #include <patchmatrix_jack.h>
 #include <patchmatrix_nk.h>
@@ -26,10 +28,21 @@
 static app_t app;
 
 static void
-_sig(int signum)
+_sig_interrupt(int signum)
 {
 	_ui_signal(&app);
 	atomic_store_explicit(&app.done, true, memory_order_release);
+}
+
+static void
+_sig_child(int signum)
+{
+	const pid_t any_child = -1;
+
+	while(waitpid(any_child, 0, WNOHANG) > 0)
+	{
+		// reap zombies
+	}
 }
 
 int
@@ -103,7 +116,8 @@ main(int argc, char **argv)
 		}
 	}
 
-	signal(SIGINT, _sig);
+	signal(SIGINT, _sig_interrupt);
+	signal(SIGCHLD, _sig_child);
 
 	if(!(app.from_jack = varchunk_new(0x10000, true)))
 		goto cleanup;
