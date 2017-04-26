@@ -534,7 +534,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 				struct nk_rect outline;
 				const float mx1 = 1.f;
 				const uint8_t alph = 0x7f;
-				const float e = cvel / 127.f;
+				const float e = vel / 127.f;
 				const float peak = NK_CLAMP(0.f, e, 1.f);
 
 				{
