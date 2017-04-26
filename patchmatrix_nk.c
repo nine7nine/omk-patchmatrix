@@ -279,7 +279,6 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		atomic_store_explicit(&shm->closing, true, memory_order_release);
 		sem_post(&shm->done);
 	}
 
@@ -319,7 +318,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 			float y = body.y + ps/2;
 			for(unsigned j = 0; j < ny; j++)
 			{
-				int32_t mBFS = atomic_load_explicit(&shm->jgains[i][j], memory_order_acquire);
+				int32_t mBFS = atomic_load_explicit(&shm->jgains[j][i], memory_order_acquire);
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 
@@ -359,7 +358,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 						mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
 					}
 
-					atomic_store_explicit(&shm->jgains[i][j], mBFS, memory_order_release);
+					atomic_store_explicit(&shm->jgains[j][i], mBFS, memory_order_release);
 				}
 
 				const float dBFS = mBFS / 100.f;
@@ -420,7 +419,7 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 		return;
 
 	const float ps = 24.f * app->scale;
-	const unsigned ny = shm->nsources;
+	const unsigned ny = shm->nsinks;
 
 	client->dim.x = 6 * ps;
 	client->dim.y = ny * ps;
@@ -432,7 +431,6 @@ node_editor_monitor(struct nk_context *ctx, app_t *app, client_t *client)
 
 	if(_client_moveable(ctx, app, client, &bounds))
 	{
-		atomic_store_explicit(&shm->closing, true, memory_order_release);
 		sem_post(&shm->done);
 	}
 

@@ -140,9 +140,9 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		}
 #endif
 
-		if(!strncmp(client_name, "/patchmatrix_monitor", 20))
+		if(!strncmp(client_name, PATCHMATRIX_MONITOR, strlen(PATCHMATRIX_MONITOR)))
 			client->monitor_shm = _monitor_add(client_name);
-		else if(!strncmp(client_name, "/patchmatrix_mixer", 20))
+		else if(!strncmp(client_name, PATCHMATRIX_MIXER, strlen(PATCHMATRIX_MIXER)))
 			client->mixer_shm = _mixer_add(client_name);
 
 		_hash_add(&app->clients, client);

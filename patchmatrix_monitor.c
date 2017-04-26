@@ -5,13 +5,13 @@
  * it under the terms of the Artistic License 2.0 as published by
  * The Perl Foundation.
  *
- * This source is distributed in the hope that it will be useful,
+ * This sink is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the iapplied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * Artistic License 2.0 for more details.
  *
  * You should have received a copy of the Artistic License 2.0
- * along the source as a COPYING file. If not, obtain it from
+ * along the sink as a COPYING file. If not, obtain it from
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
@@ -25,7 +25,7 @@ typedef struct _monitor_app_t monitor_app_t;
 
 struct _monitor_app_t {
 	jack_client_t *client;
-	jack_port_t *jsources [PORT_MAX];
+	jack_port_t *jsinks [PORT_MAX];
 	float sample_rate_1;
 	union {
 		struct {
@@ -38,6 +38,8 @@ struct _monitor_app_t {
 
 	monitor_shm_t *shm;	
 };
+
+static atomic_bool closed = ATOMIC_VAR_INIT(false);
 
 static void
 _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
@@ -55,22 +57,25 @@ _audio_monitor_process(jack_nframes_t nframes, void *arg)
 	monitor_app_t *monitor = arg;
 	monitor_shm_t *shm = monitor->shm;
 
-	if(atomic_load_explicit(&shm->closing, memory_order_relaxed))
-		return 0;
-
-	const float *psources [PORT_MAX];
-
-	const unsigned nsources = shm->nsources;
-
-	for(unsigned i = 0; i < nsources; i++)
+	if(  atomic_load_explicit(&closed, memory_order_relaxed)
+		|| atomic_load_explicit(&shm->closing, memory_order_relaxed) )
 	{
-		jack_port_t *jsource = monitor->jsources[i];
-		psources[i] = jack_port_get_buffer(jsource, nframes);
+		return 0;
+	}
+
+	const float *psinks [PORT_MAX];
+
+	const unsigned nsinks = shm->nsinks;
+
+	for(unsigned i = 0; i < nsinks; i++)
+	{
+		jack_port_t *jsink = monitor->jsinks[i];
+		psinks[i] = jack_port_get_buffer(jsink, nframes);
 
 		float peak = 0.f;
 		for(unsigned k = 0; k < nframes; k++)
 		{
-			const float sample = fabsf(psources[i][k]);
+			const float sample = fabsf(psinks[i][k]);
 			if(sample > peak)
 				peak = sample;
 		}
@@ -99,24 +104,27 @@ _midi_monitor_process(jack_nframes_t nframes, void *arg)
 	monitor_app_t *monitor = arg;
 	monitor_shm_t *shm = monitor->shm;
 
-	if(atomic_load_explicit(&shm->closing, memory_order_relaxed))
-		return 0;
-
-	void *psources [PORT_MAX];
-
-	const unsigned nsources = shm->nsources;
-
-	for(unsigned i = 0; i < nsources; i++)
+	if(  atomic_load_explicit(&closed, memory_order_relaxed)
+		|| atomic_load_explicit(&shm->closing, memory_order_relaxed) )
 	{
-		jack_port_t *jsource = monitor->jsources[i];
-		psources[i] = jack_port_get_buffer(jsource, nframes);
+		return 0;
+	}
+
+	void *psinks [PORT_MAX];
+
+	const unsigned nsinks = shm->nsinks;
+
+	for(unsigned i = 0; i < nsinks; i++)
+	{
+		jack_port_t *jsink = monitor->jsinks[i];
+		psinks[i] = jack_port_get_buffer(jsink, nframes);
 
 		float vel = 0.f;
-		const uint32_t count = jack_midi_get_event_count(psources[i]);
+		const uint32_t count = jack_midi_get_event_count(psinks[i]);
 		for(unsigned k = 0; k < count; k++)
 		{
 			jack_midi_event_t ev;
-			jack_midi_event_get(&ev, psources[i], k);
+			jack_midi_event_get(&ev, psinks[i], k);
 
 			if(ev.size != 3)
 				continue;
@@ -161,33 +169,43 @@ main(int argc, char **argv)
 		port_type = TYPE_OSC;
 #endif
 
-	unsigned nsources = atoi(argv[2]);
-	if(nsources > PORT_MAX)
-		nsources = 1;
+	unsigned nsinks = atoi(argv[2]);
+	if(nsinks > PORT_MAX)
+		nsinks = PORT_MAX;
 
 	const jack_options_t opts = JackNullOption;
 	jack_status_t status;
-	monitor.client = jack_client_open("/patchmatrix_monitor", opts, &status);
+	monitor.client = jack_client_open(PATCHMATRIX_MONITOR, opts, &status);
 	if(!monitor.client)
 		return -1;
 
 	monitor.sample_rate_1 = 1.f / jack_get_sample_rate(monitor.client);
 
-	for(unsigned i = 0; i < nsources; i++)
+	for(unsigned i = 0; i < nsinks; i++)
 	{
-		char port_name [32];
-		snprintf(port_name, 32, "sink_%u", i);
+		char buf [32];
+		snprintf(buf, 32, "sink_%02u", i + 1);
 
-		jack_port_t *jsource = jack_port_register(monitor.client, port_name,
+		jack_port_t *jsink = jack_port_register(monitor.client, buf,
 			port_type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput | JackPortIsTerminal, 0);
+
+#ifdef JACK_HAS_METADATA_API
+		jack_uuid_t uuid = jack_port_uuid(jsink);
+
+		snprintf(buf, 32, "%u", i);
+		jack_set_property(monitor.client, uuid, JACKEY_ORDER, buf, XSD__integer);
+
+		snprintf(buf, 32, "Sink %u", i + 1);
+		jack_set_property(monitor.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
+#endif
 
 		if(port_type == TYPE_AUDIO)
 			monitor.audio.dBFSs[i] = -64.f;
 		else if(port_type == TYPE_MIDI)
 			monitor.midi.vels[i] = 0.f;
 
-		monitor.jsources[i] = jsource;
+		monitor.jsinks[i] = jsink;
 	}
 
 	const char *client_name = jack_get_client_name(monitor.client);
@@ -199,9 +217,9 @@ main(int argc, char **argv)
 			if((monitor.shm = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
 				MAP_SHARED, fd, 0)) != MAP_FAILED)
 			{
-				monitor.shm->nsources = nsources;
+				monitor.shm->nsinks = nsinks;
 
-				for(unsigned i = 0; i < nsources; i++)
+				for(unsigned i = 0; i < nsinks; i++)
 					atomic_init(&monitor.shm->jgains[i], 0);
 
 				if(sem_init(&monitor.shm->done, 1, 0) != -1)
@@ -215,12 +233,14 @@ main(int argc, char **argv)
 					jack_activate(monitor.client);
 
 					sem_wait(&monitor.shm->done);
+					atomic_store_explicit(&monitor.shm->closing, true, memory_order_relaxed);
 
 					jack_deactivate(monitor.client);
 
 					sem_destroy(&monitor.shm->done);
 				}
 
+				atomic_store_explicit(&closed, true, memory_order_relaxed);
 				munmap(monitor.shm, total_size);
 			}
 		}
@@ -229,8 +249,14 @@ main(int argc, char **argv)
 		shm_unlink(client_name);
 	}
 
-	for(unsigned i = 0; i < nsources; i++)
-		jack_port_unregister(monitor.client, monitor.jsources[i]);
+	for(unsigned i = 0; i < nsinks; i++)
+	{
+#ifdef JACK_HAS_METADATA_API
+		jack_uuid_t uuid = jack_port_uuid(monitor.jsinks[i]);
+		jack_remove_properties(monitor.client, uuid);
+#endif
+		jack_port_unregister(monitor.client, monitor.jsinks[i]);
+	}
 
 	jack_client_close(monitor.client);
 

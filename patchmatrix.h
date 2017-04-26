@@ -59,6 +59,8 @@
 #define XSD__integer                 XSD_PREFIX"integer"
 #define XSD__float                   XSD_PREFIX"float"
 
+#define PATCHMATRIX_MIXER            "/patchmatrix_mixer"
+#define PATCHMATRIX_MONITOR          "/patchmatrix_monitor"
 
 #define PORT_MAX 16
 
@@ -154,7 +156,7 @@ struct _mixer_shm_t {
 struct _monitor_shm_t {
 	sem_t done;
 	atomic_bool closing;
-	unsigned nsources;
+	unsigned nsinks;
 	atomic_int jgains [PORT_MAX];
 };
 
