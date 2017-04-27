@@ -156,26 +156,99 @@ main(int argc, char **argv)
 	static monitor_app_t monitor;
 	const size_t total_size = sizeof(monitor_shm_t);
 
-	if(argc < 3)
-		return -1;
-
+	const char *server_name = NULL;
+	const char *session_id = NULL;
 	port_type_t port_type = TYPE_AUDIO;
-	if(!strcasecmp(argv[1], "MIDI"))
-		port_type = TYPE_MIDI;
+	unsigned nsinks = 1;
+
+	fprintf(stderr,
+		"%s "PATCHMATRIX_VERSION"\n"
+		"Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
+		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
+
+	int c;
+	while((c = getopt(argc, argv, "vhn:u:t:i:")) != -1)
+	{
+		switch(c)
+		{
+			case 'v':
+				fprintf(stderr,
+					"--------------------------------------------------------------------\n"
+					"This is free software: you can redistribute it and/or modify\n"
+					"it under the terms of the Artistic License 2.0 as published by\n"
+					"The Perl Foundation.\n"
+					"\n"
+					"This source is distributed in the hope that it will be useful,\n"
+					"but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+					"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n"
+					"Artistic License 2.0 for more details.\n"
+					"\n"
+					"You should have received a copy of the Artistic License 2.0\n"
+					"along the source as a COPYING file. If not, obtain it from\n"
+					"http://www.perlfoundation.org/artistic_license_2_0.\n\n");
+				return 0;
+			case 'h':
+				fprintf(stderr,
+					"--------------------------------------------------------------------\n"
+					"USAGE\n"
+					"   %s [OPTIONS]\n"
+					"\n"
+					"OPTIONS\n"
+					"   [-v]                 print version and full license information\n"
+					"   [-h]                 print usage information\n"
+					"   [-n] server-name     connect to named JACK daemon\n"
+					"   [-u] client-uuid     client UUID for JACK session management\n"
+					"   [-t] port-type       port type (audio, midi)\n"
+					"   [-i] input-num       port input number (1-%i)\n\n"
+					, argv[0], PORT_MAX);
+				return 0;
+			case 'n':
+				server_name = optarg;
+				break;
+			case 'u':
+				session_id = optarg;
+				break;
+			case 't':
+				if(!strcasecmp(optarg, "AUDIO"))
+					port_type = TYPE_AUDIO;
+				else if(!strcasecmp(optarg, "MIDI"))
+					port_type = TYPE_MIDI;
 #ifdef JACK_HAS_METADATA_API
-	else if(!strcasecmp(argv[1], "CV"))
-		port_type = TYPE_CV;
-	else if(!strcasecmp(argv[1], "OSC"))
-		port_type = TYPE_OSC;
+				else if(!strcasecmp(optarg, "CV"))
+					port_type = TYPE_CV;
+				else if(!strcasecmp(optarg, "OSC"))
+					port_type = TYPE_OSC;
 #endif
+				break;
+			case 'i':
+				nsinks = atoi(optarg);
+				if(nsinks > PORT_MAX)
+					nsinks = PORT_MAX;
+				break;
+			case '?':
+				if( (optopt == 'n') || (optopt == 'u') || (optopt == 't')
+						|| (optopt == 'i') )
+					fprintf(stderr, "Option `-%c' requires an argument.\n", optopt);
+				else if(isprint(optopt))
+					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+				else
+					fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+				return -1;
+			default:
+				return -1;
+		}
+	}
 
-	unsigned nsinks = atoi(argv[2]);
-	if(nsinks > PORT_MAX)
-		nsinks = PORT_MAX;
+	jack_options_t opts = JackNullOption | JackNoStartServer;
+	if(server_name)
+		opts |= JackServerName;
+	if(session_id)
+		opts |= JackSessionID;
 
-	const jack_options_t opts = JackNullOption;
 	jack_status_t status;
-	monitor.client = jack_client_open(PATCHMATRIX_MONITOR, opts, &status);
+	monitor.client = jack_client_open(PATCHMATRIX_MONITOR, opts, &status,
+		server_name ? server_name : session_id,
+		server_name ? session_id : NULL);
 	if(!monitor.client)
 		return -1;
 

@@ -676,21 +676,27 @@ _port_find_by_body(app_t *app, jack_port_t *body)
 
 // mixer
 void
-_mixer_spawn(app_t *app, unsigned nsources, unsigned nsinks)
+_mixer_spawn(app_t *app, unsigned nsinks, unsigned nsources)
 {
 	pthread_t pid = fork();
 	if(pid == 0) // child
 	{
-		char source_nums [32];
 		char sink_nums[32];
-		snprintf(source_nums, 32, "%u", nsources);
 		snprintf(sink_nums, 32, "%u", nsources);
 
+		char source_nums [32];
+		snprintf(source_nums, 32, "%u", nsources);
+
 		char *const argv [] = {
-			PATCHMATRIX_BIN_DIR"patchmatrix_mixer",
+			PATCHMATRIX_BIN_DIR PATCHMATRIX_MIXER,
+			"-t",
 			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
-			source_nums,
+			"-i",
 			sink_nums,
+			"-o",
+			source_nums,
+			app->server_name ? "-n" : NULL,
+			(char *)app->server_name,
 			NULL
 		};
 
@@ -729,18 +735,22 @@ _mixer_free(mixer_shm_t *mixer_shm)
 
 // monitor
 void
-_monitor_spawn(app_t *app, unsigned nsources)
+_monitor_spawn(app_t *app, unsigned nsinks)
 {
 	pthread_t pid = fork();
 	if(pid == 0) // child
 	{
-		char source_nums [32];
-		snprintf(source_nums, 32, "%u", nsources);
+		char sink_nums [32];
+		snprintf(sink_nums, 32, "%u", nsinks);
 
 		char *const argv [] = {
-			PATCHMATRIX_BIN_DIR"patchmatrix_monitor",
+			PATCHMATRIX_BIN_DIR PATCHMATRIX_MONITOR,
+			"-t",
 			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
-			source_nums,
+			"-i",
+			sink_nums,
+			app->server_name ? "-n" : NULL,
+			(char *)app->server_name,
 			NULL
 		};
 

@@ -59,9 +59,9 @@ main(int argc, char **argv)
 	app.session_id = NULL;
 
 	fprintf(stderr,
-		"PatchMatrix "PATCHMATRIX_VERSION"\n"
-		"Copyright (c) 2016 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
-		"Released under Artistic License 2.0 by Open Music Kontrollers\n");
+		"%s "PATCHMATRIX_VERSION"\n"
+		"Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
+		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
 	while((c = getopt(argc, argv, "vhn:u:")) != -1)
