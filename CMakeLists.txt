@@ -156,7 +156,7 @@ install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.desktop DESTINATION ${PATCHMATRI
 # logo
 install(FILES pix/patchmatrix.png DESTINATION ${PATCHMATRIX_ICON_DIR})
 
-# man page 
+# man pages
 include(FindUnixCommands)
 add_custom_command(
 	OUTPUT ${PROJECT_BINARY_DIR}/patchmatrix.1.gz
@@ -167,6 +167,26 @@ add_custom_command(
 		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix.1)
 add_custom_target(PATCHMATRIX_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix.1.gz)
 install(FILES ${PROJECT_BINARY_DIR}/patchmatrix.1.gz DESTINATION ${PATCHMATRIX_MAN_DIR})
+
+add_custom_command(
+	OUTPUT ${PROJECT_BINARY_DIR}/patchmatrix_mixer.1.gz
+	COMMAND ${GZIP} ARGS
+	"-c9" ${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix_mixer.1
+		">" ${PROJECT_BINARY_DIR}/patchmatrix_mixer.1.gz
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix_mixer.1)
+add_custom_target(PATCHMATRIX_MIXER_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix_mixer.1.gz)
+install(FILES ${PROJECT_BINARY_DIR}/patchmatrix_mixer.1.gz DESTINATION ${PATCHMATRIX_MAN_DIR})
+
+add_custom_command(
+	OUTPUT ${PROJECT_BINARY_DIR}/patchmatrix_monitor.1.gz
+	COMMAND ${GZIP} ARGS
+	"-c9" ${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix_monitor.1
+		">" ${PROJECT_BINARY_DIR}/patchmatrix_monitor.1.gz
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/patchmatrix_monitor.1)
+add_custom_target(PATCHMATRIX_MONITOR_MAN_GZ ALL DEPENDS ${PROJECT_BINARY_DIR}/patchmatrix_monitor.1.gz)
+install(FILES ${PROJECT_BINARY_DIR}/patchmatrix_monitor.1.gz DESTINATION ${PATCHMATRIX_MAN_DIR})
 
 # icons
 install(FILES ${PROJECT_SOURCE_DIR}/pix/audio.png DESTINATION ${PATCHMATRIX_DATA_DIR})

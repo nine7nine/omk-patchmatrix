@@ -1,7 +1,7 @@
-.TH PATCHMATRIX "1" "March 03, 2016"
+.TH PATCHMATRIX "1" "April 27, 2017"
 
 .SH NAME
-patchmatrix \- a JACK Patchbay
+patchmatrix \- a JACK patchbay
 
 .SH SYNOPSIS
 .B patchmatrix
@@ -10,14 +10,12 @@ patchmatrix \- a JACK Patchbay
 .SH DESCRIPTION
 \fBpatchmatrix\fP is a JACK patchbay.
 .PP
-It shows JACK input and output ports in a matrix configuration for convenient
-one-click connecting and disconnecting.
+It shows JACK clients and their input and output ports in flow-matrix-style.
 .PP
-Clients and ports can manually be shown and hidden to reduce complexity in
-view.
+The flow-matrix-style combines advantages of both flow-style (excellent overview
+of signal flow) and matrix-style (less virtual cabling mess, one-click patching).
 .PP
-Additionally, the patchbay shows AUDIO, MIDI, CV and OSC ports separately,
-to reduce complexity, too.
+The patchbay shows AUDIO, MIDI, CV and OSC ports separately to reduce complexity.
 
 .SH OPTIONS
 .HP
@@ -47,4 +45,4 @@ Artistic License 2.0.
 Hanspeter Portner (dev@open-music-kontrollers.ch).
 
 .SH SEE ALSO
-jackd(1)
+jackd(1), patchmatrix_monitor(1), patchmatrix_mixer(1)
