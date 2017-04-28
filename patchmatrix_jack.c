@@ -241,7 +241,7 @@ _jack_anim(app_t *app)
 									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
 									if(port)
 									{
-										port->type = strstr(value, "OSC") ? TYPE_OSC : TYPE_MIDI;
+										port->type = strcasestr(value, port_labels[TYPE_OSC]) ? TYPE_OSC : TYPE_MIDI;
 										_client_refresh_type(port->client);
 										HASH_FOREACH(&app->conns, client_conn_itr)
 										{
@@ -256,7 +256,7 @@ _jack_anim(app_t *app)
 									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
 									if(port)
 									{
-										port->type = !strcmp(value, "CV") ? TYPE_CV : TYPE_AUDIO;
+										port->type = !strcasecmp(value, port_labels[TYPE_CV]) ? TYPE_CV : TYPE_AUDIO;
 										_client_refresh_type(port->client);
 										HASH_FOREACH(&app->conns, client_conn_itr)
 										{

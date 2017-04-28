@@ -165,7 +165,7 @@ _create_session(monitor_app_t *monitor)
 	cJSON *root = cJSON_CreateObject();
 	if(root)
 	{
-		cJSON_AddStringToObject(root, "type", monitor->type == TYPE_AUDIO ? "audio" : "midi");
+		cJSON_AddStringToObject(root, "type", _port_type_to_string(monitor->type));
 		cJSON_AddNumberToObject(root, "nsinks", shm->nsinks);
 
 		return root;
@@ -272,16 +272,7 @@ main(int argc, char **argv)
 				root = _load_session(optarg);
 				break;
 			case 't':
-				if(!strcasecmp(optarg, "AUDIO"))
-					monitor.type = TYPE_AUDIO;
-				else if(!strcasecmp(optarg, "MIDI"))
-					monitor.type = TYPE_MIDI;
-#ifdef JACK_HAS_METADATA_API
-				else if(!strcasecmp(optarg, "CV"))
-					monitor.type = TYPE_CV;
-				else if(!strcasecmp(optarg, "OSC"))
-					monitor.type = TYPE_OSC;
-#endif
+				monitor.type = _port_type_from_string(optarg);
 				break;
 			case 'i':
 				nsinks = atoi(optarg);
@@ -307,18 +298,9 @@ main(int argc, char **argv)
 		cJSON *type_node = cJSON_GetObjectItem(root, "type");
 		if(type_node && cJSON_IsString(type_node))
 		{
-			const char *type = type_node->valuestring;
+			const char *port_type = type_node->valuestring;
 
-			if(!strcasecmp(type, "AUDIO"))
-				monitor.type = TYPE_AUDIO;
-			else if(!strcasecmp(type, "MIDI"))
-				monitor.type = TYPE_MIDI;
-#ifdef JACK_HAS_METADATA_API
-			else if(!strcasecmp(type, "CV"))
-				monitor.type = TYPE_CV;
-			else if(!strcasecmp(type, "OSC"))
-				monitor.type = TYPE_OSC;
-#endif
+			monitor.type = _port_type_from_string(port_type);
 		}
 
 		cJSON *nsinks_node = cJSON_GetObjectItem(root, "nsinks");

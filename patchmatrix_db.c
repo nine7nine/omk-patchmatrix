@@ -570,7 +570,7 @@ _port_add(app_t *app, jack_port_t *jport)
 			jack_get_property(port->uuid, JACKEY_SIGNAL_TYPE, &value, &type);
 			if(value)
 			{
-				if(!strcmp(value, "CV"))
+				if(!strcasecmp(value, port_labels[TYPE_CV]))
 					port->type = TYPE_CV;
 				jack_free(value);
 			}
@@ -583,7 +583,7 @@ _port_add(app_t *app, jack_port_t *jport)
 			jack_get_property(port->uuid, JACKEY_EVENT_TYPES, &value, &type);
 			if(value)
 			{
-				if(strstr(value, "OSC"))
+				if(strcasestr(value, port_labels[TYPE_OSC]))
 					port->type = TYPE_OSC; //FIXME |=
 				jack_free(value);
 			}
@@ -769,7 +769,7 @@ _mixer_spawn(app_t *app, unsigned nsinks, unsigned nsources)
 		char *const argv [] = {
 			PATCHMATRIX_BIN_DIR PATCHMATRIX_MIXER,
 			"-t",
-			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
+			(char *)_port_type_to_string(app->type),
 			"-i",
 			sink_nums,
 			"-o",
@@ -825,7 +825,7 @@ _monitor_spawn(app_t *app, unsigned nsinks)
 		char *const argv [] = {
 			PATCHMATRIX_BIN_DIR PATCHMATRIX_MONITOR,
 			"-t",
-			app->type == TYPE_AUDIO ? "AUDIO" : "MIDI",
+			(char *)_port_type_to_string(app->type),
 			"-i",
 			sink_nums,
 			app->server_name ? "-n" : NULL,

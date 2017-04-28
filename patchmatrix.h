@@ -523,4 +523,37 @@ _save_session(cJSON *root, const char *session_dir)
 	}
 }
 
+static const char *port_labels [] = {
+	[TYPE_NONE] = NULL,
+	[TYPE_AUDIO] = "AUDIO",
+	[TYPE_MIDI] = "MIDI",
+#ifdef JACK_HAS_METADATA_API
+	[TYPE_CV] = "CV",
+	[TYPE_OSC] = "OSC"
+#endif
+};
+
+static port_type_t
+_port_type_from_string(const char *str)
+{
+	if(!strcasecmp(str, port_labels[TYPE_AUDIO]))
+		return TYPE_AUDIO;
+	else if(!strcasecmp(str, port_labels[TYPE_MIDI]))
+		return TYPE_MIDI;
+#ifdef JACK_HAS_METADATA_API
+	else if(!strcasecmp(str, port_labels[TYPE_CV]))
+		return TYPE_CV;
+	else if(!strcasecmp(str, port_labels[TYPE_OSC]))
+		return TYPE_OSC;
+#endif
+
+	return TYPE_NONE;
+}
+
+static const char *
+_port_type_to_string(port_type_t port_type)
+{
+	return port_labels[port_type];
+}
+
 #endif // _PATCHMATRIX_H

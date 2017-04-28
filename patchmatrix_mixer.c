@@ -223,7 +223,7 @@ _create_session(mixer_app_t *mixer)
 	cJSON *root = cJSON_CreateObject();
 	if(root)
 	{
-		cJSON_AddStringToObject(root, "type", mixer->type == TYPE_AUDIO ? "audio" : "midi");
+		cJSON_AddStringToObject(root, "type", _port_type_to_string(mixer->type));
 		cJSON_AddNumberToObject(root, "nsinks", shm->nsinks);
 		cJSON_AddNumberToObject(root, "nsources", shm->nsources);
 		cJSON *arr1 = cJSON_CreateArray();
@@ -352,16 +352,7 @@ main(int argc, char **argv)
 				root = _load_session(optarg);
 				break;
 			case 't':
-				if(!strcasecmp(optarg, "AUDIO"))
-					mixer.type = TYPE_AUDIO;
-				else if(!strcasecmp(optarg, "MIDI"))
-					mixer.type = TYPE_MIDI;
-#ifdef JACK_HAS_METADATA_API
-				else if(!strcasecmp(optarg, "CV"))
-					mixer.type = TYPE_CV;
-				else if(!strcasecmp(optarg, "OSC"))
-					mixer.type = TYPE_OSC;
-#endif
+				mixer.type = _port_type_from_string(optarg);
 				break;
 			case 'i':
 				nsinks = atoi(optarg);
@@ -392,18 +383,9 @@ main(int argc, char **argv)
 		cJSON *type_node = cJSON_GetObjectItem(root, "type");
 		if(type_node && cJSON_IsString(type_node))
 		{
-			const char *type = type_node->valuestring;
+			const char *port_type = type_node->valuestring;
 
-			if(!strcasecmp(type, "AUDIO"))
-				mixer.type = TYPE_AUDIO;
-			else if(!strcasecmp(type, "MIDI"))
-				mixer.type = TYPE_MIDI;
-#ifdef JACK_HAS_METADATA_API
-			else if(!strcasecmp(type, "CV"))
-				mixer.type = TYPE_CV;
-			else if(!strcasecmp(type, "OSC"))
-				mixer.type = TYPE_OSC;
-#endif
+			mixer.type = _port_type_from_string(port_type);
 		}
 
 		cJSON *nsinks_node = cJSON_GetObjectItem(root, "nsinks");

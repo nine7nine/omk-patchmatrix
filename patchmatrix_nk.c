@@ -975,7 +975,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			const bool is_audio = app->type == TYPE_AUDIO;
 			if(is_audio)
 				nk_style_push_color(ctx, &style->border_color, hilight_color);
-			if(nk_button_image_label(ctx, app->icons.audio, "AUDIO", NK_TEXT_RIGHT))
+			if(nk_button_image_label(ctx, app->icons.audio, port_labels[TYPE_AUDIO], NK_TEXT_RIGHT))
 				app->type = TYPE_AUDIO;
 			if(is_audio)
 				nk_style_pop_color(ctx);
@@ -983,7 +983,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			const bool is_midi = app->type == TYPE_MIDI;
 			if(is_midi)
 				nk_style_push_color(ctx, &style->border_color, hilight_color);
-			if(nk_button_image_label(ctx, app->icons.midi, "MIDI", NK_TEXT_RIGHT))
+			if(nk_button_image_label(ctx, app->icons.midi, port_labels[TYPE_MIDI], NK_TEXT_RIGHT))
 				app->type = TYPE_MIDI;
 			if(is_midi)
 				nk_style_pop_color(ctx);
@@ -992,7 +992,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			const bool is_cv = app->type == TYPE_CV;
 			if(is_cv)
 				nk_style_push_color(ctx, &style->border_color, hilight_color);
-			if(nk_button_image_label(ctx, app->icons.cv, "CV", NK_TEXT_RIGHT))
+			if(nk_button_image_label(ctx, app->icons.cv, port_labels[TYPE_CV], NK_TEXT_RIGHT))
 				app->type = TYPE_CV;
 			if(is_cv)
 				nk_style_pop_color(ctx);
@@ -1000,7 +1000,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 			const bool is_osc = app->type == TYPE_OSC;
 			if(is_osc)
 				nk_style_push_color(ctx, &style->border_color, hilight_color);
-			if(nk_button_image_label(ctx, app->icons.osc, "OSC", NK_TEXT_RIGHT))
+			if(nk_button_image_label(ctx, app->icons.osc, port_labels[TYPE_OSC], NK_TEXT_RIGHT))
 				app->type = TYPE_OSC;
 			if(is_osc)
 				nk_style_pop_color(ctx);
