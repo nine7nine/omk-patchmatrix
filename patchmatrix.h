@@ -37,6 +37,8 @@
 #	include <jackey.h>
 #endif
 
+#include <cJSON/cJSON.h>
+
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
 #include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
 
@@ -308,6 +310,8 @@ struct _app_t {
 	atomic_bool done;
 	bool animating;
 	struct nk_rect contextbounds;
+
+	cJSON *root;
 };
 
 #define HASH_FOREACH(hash, itr) \
@@ -428,6 +432,95 @@ _hash_sort_r(hash_t *hash, int (*cmp)(const void *a, const void *b, void *data),
 {
 	if(hash->size)
 		qsort_r(hash->nodes, hash->size, sizeof(void *), cmp, data);
+}
+
+static int
+_mkdirp(const char* path, mode_t mode)
+{
+	int ret = 0;
+
+	// const cast for hack
+	char *p = strdup(path);
+	if(!p)
+		return -1;
+
+	char cwd [1024];
+	getcwd(cwd, 1024);
+
+	chdir("/");
+
+	const char *pattern = "/";
+	for(char *sub = strtok(p, pattern); sub; sub = strtok(NULL, pattern))
+	{
+		mkdir(sub, mode);
+		chdir(sub);
+	}
+
+	chdir(cwd);
+
+	free(p);
+
+	return ret;
+}
+
+static cJSON *
+_load_session(const char *session_dir)
+{
+	cJSON *root = NULL;
+
+	// path may not exist yet
+	_mkdirp(session_dir, S_IRWXU | S_IRGRP |  S_IXGRP | S_IROTH | S_IXOTH);
+
+	char *session_file;
+	if(asprintf(&session_file, "%s%s", session_dir, "state.json") != -1)
+	{
+		FILE *file = fopen(session_file, "r");
+		if(file)
+		{
+			fseek(file, 0, SEEK_END);
+			const size_t sz = ftell(file);
+			fseek(file, 0, SEEK_SET);
+
+			char *buf = malloc(sz + 1);
+			if(buf)
+			{
+				if(fread(buf, sz, 1, file) == 1)
+				{
+					buf[sz] = '\0';
+					root = cJSON_Parse(buf);
+				}
+				free(buf);
+			}
+			fclose(file);
+		}
+		free(session_file);
+	}
+
+	return root;
+}
+
+static void
+_save_session(cJSON *root, const char *session_dir)
+{
+	// path may not exist yet
+	_mkdirp(session_dir, S_IRWXU | S_IRGRP |  S_IXGRP | S_IROTH | S_IXOTH);
+
+	char *buf = cJSON_Print(root);
+	if(buf)
+	{
+		char *session_file;
+		if(asprintf(&session_file, "%s%s", session_dir, "state.json") != -1)
+		{
+			FILE *file = fopen(session_file, "w");
+			if(file)
+			{
+				fwrite(buf, strlen(buf), 1, file);
+				fclose(file);
+			}
+			free(session_file);
+		}
+		free(buf);
+	}
 }
 
 #endif // _PATCHMATRIX_H

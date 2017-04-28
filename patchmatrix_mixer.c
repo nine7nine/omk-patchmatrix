@@ -27,6 +27,7 @@ struct _mixer_app_t {
 	jack_client_t *client;
 	jack_port_t *jsinks [PORT_MAX];
 	jack_port_t *jsources[PORT_MAX];
+	port_type_t type;
 
 	mixer_shm_t *shm;	
 };
@@ -34,13 +35,19 @@ struct _mixer_app_t {
 static atomic_bool closed = ATOMIC_VAR_INIT(false);
 
 static void
+_close(mixer_shm_t *shm)
+{
+	atomic_store_explicit(&shm->closing, true, memory_order_relaxed);
+	sem_post(&shm->done);
+}
+
+static void
 _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 {
 	mixer_app_t *mixer = arg;
 	mixer_shm_t *shm = mixer->shm;
 
-	atomic_store_explicit(&shm->closing, true, memory_order_relaxed);
-	sem_post(&shm->done);
+	_close(shm);
 }
 
 static int
@@ -208,17 +215,89 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 	return 0;
 }
 
+static cJSON *
+_create_session(mixer_app_t *mixer)
+{
+	mixer_shm_t *shm = mixer->shm;
+
+	cJSON *root = cJSON_CreateObject();
+	if(root)
+	{
+		cJSON_AddStringToObject(root, "type", mixer->type == TYPE_AUDIO ? "audio" : "midi");
+		cJSON_AddNumberToObject(root, "nsinks", shm->nsinks);
+		cJSON_AddNumberToObject(root, "nsources", shm->nsources);
+		cJSON *arr1 = cJSON_CreateArray();
+		if(arr1)
+		{
+			for(unsigned j = 0; j < shm->nsources; j++)
+			{
+				cJSON *arr2 = cJSON_CreateArray();
+				if(arr2)
+				{
+					for(unsigned i = 0; i < shm->nsinks; i++)
+					{
+						const int32_t gain = atomic_load_explicit(&shm->jgains[j][i], memory_order_relaxed);
+						cJSON_AddItemToArray(arr2, cJSON_CreateNumber(gain));
+					}
+					cJSON_AddItemToArray(arr1, arr2);
+				}
+			}
+			cJSON_AddItemToObject(root, "gains", arr1);
+		}
+
+		return root;
+	}
+
+	return NULL;
+}
+
+static void
+_jack_session_cb(jack_session_event_t *jev, void *arg)
+{
+	mixer_app_t *mixer= arg;
+	mixer_shm_t *shm = mixer->shm;
+
+	asprintf(&jev->command_line, "patchmatrix_mixer -u %s -d ${SESSION_DIR}",
+		jev->client_uuid);
+
+	switch(jev->type)
+	{
+		case JackSessionSave:
+		case JackSessionSaveAndQuit:
+		{
+			cJSON *root = _create_session(mixer);
+			if(root)
+			{
+				_save_session(root, jev->session_dir);
+				cJSON_Delete(root);
+			}
+
+			if(jev->type == JackSessionSaveAndQuit)
+				_close(shm);
+		}	break;
+		case JackSessionSaveTemplate:
+		{
+			// nothing
+		} break;
+	}
+
+	jack_session_reply(mixer->client, jev);
+	jack_session_event_free(jev);
+}
+
 int
 main(int argc, char **argv)
 {
 	static mixer_app_t mixer;
 	const size_t total_size = sizeof(mixer_shm_t);
 
+	cJSON *root = NULL;
+	cJSON *gains_node = NULL;
 	const char *server_name = NULL;
 	const char *session_id = NULL;
-	port_type_t port_type = TYPE_AUDIO;
 	unsigned nsinks = 1;
 	unsigned nsources = 1;
+	mixer.type = TYPE_AUDIO;
 
 	fprintf(stderr,
 		"%s "PATCHMATRIX_VERSION"\n"
@@ -226,7 +305,7 @@ main(int argc, char **argv)
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
-	while((c = getopt(argc, argv, "vhn:u:t:i:o:")) != -1)
+	while((c = getopt(argc, argv, "vhn:u:t:i:o:d:")) != -1)
 	{
 		switch(c)
 		{
@@ -255,11 +334,12 @@ main(int argc, char **argv)
 					"OPTIONS\n"
 					"   [-v]                 print version and full license information\n"
 					"   [-h]                 print usage information\n"
-					"   [-n] server-name     connect to named JACK daemon\n"
-					"   [-u] client-uuid     client UUID for JACK session management\n"
 					"   [-t] port-type       port type (audio, midi)\n"
 					"   [-i] input-num       port input number (1-%i)\n"
-					"   [-o] output-num      port output number (1-%i)\n\n"
+					"   [-o] output-num      port output number (1-%i)\n"
+					"   [-n] server-name     connect to named JACK daemon\n"
+					"   [-u] client-uuid     client UUID for JACK session management\n"
+					"   [-d] session-dir     directory for JACK session management\n\n"
 					, argv[0], PORT_MAX, PORT_MAX);
 				return 0;
 			case 'n':
@@ -268,16 +348,19 @@ main(int argc, char **argv)
 			case 'u':
 				session_id = optarg;
 				break;
+			case 'd':
+				root = _load_session(optarg);
+				break;
 			case 't':
 				if(!strcasecmp(optarg, "AUDIO"))
-					port_type = TYPE_AUDIO;
+					mixer.type = TYPE_AUDIO;
 				else if(!strcasecmp(optarg, "MIDI"))
-					port_type = TYPE_MIDI;
+					mixer.type = TYPE_MIDI;
 #ifdef JACK_HAS_METADATA_API
 				else if(!strcasecmp(optarg, "CV"))
-					port_type = TYPE_CV;
+					mixer.type = TYPE_CV;
 				else if(!strcasecmp(optarg, "OSC"))
-					port_type = TYPE_OSC;
+					mixer.type = TYPE_OSC;
 #endif
 				break;
 			case 'i':
@@ -292,7 +375,7 @@ main(int argc, char **argv)
 				break;
 			case '?':
 				if( (optopt == 'n') || (optopt == 'u') || (optopt == 't')
-						|| (optopt == 'i') || (optopt == 'o') )
+						|| (optopt == 'i') || (optopt == 'o') || (optopt == 'd') )
 					fprintf(stderr, "Option `-%c' requires an argument.\n", optopt);
 				else if(isprint(optopt))
 					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
@@ -302,6 +385,40 @@ main(int argc, char **argv)
 			default:
 				return -1;
 		}
+	}
+
+	if(root)
+	{
+		cJSON *type_node = cJSON_GetObjectItem(root, "type");
+		if(type_node && cJSON_IsString(type_node))
+		{
+			const char *type = type_node->valuestring;
+
+			if(!strcasecmp(type, "AUDIO"))
+				mixer.type = TYPE_AUDIO;
+			else if(!strcasecmp(type, "MIDI"))
+				mixer.type = TYPE_MIDI;
+#ifdef JACK_HAS_METADATA_API
+			else if(!strcasecmp(type, "CV"))
+				mixer.type = TYPE_CV;
+			else if(!strcasecmp(type, "OSC"))
+				mixer.type = TYPE_OSC;
+#endif
+		}
+
+		cJSON *nsinks_node = cJSON_GetObjectItem(root, "nsinks");
+		if(nsinks_node && cJSON_IsNumber(nsinks_node))
+		{
+			nsinks = nsinks_node->valueint;
+		}
+
+		cJSON *nsources_node = cJSON_GetObjectItem(root, "nsources");
+		if(nsources_node && cJSON_IsNumber(nsources_node))
+		{
+			nsources = nsources_node->valueint;
+		}
+
+		gains_node = cJSON_GetObjectItem(root, "gains");
 	}
 
 	jack_options_t opts = JackNullOption | JackNoStartServer;
@@ -323,7 +440,7 @@ main(int argc, char **argv)
 		snprintf(buf, 32, "sink_%02u", i + 1);
 
 		jack_port_t *jsink = jack_port_register(mixer.client, buf,
-			port_type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+			mixer.type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput, 0);
 
 #ifdef JACK_HAS_METADATA_API
@@ -345,7 +462,7 @@ main(int argc, char **argv)
 		snprintf(buf, 32, "source_%02u", j + 1);
 
 		jack_port_t *jsource = jack_port_register(mixer.client, buf,
-			port_type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+			mixer.type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput, 0);
 
 #ifdef JACK_HAS_METADATA_API
@@ -381,6 +498,17 @@ main(int argc, char **argv)
 							atomic_init(&mixer.shm->jgains[j][i], 0);
 						else
 							atomic_init(&mixer.shm->jgains[j][i], -3600);
+
+						if(gains_node)
+						{
+							cJSON *row = cJSON_GetArrayItem(gains_node, j);
+							if(row)
+							{
+								cJSON *col = cJSON_GetArrayItem(row, i);
+								if(col && cJSON_IsNumber(col))
+									atomic_init(&mixer.shm->jgains[j][i], col->valueint);
+							}
+						}
 					}
 				}
 
@@ -388,9 +516,10 @@ main(int argc, char **argv)
 				{
 					jack_on_info_shutdown(mixer.client, _jack_on_info_shutdown_cb, &mixer);
 					jack_set_process_callback(mixer.client,
-						port_type == TYPE_AUDIO ? _audio_mixer_process : _midi_mixer_process,
+						mixer.type == TYPE_AUDIO ? _audio_mixer_process : _midi_mixer_process,
 						&mixer);
 					//TODO CV
+					jack_set_session_callback(mixer.client, _jack_session_cb, &mixer);
 
 					jack_activate(mixer.client);
 
@@ -430,6 +559,9 @@ main(int argc, char **argv)
 	}
 
 	jack_client_close(mixer.client);
+
+	if(root)
+		cJSON_Delete(root);
 
 	return 0;
 }

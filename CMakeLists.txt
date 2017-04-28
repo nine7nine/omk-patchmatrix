@@ -129,23 +129,29 @@ else() # GNU/Linux
 	set(TAR_UI ${TAR_UI} pugl/pugl/pugl_x11.c)
 endif()
 
+add_library(cJSON OBJECT
+	cJSON/cJSON.c)
+
 # binary
 add_executable(patchmatrix
 	patchmatrix.c
 	patchmatrix_jack.c
 	patchmatrix_nk.c
 	patchmatrix_db.c
-	${TAR_UI})
+	${TAR_UI}
+	$<TARGET_OBJECTS:cJSON>)
 target_link_libraries(patchmatrix ${LIBS} ${UI_LIBS})
 install(TARGETS patchmatrix DESTINATION ${PATCHMATRIX_BIN_DIR})
 
 add_executable(patchmatrix_monitor
-	patchmatrix_monitor.c)
+	patchmatrix_monitor.c
+	$<TARGET_OBJECTS:cJSON>)
 target_link_libraries(patchmatrix_monitor ${LIBS})
 install(TARGETS patchmatrix_monitor DESTINATION ${PATCHMATRIX_BIN_DIR})
 
 add_executable(patchmatrix_mixer
-	patchmatrix_mixer.c)
+	patchmatrix_mixer.c
+	$<TARGET_OBJECTS:cJSON>)
 target_link_libraries(patchmatrix_mixer ${LIBS})
 install(TARGETS patchmatrix_mixer DESTINATION ${PATCHMATRIX_BIN_DIR})
 

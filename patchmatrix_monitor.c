@@ -35,6 +35,7 @@ struct _monitor_app_t {
 			float vels [PORT_MAX];
 		} midi;
 	};
+	port_type_t type;
 
 	monitor_shm_t *shm;	
 };
@@ -42,13 +43,19 @@ struct _monitor_app_t {
 static atomic_bool closed = ATOMIC_VAR_INIT(false);
 
 static void
+_close(monitor_shm_t *shm)
+{
+	atomic_store_explicit(&shm->closing, true, memory_order_relaxed);
+	sem_post(&shm->done);
+}
+
+static void
 _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 {
 	monitor_app_t *monitor = arg;
 	monitor_shm_t *shm = monitor->shm;
 
-	atomic_store_explicit(&shm->closing, true, memory_order_relaxed);
-	sem_post(&shm->done);
+	_close(shm);
 }
 
 static int
@@ -150,16 +157,68 @@ _midi_monitor_process(jack_nframes_t nframes, void *arg)
 	return 0;
 }
 
+static cJSON *
+_create_session(monitor_app_t *monitor)
+{
+	monitor_shm_t *shm = monitor->shm;
+
+	cJSON *root = cJSON_CreateObject();
+	if(root)
+	{
+		cJSON_AddStringToObject(root, "type", monitor->type == TYPE_AUDIO ? "audio" : "midi");
+		cJSON_AddNumberToObject(root, "nsinks", shm->nsinks);
+
+		return root;
+	}
+
+	return NULL;
+}
+
+static void
+_jack_session_cb(jack_session_event_t *jev, void *arg)
+{
+	monitor_app_t *monitor= arg;
+	monitor_shm_t *shm = monitor->shm;
+
+	asprintf(&jev->command_line, "patchmatrix_monitor -u %s -d ${SESSION_DIR}",
+		jev->client_uuid);
+
+	switch(jev->type)
+	{
+		case JackSessionSave:
+		case JackSessionSaveAndQuit:
+		{
+			cJSON *root = _create_session(monitor);
+			if(root)
+			{
+				_save_session(root, jev->session_dir);
+				cJSON_Delete(root);
+			}
+
+			if(jev->type == JackSessionSaveAndQuit)
+				_close(shm);
+		}	break;
+		case JackSessionSaveTemplate:
+		{
+			// nothing
+		} break;
+	}
+
+	jack_session_reply(monitor->client, jev);
+	jack_session_event_free(jev);
+}
+
 int
 main(int argc, char **argv)
 {
 	static monitor_app_t monitor;
 	const size_t total_size = sizeof(monitor_shm_t);
 
+	cJSON *root = NULL;
 	const char *server_name = NULL;
 	const char *session_id = NULL;
-	port_type_t port_type = TYPE_AUDIO;
 	unsigned nsinks = 1;
+	monitor.type = TYPE_AUDIO;
 
 	fprintf(stderr,
 		"%s "PATCHMATRIX_VERSION"\n"
@@ -167,7 +226,7 @@ main(int argc, char **argv)
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
-	while((c = getopt(argc, argv, "vhn:u:t:i:")) != -1)
+	while((c = getopt(argc, argv, "vhn:u:t:i:d:")) != -1)
 	{
 		switch(c)
 		{
@@ -196,10 +255,11 @@ main(int argc, char **argv)
 					"OPTIONS\n"
 					"   [-v]                 print version and full license information\n"
 					"   [-h]                 print usage information\n"
+					"   [-t] port-type       port type (audio, midi)\n"
+					"   [-i] input-num       port input number (1-%i)\n"
 					"   [-n] server-name     connect to named JACK daemon\n"
 					"   [-u] client-uuid     client UUID for JACK session management\n"
-					"   [-t] port-type       port type (audio, midi)\n"
-					"   [-i] input-num       port input number (1-%i)\n\n"
+					"   [-d] session-dir     directory for JACK session management\n\n"
 					, argv[0], PORT_MAX);
 				return 0;
 			case 'n':
@@ -208,16 +268,19 @@ main(int argc, char **argv)
 			case 'u':
 				session_id = optarg;
 				break;
+			case 'd':
+				root = _load_session(optarg);
+				break;
 			case 't':
 				if(!strcasecmp(optarg, "AUDIO"))
-					port_type = TYPE_AUDIO;
+					monitor.type = TYPE_AUDIO;
 				else if(!strcasecmp(optarg, "MIDI"))
-					port_type = TYPE_MIDI;
+					monitor.type = TYPE_MIDI;
 #ifdef JACK_HAS_METADATA_API
 				else if(!strcasecmp(optarg, "CV"))
-					port_type = TYPE_CV;
+					monitor.type = TYPE_CV;
 				else if(!strcasecmp(optarg, "OSC"))
-					port_type = TYPE_OSC;
+					monitor.type = TYPE_OSC;
 #endif
 				break;
 			case 'i':
@@ -227,7 +290,7 @@ main(int argc, char **argv)
 				break;
 			case '?':
 				if( (optopt == 'n') || (optopt == 'u') || (optopt == 't')
-						|| (optopt == 'i') )
+						|| (optopt == 'i') || (optopt == 'd') )
 					fprintf(stderr, "Option `-%c' requires an argument.\n", optopt);
 				else if(isprint(optopt))
 					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
@@ -237,6 +300,34 @@ main(int argc, char **argv)
 			default:
 				return -1;
 		}
+	}
+
+	if(root)
+	{
+		cJSON *type_node = cJSON_GetObjectItem(root, "type");
+		if(type_node && cJSON_IsString(type_node))
+		{
+			const char *type = type_node->valuestring;
+
+			if(!strcasecmp(type, "AUDIO"))
+				monitor.type = TYPE_AUDIO;
+			else if(!strcasecmp(type, "MIDI"))
+				monitor.type = TYPE_MIDI;
+#ifdef JACK_HAS_METADATA_API
+			else if(!strcasecmp(type, "CV"))
+				monitor.type = TYPE_CV;
+			else if(!strcasecmp(type, "OSC"))
+				monitor.type = TYPE_OSC;
+#endif
+		}
+
+		cJSON *nsinks_node = cJSON_GetObjectItem(root, "nsinks");
+		if(nsinks_node && cJSON_IsNumber(nsinks_node))
+		{
+			nsinks = nsinks_node->valueint;
+		}
+
+		cJSON_Delete(root);
 	}
 
 	jack_options_t opts = JackNullOption | JackNoStartServer;
@@ -260,7 +351,7 @@ main(int argc, char **argv)
 		snprintf(buf, 32, "sink_%02u", i + 1);
 
 		jack_port_t *jsink = jack_port_register(monitor.client, buf,
-			port_type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
+			monitor.type == TYPE_AUDIO ? JACK_DEFAULT_AUDIO_TYPE : JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput | JackPortIsTerminal, 0);
 
 #ifdef JACK_HAS_METADATA_API
@@ -273,9 +364,9 @@ main(int argc, char **argv)
 		jack_set_property(monitor.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
 #endif
 
-		if(port_type == TYPE_AUDIO)
+		if(monitor.type == TYPE_AUDIO)
 			monitor.audio.dBFSs[i] = -64.f;
-		else if(port_type == TYPE_MIDI)
+		else if(monitor.type == TYPE_MIDI)
 			monitor.midi.vels[i] = 0.f;
 
 		monitor.jsinks[i] = jsink;
@@ -299,9 +390,10 @@ main(int argc, char **argv)
 				{
 					jack_on_info_shutdown(monitor.client, _jack_on_info_shutdown_cb, &monitor);
 					jack_set_process_callback(monitor.client,
-						port_type == TYPE_AUDIO ? _audio_monitor_process : _midi_monitor_process,
+						monitor.type == TYPE_AUDIO ? _audio_monitor_process : _midi_monitor_process,
 						&monitor);
 					//TODO CV
+					jack_set_session_callback(monitor.client, _jack_session_cb, &monitor);
 
 					jack_activate(monitor.client);
 
