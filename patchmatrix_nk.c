@@ -232,7 +232,21 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 								if(sink_port->type != app->type)
 									continue;
 
-								if(i == j)
+								bool do_connect = false;
+								if(  (!source_port->designation || !sink_port->designation)
+									&& (i == j) )
+								{
+									// try do be smart
+									do_connect = true;
+								}
+								else if( (source_port->designation && sink_port->designation)
+									&& (source_port->designation == sink_port->designation) )
+								{
+									// connect matching designations
+									do_connect = true;
+								}
+
+								if(do_connect)
 									jack_connect(app->client, source_port->name, sink_port->name);
 
 								j++;

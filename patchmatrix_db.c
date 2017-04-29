@@ -605,6 +605,18 @@ _port_add(app_t *app, jack_port_t *jport)
 		{
 			char *value = NULL;
 			char *type = NULL;
+			jack_get_property(port->uuid, JACKEY_DESIGNATION, &value, &type);
+			if(value)
+			{
+				port->designation = _designation_get(value);
+				jack_free(value);
+			}
+			if(type)
+				jack_free(type);
+		}
+		{
+			char *value = NULL;
+			char *type = NULL;
 			jack_get_property(port->uuid, JACK_METADATA_PRETTY_NAME, &value, &type);
 			if(value)
 			{

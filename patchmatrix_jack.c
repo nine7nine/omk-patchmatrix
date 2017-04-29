@@ -19,34 +19,6 @@
 #include <patchmatrix_db.h>
 #include <patchmatrix_nk.h>
 
-static const char *designations [DESIGNATION_MAX] = {
-	[DESIGNATION_NONE] = NULL,
-	[DESIGNATION_LEFT] = LV2_PORT_GROUPS__left,
-	[DESIGNATION_RIGHT] = LV2_PORT_GROUPS__right,
-	[DESIGNATION_CENTER] = LV2_PORT_GROUPS__center,
-	[DESIGNATION_SIDE] = LV2_PORT_GROUPS__side,
-	[DESIGNATION_CENTER_LEFT] = LV2_PORT_GROUPS__centerLeft,
-	[DESIGNATION_CENTER_RIGHT] = LV2_PORT_GROUPS__centerRight,
-	[DESIGNATION_SIDE_LEFT] = LV2_PORT_GROUPS__sideLeft,
-	[DESIGNATION_SIDE_RIGHT] = LV2_PORT_GROUPS__sideRight,
-	[DESIGNATION_REAR_LEFT] = LV2_PORT_GROUPS__rearLeft,
-	[DESIGNATION_REAR_RIGHT] = LV2_PORT_GROUPS__rearRight,
-	[DESIGNATION_REAR_CENTER] = LV2_PORT_GROUPS__rearCenter,
-	[DESIGNATION_LOW_FREQUENCY_EFFECTS] = LV2_PORT_GROUPS__lowFrequencyEffects
-};
-
-static inline int
-_designation_get(const char *uri)
-{
-	for(int i=1; i<DESIGNATION_MAX; i++)
-	{
-		if(!strcmp(uri, designations[i]))
-			return i; // found a match
-	}
-
-	return DESIGNATION_NONE; // found no match
-}
-
 static cJSON *
 _create_session(app_t *app)
 {
