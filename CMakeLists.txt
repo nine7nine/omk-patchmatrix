@@ -13,7 +13,7 @@ elseif(WIN32)
 	set(CMAKE_C_FLAGS "-mstackrealign ${CMAKE_C_FLAGS}")
 endif()
 
-if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
 	if(APPLE)
 		set(CMAKE_MODULE_LINKER_FLAGS "-Wl,-dead_strip ${CMAKE_MODULE_LINKER_FLAGS}")
 	else()
