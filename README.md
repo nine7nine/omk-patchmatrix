@@ -38,6 +38,16 @@
 * Wheel: _toggle port connection_
 * Right button: _remove and disconnect all ports_
 
+### Binaries
+
+#### Stable
+
+https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-latest-stable.zip
+
+#### Unstable
+
+https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-unstable.zip
+
 ### Dependencies
 
 #### Runtime
