@@ -74,7 +74,7 @@ if(${JACK_HAS_PORT_RENAME_CALLBACK})
 	add_definitions("-DJACK_HAS_PORT_RENAME_CALLBACK")
 endif()
 
-set(LIBS ${LIBS} m rt)
+set(LIBS ${LIBS} m rt pthread)
 add_definitions("-DPUGL_HAVE_GL")
 
 find_package(OpenGL)
