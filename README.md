@@ -40,11 +40,13 @@
 
 ### Binaries
 
+Extract matching platform subdirectory into _/opt_ and start with _/opt/patchmatrix/bin/patchmatrix_
+
 #### Stable
 
 https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-latest-stable.zip
 
-#### Unstable
+#### Unstable / Nightly
 
 https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-unstable.zip
 
