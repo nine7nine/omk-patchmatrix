@@ -1203,6 +1203,8 @@ _ui_init(app_t *app)
 	app->type = TYPE_AUDIO;
 	app->designation = DESIGNATION_NONE;
 
+	XInitThreads(); // for nk_pugl_async_redisplay
+
 	nk_pugl_init(&app->win);
 	nk_pugl_show(&app->win);
 
