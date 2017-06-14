@@ -2,6 +2,9 @@
 
 ## a JACK patchbay in flow matrix style
 
+PatchMatrix gives the best user experience with JACK1, as it makes intensive use of
+JACK's metadata API, which JACK2 still lacks an implementation of.
+
 ### Build status
 
 [![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix/commits/master)
