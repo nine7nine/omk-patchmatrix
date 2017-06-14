@@ -792,6 +792,7 @@ _mixer_spawn(app_t *app, unsigned nsinks, unsigned nsources)
 		};
 
 		execvp(argv[0], argv);
+		exit(-1);
 	}
 }
 
@@ -846,6 +847,7 @@ _monitor_spawn(app_t *app, unsigned nsinks)
 		};
 
 		execvp(argv[0], argv);
+		exit(-1);
 	}
 }
 
