@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Hanspeter Portner (dev@open-music-kontrollers.ch)
+ * Copyright (c) 2015-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
  * it under the terms of the Artistic License 2.0 as published by
@@ -38,14 +38,23 @@ extern "C" {
 
 typedef struct _varchunk_t varchunk_t;
 
-static inline int
+static inline bool
 varchunk_is_lock_free(void);
+
+static inline size_t
+varchunk_body_size(size_t minimum);
 
 static inline varchunk_t *
 varchunk_new(size_t minimum, bool release_and_acquire);
 
 static inline void
 varchunk_free(varchunk_t *varchunk);
+
+static inline void
+varchunk_init(varchunk_t *varchunk, size_t body_size, bool release_and_acquire);
+
+static inline void *
+varchunk_write_request_max(varchunk_t *varchunk, size_t minimum, size_t *maximum);
 
 static inline void *
 varchunk_write_request(varchunk_t *varchunk, size_t minimum);
@@ -81,13 +90,13 @@ struct _varchunk_t {
 	memory_order acquire;
 	memory_order release;
 
-  _Atomic size_t head;
-  _Atomic size_t tail;
+  atomic_size_t head;
+  atomic_size_t tail;
 
-  void *buf;
+  uint8_t buf [0] __attribute__((aligned(sizeof(varchunk_elmnt_t))));
 }; 
 
-static inline int
+static inline bool
 varchunk_is_lock_free(void)
 {
 	varchunk_t varchunk;
@@ -96,14 +105,18 @@ varchunk_is_lock_free(void)
 	 && atomic_is_lock_free(&varchunk.tail);
 }
 
-static inline varchunk_t *
-varchunk_new(size_t minimum, bool release_and_acquire)
+static inline size_t
+varchunk_body_size(size_t minimum)
 {
-	varchunk_t *varchunk;
+	size_t size = 1;
+	while(size < minimum)
+		size <<= 1; // assure size to be a power of 2
+	return size;
+}
 
-	if(!(varchunk = calloc(1, sizeof(varchunk_t))))
-		return NULL;
-
+static inline void
+varchunk_init(varchunk_t *varchunk, size_t body_size, bool release_and_acquire)
+{
 	varchunk->acquire = release_and_acquire
 		? memory_order_acquire
 		: memory_order_relaxed;
@@ -114,22 +127,27 @@ varchunk_new(size_t minimum, bool release_and_acquire)
 	atomic_init(&varchunk->head, 0);
 	atomic_init(&varchunk->tail, 0);
 
-	varchunk->size = 1;
-	while(varchunk->size < minimum)
-		varchunk->size <<= 1; // assure size to be a power of 2
+	varchunk->size = body_size;
 	varchunk->mask = varchunk->size - 1;
+}
+
+static inline varchunk_t *
+varchunk_new(size_t minimum, bool release_and_acquire)
+{
+	varchunk_t *varchunk = NULL;
+
+	const size_t body_size = varchunk_body_size(minimum);
+	const size_t total_size = sizeof(varchunk_t) + body_size;
 
 #if defined(_WIN32)
-	varchunk->buf = _aligned_malloc(varchunk->size, sizeof(varchunk_elmnt_t));
+	varchunk = _aligned_malloc(total_size, sizeof(varchunk_elmnt_t));
 #else
-	posix_memalign(&varchunk->buf, sizeof(varchunk_elmnt_t), varchunk->size);
-	mlock(varchunk->buf, varchunk->size); // prevent memory from being flushed to disk
+	posix_memalign((void **)&varchunk, sizeof(varchunk_elmnt_t), total_size);
+	mlock(varchunk, total_size); // prevent memory from being flushed to disk
 #endif
-	if(!varchunk->buf)
-	{
-		free(varchunk);
-		return NULL;
-	}
+
+	if(varchunk)
+		varchunk_init(varchunk, body_size, release_and_acquire);
 
 	return varchunk;
 }
@@ -139,13 +157,9 @@ varchunk_free(varchunk_t *varchunk)
 {
 	if(varchunk)
 	{
-		if(varchunk->buf)
-		{
 #if !defined(_WIN32)
-			munlock(varchunk->buf, varchunk->size);
+		munlock(varchunk->buf, varchunk->size);
 #endif
-			free(varchunk->buf);
-		}
 		free(varchunk);
 	}
 }
@@ -159,16 +173,9 @@ _varchunk_write_advance_raw(varchunk_t *varchunk, size_t head, size_t written)
 }
 
 static inline void *
-varchunk_write_request(varchunk_t *varchunk, size_t minimum)
+varchunk_write_request_max(varchunk_t *varchunk, size_t minimum, size_t *maximum)
 {
 	assert(varchunk);
-
-	if(minimum == 0)
-	{
-		varchunk->rsvd = 0;
-		varchunk->gapd = 0;
-		return NULL;
-	}
 
 	size_t space; // size of writable buffer
 	size_t end; // virtual end of writable buffer
@@ -201,19 +208,25 @@ varchunk_write_request(varchunk_t *varchunk, size_t minimum)
 			{
 				varchunk->rsvd = 0;
 				varchunk->gapd = 0;
+				if(maximum)
+					*maximum = varchunk->rsvd;
 				return NULL;
 			}
 			else // enough space left on second buffer, use it!
 			{
-				varchunk->rsvd = minimum;
+				varchunk->rsvd = len2;
 				varchunk->gapd = len1;
+				if(maximum)
+					*maximum = varchunk->rsvd;
 				return buf2 + sizeof(varchunk_elmnt_t);
 			}
 		}
 		else // enough space left on first part of buffer, use it!
 		{
-			varchunk->rsvd = minimum;
+			varchunk->rsvd = len1;
 			varchunk->gapd = 0;
+			if(maximum)
+				*maximum = varchunk->rsvd;
 			return buf1 + sizeof(varchunk_elmnt_t);
 		}
 	}
@@ -225,15 +238,25 @@ varchunk_write_request(varchunk_t *varchunk, size_t minimum)
 		{
 			varchunk->rsvd = 0;
 			varchunk->gapd = 0;
+			if(maximum)
+				*maximum = varchunk->rsvd;
 			return NULL;
 		}
 		else // enough space left on contiguous buffer, use it!
 		{
-			varchunk->rsvd = minimum;
+			varchunk->rsvd = space;
 			varchunk->gapd = 0;
+			if(maximum)
+				*maximum = varchunk->rsvd;
 			return buf + sizeof(varchunk_elmnt_t);
 		}
 	}
+}
+
+static inline void *
+varchunk_write_request(varchunk_t *varchunk, size_t minimum)
+{
+	return varchunk_write_request_max(varchunk, minimum, NULL);
 }
 
 static inline void
@@ -248,19 +271,19 @@ varchunk_write_advance(varchunk_t *varchunk, size_t written)
 	if(varchunk->gapd > 0)
 	{
 		// fill end of first buffer with gap
-		varchunk_elmnt_t *elmnt = varchunk->buf + head;
+		varchunk_elmnt_t *elmnt = (void *)varchunk->buf + head;
 		elmnt->size = varchunk->gapd - sizeof(varchunk_elmnt_t);
 		elmnt->gap = 1;
 
 		// fill written element header
-		elmnt = varchunk->buf;
+		elmnt = (void *)varchunk->buf;
 		elmnt->size = written;
 		elmnt->gap = 0;
 	}
 	else // varchunk->gapd == 0
 	{
 		// fill written element header
-		varchunk_elmnt_t *elmnt = varchunk->buf + head;
+		varchunk_elmnt_t *elmnt = (void *)varchunk->buf + head;
 		elmnt->size = written;
 		elmnt->gap = 0;
 	}
@@ -344,7 +367,7 @@ varchunk_read_advance(varchunk_t *varchunk)
 	assert(varchunk);
 	// get elmnt header from tail (for size)
 	const size_t tail = atomic_load_explicit(&varchunk->tail, memory_order_relaxed);
-	const varchunk_elmnt_t *elmnt = varchunk->buf + tail;
+	const varchunk_elmnt_t *elmnt = (const void *)varchunk->buf + tail;
 
 	// advance read tail
 	_varchunk_read_advance_raw(varchunk, tail,
