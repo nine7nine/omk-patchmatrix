@@ -131,10 +131,10 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 
 	const float cw = 4.f * app->scale;
 
-	const struct nk_rect bounds = nk_rect(
-		client->pos.x - dim.x/2, client->pos.y - dim.y/2,
-		dim.x, dim.y
-	);
+	struct nk_rect bounds = nk_rect(
+		client->pos.x - dim.x/2 - scrolling.x,
+		client->pos.y - dim.y/2 - scrolling.y,
+		dim.x, dim.y);
 
 	// output connector
 	if(client->source_type & app->type)
