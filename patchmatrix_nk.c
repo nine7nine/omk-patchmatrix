@@ -350,10 +350,10 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 				}
 				else if(nk_input_is_mouse_hovering_rect(in, tile))
 				{
-					if(in->mouse.scroll_delta != 0.f) // has scrolling
+					if(in->mouse.scroll_delta.y != 0.f) // has scrolling
 					{
-						dd = in->mouse.scroll_delta;
-						in->mouse.scroll_delta = 0.f;
+						dd = in->mouse.scroll_delta.y;
+						in->mouse.scroll_delta.y = 0.f;
 					}
 				}
 
@@ -934,10 +934,10 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 					nk_tooltip(ctx, tmp);
 
 					float dd = 0.f;
-					if(in->mouse.scroll_delta != 0.f) // has scrolling
+					if(in->mouse.scroll_delta.y != 0.f) // has scrolling
 					{
-						dd = in->mouse.scroll_delta;
-						in->mouse.scroll_delta = 0.f;
+						dd = in->mouse.scroll_delta.y;
+						in->mouse.scroll_delta.y = 0.f;
 					}
 
 					if(nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) || (dd != 0.f) )
@@ -972,9 +972,10 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	client_t *updated = 0;
 	struct node_editor *nodedit = &app->nodedit;
 
-	if(nk_begin(ctx, "Base", wbounds, NK_WINDOW_NO_SCROLLBAR))
+	const char *window_name = "base";
+	if(nk_begin(ctx, window_name, wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
-		nk_window_set_bounds(ctx, wbounds);
+		nk_window_set_bounds(ctx, window_name, wbounds);
 		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 
 		nk_menubar_begin(ctx);
