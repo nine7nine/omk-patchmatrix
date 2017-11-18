@@ -975,7 +975,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	const char *window_name = "base";
 	if(nk_begin(ctx, window_name, wbounds, NK_WINDOW_NO_SCROLLBAR))
 	{
-		nk_window_set_bounds(ctx, window_name, wbounds);
 		struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
 
 		nk_menubar_begin(ctx);
