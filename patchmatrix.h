@@ -434,6 +434,22 @@ _hash_sort_r(hash_t *hash, int (*cmp)(const void *a, const void *b, void *data),
 		qsort_r(hash->nodes, hash->size, sizeof(void *), cmp, data);
 }
 
+#if defined(_WIN32)
+static inline char *
+strsep(char **sp, char *sep)
+{
+	char *p, *s;
+	if(sp == NULL || *sp == NULL || **sp == '\0')
+		return(NULL);
+	s = *sp;
+	p = s + strcspn(s, sep);
+	if(*p != '\0')
+		*p++ = '\0';
+	*sp = p;
+	return(s);
+}
+#endif
+
 static int
 _mkdirp(const char* path, mode_t mode)
 {
@@ -450,7 +466,9 @@ _mkdirp(const char* path, mode_t mode)
 	chdir("/");
 
 	const char *pattern = "/";
-	for(char *sub = strtok(p, pattern); sub; sub = strtok(NULL, pattern))
+	for(char *pp = p, *sub = strsep(&pp, pattern);
+		sub;
+		sub = strsep(&pp, pattern))
 	{
 		mkdir(sub, mode);
 		chdir(sub);
