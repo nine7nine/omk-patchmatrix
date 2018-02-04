@@ -12,5 +12,12 @@ include(CTest)
 if(${BUILD_TESTING})
 	add_executable(osc_test
 		osc_test.c)
-	add_test(NAME API-Test COMMAND osc_test)
+	add_executable(osc_server
+		osc_server.c)
+	add_executable(osc_client
+		osc_client.c)
+
+	add_test(NAME Forge-Test COMMAND osc_test)
+	add_test(NAME Server-Test COMMAND osc_server)
+	add_test(NAME Client-Test COMMAND osc_client)
 endif()
