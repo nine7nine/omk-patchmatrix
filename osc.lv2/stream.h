@@ -126,7 +126,7 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		stream->socket_family = AF_INET;
 		stream->socket_type = SOCK_STREAM;
 		stream->protocol = IPPROTO_TCP;
-		ptr += strlen(tcp_prefix);
+		ptr += strlen(tcp_slip_prefix);
 	}
 	else if(strncmp(ptr, tcp_prefix_prefix, strlen(tcp_prefix_prefix)) == 0)
 	{
@@ -134,7 +134,7 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		stream->socket_family = AF_INET;
 		stream->socket_type = SOCK_STREAM;
 		stream->protocol = IPPROTO_TCP;
-		ptr += strlen(tcp_prefix);
+		ptr += strlen(tcp_prefix_prefix);
 	}
 	else
 	{
@@ -343,6 +343,10 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		}
 		else if(stream->socket_type == SOCK_STREAM)
 		{
+			const int flag = 1;
+			assert(setsockopt(stream->sock, stream->protocol,
+				TCP_NODELAY, &flag, sizeof(int)) == 0);
+
 			if(stream->server)
 			{
 				assert(listen(stream->sock, 1) == 0);
@@ -488,8 +492,6 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 			fprintf(stderr, "received %zi bytes\n", recvd);
 			stream->driv->write_adv(stream->data, recvd);
 			ev |= LV2_OSC_RECV;
-
-			break; //FIXME
 		}
 	}
 	else if(stream->socket_type == SOCK_STREAM)
@@ -534,8 +536,6 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 				fprintf(stderr, "received %zi bytes\n", recvd);
 				stream->driv->write_adv(stream->data, recvd);
 				ev |= LV2_OSC_RECV;
-
-				break; //FIXME
 			}
 		}
 	}
