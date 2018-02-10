@@ -79,6 +79,9 @@ struct _LV2_OSC_Stream {
 	LV2_OSC_Address peer;
 	const LV2_OSC_Driver *driv;
 	void *data;
+	uint8_t tx_buf [8092];
+	uint8_t rx_buf [8092];
+	size_t rx_off;
 };
 
 typedef enum _LV2_OSC_Enum {
@@ -100,7 +103,12 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 	memset(stream, 0x0, sizeof(LV2_OSC_Stream));
 
 	char *dup = strdup(url);
-	assert(dup);
+	if(!dup)
+	{
+		fprintf(stderr, "%s: out-of-memory\n", __func__);
+		goto fail;
+	}
+
 	char *ptr = dup;
 	char *tmp;
 
@@ -138,10 +146,15 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 	}
 	else
 	{
-		assert(false);
+		fprintf(stderr, "%s: invalid protocol\n", __func__);
+		goto fail;
 	}
 
-	assert(ptr[0]);
+	if(ptr[0] == '\0')
+	{
+		fprintf(stderr, "%s: URI has no colon\n", __func__);
+		goto fail;
+	}
 
 	const char *node = NULL;
 	const char *iface = NULL;
@@ -161,7 +174,12 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 	// optional IPv6
 	if( (tmp = strchr(ptr, '%')) )
 	{
-		assert(stream->socket_family == AF_INET6);
+		if(stream->socket_family != AF_INET6)
+		{
+			fprintf(stderr, "%s: no IPv6 interface delimiter expected here\n", __func__);
+			goto fail;
+		}
+
 		ptr = tmp;
 		ptr[0] = '\0';
 		iface = ++ptr;
@@ -171,7 +189,12 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 	if( (tmp = strchr(ptr, ']')) )
 	if(ptr)
 	{
-		assert(stream->socket_family == AF_INET6);
+		if(stream->socket_family != AF_INET6)
+		{
+			fprintf(stderr, "%s: no closing IPv6 bracket expected here\n", __func__);
+			goto fail;
+		}
+
 		ptr = tmp;
 		ptr[0] = '\0';
 		++ptr;
@@ -179,7 +202,12 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 
 	// mandatory IPv4/6
 	ptr = strchr(ptr, ':');
-	assert(ptr);
+	if(!ptr)
+	{
+		fprintf(stderr, "%s: pre-service colon expected\n", __func__);
+		goto fail;
+	}
+
 	ptr[0] = '\0';
 
 	service = ++ptr;
@@ -190,12 +218,20 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		stream->server = true;
 	}
 
-	fprintf(stderr, "%s , %s , %s\n", node, iface, service);
-
 	stream->sock = socket(stream->socket_family, stream->socket_type,
 		stream->protocol);
-	assert(stream->sock >= 0);
-	fcntl(stream->sock, F_SETFL, O_NONBLOCK);
+
+	if(stream->sock < 0)
+	{
+		fprintf(stderr, "%s: socket failed\n", __func__);
+		goto fail;
+	}
+
+	if(fcntl(stream->sock, F_SETFL, O_NONBLOCK) == -1)
+	{
+		fprintf(stderr, "%s: fcntl failed\n", __func__);
+		goto fail;
+	}
 
 	stream->driv = driv;
 	stream->data = data;
@@ -212,17 +248,28 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 			hints.ai_protocol = stream->protocol;
 
 			struct addrinfo *res;
-			assert(getaddrinfo(node, service, &hints, &res) == 0);
-			assert(res->ai_addrlen == sizeof(stream->peer.in4));
+			if(getaddrinfo(node, service, &hints, &res) != 0)
+			{
+				fprintf(stderr, "%s: getaddrinfo failed\n", __func__);
+				goto fail;
+			}
+			if(res->ai_addrlen != sizeof(stream->peer.in4))
+			{
+				fprintf(stderr, "%s: IPv4 address expected\n", __func__);
+				goto fail;
+			}
 
 			stream->self.len = res->ai_addrlen;
 			stream->self.in = *res->ai_addr;
-			stream->self.in4.sin_addr.s_addr = htonl(INADDR_ANY); //FIXME
+			stream->self.in4.sin_addr.s_addr = htonl(INADDR_ANY);
 
 			freeaddrinfo(res);
 
-			fprintf(stdout, "binding as IPv4 server\n");
-			assert(bind(stream->sock, &stream->self.in, stream->self.len) == 0);
+			if(bind(stream->sock, &stream->self.in, stream->self.len) != 0)
+			{
+				fprintf(stderr, "%s: bind failed\n", __func__);
+				goto fail;
+			}
 		}
 		else // client
 		{
@@ -231,8 +278,11 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 			stream->self.in4.sin_port = htons(0);
 			stream->self.in4.sin_addr.s_addr = htonl(INADDR_ANY);
 
-			fprintf(stdout, "binding as IPv4 client\n");
-			assert(bind(stream->sock, &stream->self.in, stream->self.len) == 0);
+			if(bind(stream->sock, &stream->self.in, stream->self.len) != 0)
+			{
+				fprintf(stderr, "%s: bind failed\n", __func__);
+				goto fail;
+			}
 
 			// resolve peer address
 			struct addrinfo hints;
@@ -242,8 +292,16 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 			hints.ai_protocol = stream->protocol;
 
 			struct addrinfo *res;
-			assert(getaddrinfo(node, service, &hints, &res) == 0);
-			assert(res->ai_addrlen == sizeof(stream->peer.in4));
+			if(getaddrinfo(node, service, &hints, &res) != 0)
+			{
+				fprintf(stderr, "%s: getaddrinfo failed\n", __func__);
+				goto fail;
+			}
+			if(res->ai_addrlen != sizeof(stream->peer.in4))
+			{
+				fprintf(stderr, "%s: IPv4 address failed\n", __func__);
+				goto fail;
+			}
 
 			stream->peer.len = res->ai_addrlen;
 			stream->peer.in = *res->ai_addr;
@@ -253,17 +311,34 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 
 		if(stream->socket_type == SOCK_DGRAM)
 		{
-			//FIXME
+			const int broadcast = 1;
+
+			if(setsockopt(stream->sock, SOL_SOCKET, SO_BROADCAST,
+				&broadcast, sizeof(broadcast)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+				goto fail;
+			}
+
+			//FIXME handle multicast
 		}
 		else if(stream->socket_type == SOCK_STREAM)
 		{
 			const int flag = 1;
-			assert(setsockopt(stream->sock, stream->protocol,
-				TCP_NODELAY, &flag, sizeof(int)) == 0);
+			if(setsockopt(stream->sock, stream->protocol,
+				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+				goto fail;
+			}
 
 			if(stream->server)
 			{
-				assert(listen(stream->sock, 1) == 0);
+				if(listen(stream->sock, 1) != 0)
+				{
+					fprintf(stderr, "%s: listen failed\n", __func__);
+					goto fail;
+				}
 			}
 			else // client
 			{
@@ -272,7 +347,8 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		}
 		else
 		{
-			assert(false);
+			fprintf(stderr, "%s: invalid socket type\n", __func__);
+			goto fail;
 		}
 	}
 	else if(stream->socket_family == AF_INET6) // IPv6
@@ -287,12 +363,20 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 			hints.ai_protocol = stream->protocol;
 
 			struct addrinfo *res;
-			assert(getaddrinfo(node, service, &hints, &res) == 0);
-			assert(res->ai_addrlen == sizeof(stream->peer.in6));
+			if(getaddrinfo(node, service, &hints, &res) != 0)
+			{
+				fprintf(stderr, "%s: getaddrinfo failed\n", __func__);
+				goto fail;
+			}
+			if(res->ai_addrlen != sizeof(stream->peer.in6))
+			{
+				fprintf(stderr, "%s: IPv6 address expected\n", __func__);
+				goto fail;
+			}
 
 			stream->self.len = res->ai_addrlen;
 			stream->self.in = *res->ai_addr;
-			stream->self.in6.sin6_addr = in6addr_any; //FIXME
+			stream->self.in6.sin6_addr = in6addr_any;
 			if(iface)
 			{
 				stream->self.in6.sin6_scope_id = if_nametoindex(iface);
@@ -300,8 +384,11 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 
 			freeaddrinfo(res);
 
-			fprintf(stdout, "binding as IPv6 server\n");
-			assert(bind(stream->sock, &stream->self.in, stream->self.len) == 0);
+			if(bind(stream->sock, &stream->self.in, stream->self.len) != 0)
+			{
+				fprintf(stderr, "%s: bind failed\n", __func__);
+				goto fail;
+			}
 		}
 		else // client
 		{
@@ -314,8 +401,11 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 				stream->self.in6.sin6_scope_id = if_nametoindex(iface);
 			}
 
-			fprintf(stdout, "binding as IPv6 client\n");
-			assert(bind(stream->sock, &stream->self.in, stream->self.len) == 0);
+			if(bind(stream->sock, &stream->self.in, stream->self.len) != 0)
+			{
+				fprintf(stderr, "%s: bind failed\n", __func__);
+				goto fail;
+			}
 
 			// resolve peer address
 			struct addrinfo hints;
@@ -325,8 +415,16 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 			hints.ai_protocol = stream->protocol;
 
 			struct addrinfo *res;
-			assert(getaddrinfo(node, service, &hints, &res) == 0);
-			assert(res->ai_addrlen == sizeof(stream->peer.in6));
+			if(getaddrinfo(node, service, &hints, &res) != 0)
+			{
+				fprintf(stderr, "%s: getaddrinfo failed\n", __func__);
+				goto fail;
+			}
+			if(res->ai_addrlen != sizeof(stream->peer.in6))
+			{
+				fprintf(stderr, "%s: IPv6 address expected\n", __func__);
+				goto fail;
+			}
 			stream->peer.len = res->ai_addrlen;
 			stream->peer.in = *res->ai_addr;
 			if(iface)
@@ -339,17 +437,25 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 
 		if(stream->socket_type == SOCK_DGRAM)
 		{
-			//FIXME
+			// nothing to do
 		}
 		else if(stream->socket_type == SOCK_STREAM)
 		{
 			const int flag = 1;
-			assert(setsockopt(stream->sock, stream->protocol,
-				TCP_NODELAY, &flag, sizeof(int)) == 0);
+			if(setsockopt(stream->sock, stream->protocol,
+				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+				goto fail;
+			}
 
 			if(stream->server)
 			{
-				assert(listen(stream->sock, 1) == 0);
+				if(listen(stream->sock, 1) != 0)
+				{
+					fprintf(stderr, "%s: listen failed\n", __func__);
+					goto fail;
+				}
 			}
 			else // client
 			{
@@ -358,17 +464,134 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		}
 		else
 		{
-			assert(false);
+			fprintf(stderr, "%s: invalid socket type\n", __func__);
+			goto fail;
 		}
 	}
 	else
 	{
-		//FIXME
-		assert(false);
+		fprintf(stderr, "%s: invalid socket family\n", __func__);
+		goto fail;
 	}
 
 	free(dup);
 
+	return 0;
+
+fail:
+	if(dup)
+	{
+		free(dup);
+	}
+
+	if(stream->sock >= 0)
+	{
+		close(stream->sock);
+		stream->sock = 0;
+	}
+
+	return -1;
+}
+
+#define SLIP_END					0300	// 0xC0, 192, indicates end of packet
+#define SLIP_ESC					0333	// 0xDB, 219, indicates byte stuffing
+#define SLIP_END_REPLACE	0334	// 0xDC, 220, ESC ESC_END means END data byte
+#define SLIP_ESC_REPLACE	0335	// 0xDD, 221, ESC ESC_ESC means ESC data byte
+
+// SLIP encoding
+static size_t
+lv2_osc_slip_encode_inline(uint8_t *dst, size_t len)
+{
+	if(len == 0)
+		return 0;
+
+	const uint8_t *end = dst + len;
+
+	// estimate new size
+	size_t size = 2; // double ended SLIP
+	for(const uint8_t *from=dst; from<end; from++, size++)
+	{
+		if( (*from == SLIP_END) || (*from == SLIP_ESC))
+			size ++;
+	}
+
+	// fast track if no escaping needed
+	if(size == len + 2)
+	{
+		memmove(dst+1, dst, len);
+		dst[0] = SLIP_END;
+		dst[size-1] = SLIP_END;
+
+		return size;
+	}
+
+	// slow track if some escaping needed
+	uint8_t *to = dst + size - 1;
+	*to-- = SLIP_END;
+	for(const uint8_t *from=end-1; from>=dst; from--)
+	{
+		if(*from == SLIP_END)
+		{
+			*to-- = SLIP_END_REPLACE;
+			*to-- = SLIP_ESC;
+		}
+		else if(*from == SLIP_ESC)
+		{
+			*to-- = SLIP_ESC_REPLACE;
+			*to-- = SLIP_ESC;
+		}
+		else
+			*to-- = *from;
+	}
+	*to-- = SLIP_END;
+
+	return size;
+}
+
+// SLIP decoding
+static size_t 
+lv2_osc_slip_decode_inline(uint8_t *dst, size_t len, size_t *size)
+{
+	const uint8_t *src = dst;
+	const uint8_t *end = dst + len;
+	uint8_t *ptr = dst;
+
+	bool whole = false;
+
+	if( (src < end) && (*src == SLIP_END) )
+	{
+		 whole = true;
+		 src++;
+	}
+
+	while(src < end)
+	{
+		if(*src == SLIP_ESC)
+		{
+			if(src == end-1)
+				break;
+
+			src++;
+			if(*src == SLIP_END_REPLACE)
+				*ptr++ = SLIP_END;
+			else if(*src == SLIP_ESC_REPLACE)
+				*ptr++ = SLIP_ESC;
+			src++;
+		}
+		else if(*src == SLIP_END)
+		{
+			src++;
+
+			*size = whole ? ptr - dst : 0;
+			return src - dst;
+		}
+		else
+		{
+			*ptr++ = *src++;
+		}
+	}
+
+	*size = 0;
 	return 0;
 }
 
@@ -380,14 +603,26 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 	// handle connections
 	if( (stream->socket_type == SOCK_STREAM)
 		&& (stream->server)
-		&& (stream->fd <= 0)) // no peerr
+		&& (stream->fd <= 0)) // no peer
 	{
 		stream->peer.len = sizeof(stream->peer.in);
 		stream->fd = accept(stream->sock, &stream->peer.in, &stream->peer.len);
 
 		if(stream->fd > 0)
 		{
-			fprintf(stderr, "accept: %i\n", stream->fd);
+			if(fcntl(stream->fd, F_SETFL, O_NONBLOCK) == -1)
+			{
+				fprintf(stderr, "%s: fcntl failed\n", __func__);
+			}
+
+			const int flag = 1;
+			if(setsockopt(stream->fd, stream->protocol,
+				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+			}
+
+			//FIXME ev |=
 		}
 	}
 
@@ -406,16 +641,21 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 				if(sent == -1)
 				{
-					fprintf(stderr, "sendto: %s\n", strerror(errno));
+					if( (errno = EAGAIN) || (errno == EWOULDBLOCK) )
+					{
+						// full queue
+						break;
+					}
+
+					fprintf(stderr, "%s: sendto: %s\n", __func__, strerror(errno));
 					break;
 				}
-				if(sent != (ssize_t)tosend)
+				else if(sent != (ssize_t)tosend)
 				{
-					fprintf(stderr, "only sent %zi of %zu bytes", sent, tosend);
+					fprintf(stderr, "%s: only sent %zi of %zu bytes", __func__, sent, tosend);
 					break;
 				}
 
-				fprintf(stderr, "sent %zi bytes\n", sent);
 				stream->driv->read_adv(stream->data);
 				ev |= LV2_OSC_SEND;
 			}
@@ -434,20 +674,51 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 			while( (buf = stream->driv->read_req(stream->data, &tosend)) )
 			{
-				const ssize_t sent = send(fd, buf, tosend, 0);
+				if(stream->slip) // SLIP framed
+				{
+					if(tosend <= sizeof(stream->tx_buf)) // check if there is enough memory
+					{
+						memcpy(stream->tx_buf, buf, tosend);
+						tosend = lv2_osc_slip_encode_inline(stream->tx_buf, tosend);
+					}
+					else
+					{
+						tosend = 0;
+					}
+				}
+				else // uint32_t prefix frames
+				{
+					const size_t nsize = tosend + sizeof(uint32_t);
+
+					if(nsize <= sizeof(stream->tx_buf)) // check if there is enough memory
+					{
+						const uint32_t prefix = htonl(tosend);
+
+						memcpy(stream->tx_buf, &prefix, sizeof(uint32_t));
+						memcpy(stream->tx_buf + sizeof(uint32_t), buf, tosend);
+						tosend = nsize;
+					}
+					else
+					{
+						tosend = 0;
+					}
+				}
+
+				const ssize_t sent = tosend
+					? send(fd, stream->tx_buf, tosend, 0)
+					: 0;
 
 				if(sent == -1)
 				{
-					fprintf(stderr, "sendto: %s\n", strerror(errno));
+					fprintf(stderr, "%s: sendto: %s\n", __func__, strerror(errno));
 					break;
 				}
-				if(sent != (ssize_t)tosend)
+				else if(sent != (ssize_t)tosend)
 				{
-					fprintf(stderr, "only sent %zi of %zu bytes", sent, tosend);
+					fprintf(stderr, "%s: only sent %zi of %zu bytes", __func__, sent, tosend);
 					break;
 				}
 
-				fprintf(stderr, "sent %zi bytes\n", sent);
 				stream->driv->read_adv(stream->data);
 				ev |= LV2_OSC_SEND;
 			}
@@ -458,10 +729,9 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 	if(stream->socket_type == SOCK_DGRAM)
 	{
 		uint8_t *buf;
-		const size_t min_len = 1024;
 		size_t max_len;
 
-		while( (buf = stream->driv->write_req(stream->data, min_len, &max_len)) )
+		while( (buf = stream->driv->write_req(stream->data, 1024, &max_len)) )
 		{
 			struct sockaddr in;
 			socklen_t in_len = sizeof(in);
@@ -471,25 +741,24 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 			if(recvd == -1)
 			{
-				if(errno == EAGAIN)
+				if( (errno == EAGAIN) || (errno == EWOULDBLOCK) )
 				{
-					//fprintf(stderr, "recv: no messages\n");
+					// empty queue
 					break;
 				}
 
-				fprintf(stderr, "recv: %s\n", strerror(errno));
+				fprintf(stderr, "%s: recv: %s\n", __func__, strerror(errno));
 				break;
 			}
 			else if(recvd == 0)
 			{
-				fprintf(stderr, "recv: peer shutdown\n");
+				// peer has shut down
 				break;
 			}
 
 			stream->peer.len = in_len;
 			stream->peer.in = in;
 
-			fprintf(stderr, "received %zi bytes\n", recvd);
 			stream->driv->write_adv(stream->data, recvd);
 			ev |= LV2_OSC_RECV;
 		}
@@ -502,40 +771,118 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 		if(fd > 0)
 		{
-			uint8_t *buf;
-			const size_t min_len = 1024;
-			size_t max_len;
-
-			while( (buf = stream->driv->write_req(stream->data, min_len, &max_len)) )
+			if(stream->slip) // SLIP framed
 			{
-				const ssize_t recvd = recv(fd, buf, 16, 0); //FIXME
-				//const ssize_t recvd = recv(fd, buf, max_len, 0);
-
-				if(recvd == -1)
+				while(true)
 				{
-					if(errno == EAGAIN)
+					ssize_t recvd = recv(fd, stream->rx_buf + stream->rx_off,
+						sizeof(stream->rx_buf) - stream->rx_off, 0);
+
+					if(recvd == -1)
 					{
-						//fprintf(stderr, "recv: no messages\n");
+						if( (errno == EAGAIN) || (errno == EWOULDBLOCK) )
+						{
+							// empty queue
+							break;
+						}
+
+						fprintf(stderr, "%s: recv: %s\n", __func__, strerror(errno));
+						break;
+					}
+					else if(recvd == 0)
+					{
+						// peer has shut down
+						close(stream->fd);
+						stream->fd = 0;
 						break;
 					}
 
-					fprintf(stderr, "recv: %s\n", strerror(errno));
+					uint8_t *ptr = stream->rx_buf;
+					recvd += stream->rx_off;
+
+					while(recvd > 0)
+					{
+						size_t size;
+						const size_t parsed = lv2_osc_slip_decode_inline(ptr, recvd, &size);
+
+						if(size) // dispatch
+						{
+							uint8_t *buf ;
+
+							if( (buf = stream->driv->write_req(stream->data, size, NULL)) )
+							{
+								memcpy(buf, ptr, size);
+
+								stream->driv->write_adv(stream->data, size);
+								ev |= LV2_OSC_RECV;
+							}
+							else
+							{
+								fprintf(stderr, "%s: write buffer overflow", __func__);
+							}
+						}
+
+						if(parsed)
+						{
+							ptr += parsed;
+							recvd -= parsed;
+						}
+						else
+						{
+							break;
+						}
+					}
+
+					if(recvd > 0) // is there remaining chunk for next call?
+					{
+						memmove(stream->rx_buf, ptr, recvd);
+						stream->rx_off = recvd;
+					}
+					else
+					{
+						stream->rx_off = 0;
+					}
+
 					break;
 				}
-				else if(recvd == 0)
+			}
+			else // uint32_t prefix frames
+			{
+				uint8_t *buf;
+				
+				while( (buf = stream->driv->write_req(stream->data, 1024, NULL)) )
 				{
-					fprintf(stderr, "recv: peer shutdown\n");
-					if(stream->fd)
+					uint32_t prefix;
+
+					ssize_t recvd = recv(fd, &prefix, sizeof(uint32_t), 0);
+					if(recvd == sizeof(uint32_t))
 					{
+						prefix = ntohl(prefix); //FIXME check prefix <= max_len
+						recvd = recv(fd, buf, prefix, 0);
+					}
+
+					if(recvd == -1)
+					{
+						if( (errno == EAGAIN) || (errno == EWOULDBLOCK) )
+						{
+							// empty queue
+							break;
+						}
+
+						fprintf(stderr, "%s: recv: %s\n", __func__, strerror(errno));
+						break;
+					}
+					else if(recvd == 0)
+					{
+						// peer has shut down
 						close(stream->fd);
 						stream->fd = 0;
+						break;
 					}
-					break;
-				}
 
-				fprintf(stderr, "received %zi bytes\n", recvd);
-				stream->driv->write_adv(stream->data, recvd);
-				ev |= LV2_OSC_RECV;
+					stream->driv->write_adv(stream->data, recvd);
+					ev |= LV2_OSC_RECV;
+				}
 			}
 		}
 	}
@@ -558,7 +905,6 @@ lv2_osc_stream_deinit(LV2_OSC_Stream *stream)
 		stream->sock = 0;
 	}
 
-	//FIXME
 	return 0;
 }
 
