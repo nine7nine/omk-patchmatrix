@@ -8,7 +8,7 @@ all: osc_test
 
 osc_test: osc_test.c ../osc.lv2/*.h
 	$(CC) -std=gnu11 -g -o $@ $< $(C_FLAGS) -lpthread
-	valgrind ./$@
+	./$@
 	gcov $<
 
 clean:

@@ -119,6 +119,17 @@ const uint8_t raw_7 [] = {
 		',', 0x0, 0x0, 0x0
 };
 
+const uint8_t raw_8 [] = {
+	'/', 'p', 'i', 'n',
+	'g', 0x0, 0x0, 0x0,
+	',', 't', 'c', 'r',
+	0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x1,
+	0x0, 0x0, 0x0, 'o',
+	0x1, 0x2, 0x3, 0x4
+};
+
 static LV2_URID
 _map(LV2_URID_Map_Handle instance, const char *uri)
 {
@@ -166,6 +177,8 @@ static LV2_URID_Unmap unmap = {
 	.unmap = _unmap
 };
 
+//#define DUMP
+#if defined(DUMP)
 static void
 _dump(const uint8_t *src, const uint8_t *dst, size_t size)
 {
@@ -173,6 +186,7 @@ _dump(const uint8_t *src, const uint8_t *dst, size_t size)
 		printf("%zu %02x %02x\n", i, src[i], dst[i]);
 	printf("\n");
 }
+#endif
 
 static void
 _clone(LV2_OSC_Reader *reader, LV2_OSC_Writer *writer, size_t size)
@@ -266,6 +280,10 @@ _test_a(LV2_OSC_Writer *writer, const uint8_t *raw, size_t size)
 	size_t len;
 	assert(lv2_osc_writer_finalize(writer, &len) == buf0);
 	assert(len == size);
+#if defined(DUMP)
+	if(memcmp(raw, buf0, size) != 0)
+		_dump(raw, buf0, size);
+#endif
 	assert(memcmp(raw, buf0, size) == 0);
 
 	// check reader & writer
@@ -277,6 +295,10 @@ _test_a(LV2_OSC_Writer *writer, const uint8_t *raw, size_t size)
 	// check cloned against raw bytes
 	assert(lv2_osc_writer_finalize(writer, &len) == buf1);
 	assert(len == size);
+#if defined(DUMP)
+	if(memcmp(raw, buf1, size) != 0)
+		_dump(raw, buf1, size);
+#endif
 	assert(memcmp(raw, buf1, size) == 0);
 
 	// check forge 
@@ -292,6 +314,10 @@ _test_a(LV2_OSC_Writer *writer, const uint8_t *raw, size_t size)
 	// check deforged against raw bytes
 	assert(lv2_osc_writer_finalize(writer, &len) == buf1);
 	assert(len == size);
+#if defined(DUMP)
+	if(memcmp(raw, buf1, size) != 0)
+		_dump(raw, buf1, size);
+#endif
 	assert(memcmp(raw, buf1, size) == 0);
 }
 
@@ -393,6 +419,16 @@ test_7_a(LV2_OSC_Writer *writer)
 	_test_a(writer, raw_7, sizeof(raw_7));
 }
 
+static void
+test_8_a(LV2_OSC_Writer *writer)
+{
+	assert(lv2_osc_writer_message_vararg(writer, "/ping", "tcr",
+		1ULL,
+		'o',
+		0x1, 0x2, 0x3, 0x4));
+	_test_a(writer, raw_8, sizeof(raw_8));
+}
+
 static test_t tests [] = {
 	test_0_a,
 	test_1_a,
@@ -402,6 +438,7 @@ static test_t tests [] = {
 	test_5_a,
 	test_6_a,
 	test_7_a,
+	test_8_a,
 
 	NULL
 }
@@ -422,6 +459,8 @@ _run_tests()
 
 		cb(&writer);
 	}
+
+	assert(unmap.unmap(unmap.handle, 0)== NULL);
 
 	return 0;
 }
@@ -569,7 +608,6 @@ _thread_1(void *data)
 	unsigned count = 0;
 	while(true)
 	{
-		bool skip = false;
 		const LV2_OSC_Enum ev = lv2_osc_stream_run(&stream);
 
 		if(ev & LV2_OSC_RECV)
@@ -591,8 +629,9 @@ _thread_1(void *data)
 					assert(arg->size == sizeof(int32_t));
 					assert(check[arg->i] == 0);
 					check[arg->i] = 1;
-					count++;
 				}
+
+				count++;
 
 				while(true)
 				{
@@ -623,6 +662,8 @@ _thread_1(void *data)
 		ev = lv2_osc_stream_run(&stream);
 	} while( (ev & LV2_OSC_SEND) || (stream.fd > 0) );
 
+	sleep(1);
+
 	assert(lv2_osc_stream_deinit(&stream) == 0);
 
 	if(stash[0].rsvd)
@@ -631,11 +672,7 @@ _thread_1(void *data)
 		stash[0].rsvd = NULL;
 	}
 
-	if(stash[1].rsvd)
-	{
-		free(stash[1].rsvd);
-		stash[1].rsvd = NULL;
-	}
+	assert(stash[1].rsvd == 0);
 
 	return NULL;
 }
@@ -671,6 +708,8 @@ _thread_2(void *data)
 				assert(lv2_osc_writer_message_vararg(&writer, "/trip", "i", i));
 				assert(lv2_osc_writer_finalize(&writer, &writ) == buf_tx);
 				assert(writ == 16);
+				assert(check[i] == 0);
+				check[i] = 1;
 
 				_stash_write_adv(&stash[1], writ);
 				break;
@@ -696,10 +735,11 @@ _thread_2(void *data)
 					assert(strcmp(arg->path, "/trip") == 0);
 					assert(*arg->type == 'i');
 					assert(arg->size == sizeof(int32_t));
-					assert(check[arg->i] == 0);
-					check[arg->i] = 1;
-					count++;
+					assert(check[arg->i] == 1);
+					check[arg->i] = 2;
 				}
+
+				count++;
 
 				_stash_read_adv(&stash[0]);
 			}
@@ -708,34 +748,39 @@ _thread_2(void *data)
 
 	while(count <= (COUNT - 1))
 	{
-		const uint8_t *buf_rx;
-		size_t reat;
-
-		while( (buf_rx = _stash_read_req(&stash[0], &reat)) )
-		{
-			LV2_OSC_Reader reader;
-
-			lv2_osc_reader_initialize(&reader, buf_rx, reat);
-			assert(lv2_osc_reader_is_message(&reader));
-
-			OSC_READER_MESSAGE_FOREACH(&reader, arg, reat)
-			{
-				assert(strcmp(arg->path, "/trip") == 0);
-				assert(*arg->type == 'i');
-				assert(arg->size == sizeof(int32_t));
-				assert(check[arg->i] == 0);
-				check[arg->i] = 1;
-				count++;
-			}
-
-			_stash_read_adv(&stash[0]);
-		}
-
 		const LV2_OSC_Enum ev = lv2_osc_stream_run(&stream);
-		(void)ev;
+
+		if(ev & LV2_OSC_RECV)
+		{
+			const uint8_t *buf_rx;
+			size_t reat;
+
+			while( (buf_rx = _stash_read_req(&stash[0], &reat)) )
+			{
+				LV2_OSC_Reader reader;
+
+				lv2_osc_reader_initialize(&reader, buf_rx, reat);
+				assert(lv2_osc_reader_is_message(&reader));
+
+				OSC_READER_MESSAGE_FOREACH(&reader, arg, reat)
+				{
+					assert(strcmp(arg->path, "/trip") == 0);
+					assert(*arg->type == 'i');
+					assert(arg->size == sizeof(int32_t));
+					assert(check[arg->i] == 1);
+					check[arg->i] = 2;
+				}
+
+				count++;
+
+				_stash_read_adv(&stash[0]);
+			}
+		}
 	}
 
 	assert(count == COUNT);
+
+	sleep(1);
 
 	assert(lv2_osc_stream_deinit(&stream) == 0);
 
@@ -745,11 +790,7 @@ _thread_2(void *data)
 		stash[0].rsvd = NULL;
 	}
 
-	if(stash[1].rsvd)
-	{
-		free(stash[1].rsvd);
-		stash[1].rsvd = NULL;
-	}
+	assert(stash[1].rsvd == NULL);
 
 	return NULL;
 }
@@ -771,14 +812,11 @@ static const pair_t pairs [] = {
 		.client = "osc.udp://[::1]:3333"
 	},
 
-#if 0
 	{
 		.server = "osc.udp://:3344",
 		.client = "osc.udp://255.255.255.255:3344"
 	},
-#endif
 
-#if 0
 	{
 		.server = "osc.tcp://:4444",
 		.client = "osc.tcp://localhost:4444"
@@ -802,10 +840,9 @@ static const pair_t pairs [] = {
 		.client = "osc.prefix.tcp://localhost:8888"
 	},
 	{
-		.server = "osc.prefix.tcp://[]:9999",
-		.client = "osc.prefix.tcp://[::1]:9999"
+		.server = "osc.prefix.tcp://[%lo]:9999",
+		.client = "osc.prefix.tcp://[::1%lo]:9999"
 	},
-#endif
 
 	{
 		.server = NULL,

@@ -372,10 +372,14 @@ lv2_osc_writer_arg_varlist(LV2_OSC_Writer *writer, const char *fmt, va_list args
 					return false;
 				break;
 			case LV2_OSC_RGBA:
-				if(!lv2_osc_writer_add_rgba(writer, va_arg(args, unsigned), va_arg(args, unsigned),
-						va_arg(args, unsigned), va_arg(args, unsigned)))
+			{
+				const uint8_t r = va_arg(args, unsigned);
+				const uint8_t g = va_arg(args, unsigned);
+				const uint8_t b = va_arg(args, unsigned);
+				const uint8_t a = va_arg(args, unsigned);
+				if(!lv2_osc_writer_add_rgba(writer, r, g, b, a))
 					return false;
-				break;
+			}	break;
 		}
 	}
 
@@ -533,17 +537,25 @@ lv2_osc_writer_packet(LV2_OSC_Writer *writer, LV2_OSC_URID *osc_urid,
 					m[0] = 0x0; // port
 					memcpy(&m[1], LV2_ATOM_BODY_CONST(atom), atom->size);
 				}
-				else if(atom->type == osc_urid->OSC_Char)
+				else if(atom->type == osc_urid->ATOM_Literal)
 				{
-					const char c = *(const char *)LV2_ATOM_BODY_CONST(atom);
-					if(!lv2_osc_writer_add_char(writer, c))
-						return false;
-				}
-				else if(atom->type == osc_urid->OSC_RGBA)
-				{
-					const uint8_t *rgba = LV2_ATOM_BODY_CONST(atom);
-					if(!lv2_osc_writer_add_rgba(writer, rgba[0], rgba[1], rgba[2], rgba[3]))
-						return false;
+					const LV2_Atom_Literal *lit = (LV2_Atom_Literal *)atom;
+
+					if(lit->body.datatype == osc_urid->OSC_Char)
+					{
+						const char c = *(const char *)LV2_ATOM_CONTENTS_CONST(LV2_Atom_Literal, lit);
+						if(!lv2_osc_writer_add_char(writer, c))
+							return false;
+					}
+					else if(lit->body.datatype == osc_urid->OSC_RGBA)
+					{
+						const uint8_t *rgba = LV2_ATOM_CONTENTS_CONST(LV2_Atom_Literal, atom);
+						uint8_t r, g, b, a;
+						if(sscanf(rgba, "%02"SCNx8"%02"SCNx8"%02"SCNx8"%02"SCNx8, &r, &g, &b, &a) != 4)
+							return false;
+						if(!lv2_osc_writer_add_rgba(writer, r, g, b, a))
+							return false;
+					}
 				}
 			}
 		}
