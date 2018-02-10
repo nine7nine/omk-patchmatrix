@@ -32,6 +32,18 @@
 
 #include <osc.lv2/osc.h>
 
+#if !defined(LV2_OSC_STREAM_SNDBUF)
+#	define LV2_OSC_STREAM_SNDBUF 0x100000 // 1 M
+#endif
+
+#if !defined(LV2_OSC_STREAM_RCVBUF)
+#	define LV2_OSC_STREAM_RCVBUF 0x100000 // 1 M
+#endif
+
+#if !defined(LV2_OSC_STREAM_REQBUF)
+#	define LV2_OSC_STREAM_REQBUF 1024
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -234,6 +246,23 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		goto fail;
 	}
 
+	const int sendbuff = LV2_OSC_STREAM_SNDBUF;
+	const int recvbuff = LV2_OSC_STREAM_RCVBUF;
+
+	if(setsockopt(stream->sock, SOL_SOCKET,
+		SO_SNDBUF, &sendbuff, sizeof(int))== -1)
+	{
+		fprintf(stderr, "%s: setsockopt failed\n", __func__);
+		goto fail;
+	}
+
+	if(setsockopt(stream->sock, SOL_SOCKET,
+		SO_RCVBUF, &recvbuff, sizeof(int))== -1)
+	{
+		fprintf(stderr, "%s: setsockopt failed\n", __func__);
+		goto fail;
+	}
+
 	stream->driv = driv;
 	stream->data = data;
 
@@ -326,8 +355,16 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		else if(stream->socket_type == SOCK_STREAM)
 		{
 			const int flag = 1;
+
 			if(setsockopt(stream->sock, stream->protocol,
 				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+				goto fail;
+			}
+
+			if(setsockopt(stream->sock, SOL_SOCKET,
+				SO_KEEPALIVE, &flag, sizeof(int)) != 0)
 			{
 				fprintf(stderr, "%s: setsockopt failed\n", __func__);
 				goto fail;
@@ -443,8 +480,16 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 		else if(stream->socket_type == SOCK_STREAM)
 		{
 			const int flag = 1;
+
 			if(setsockopt(stream->sock, stream->protocol,
 				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+				goto fail;
+			}
+
+			if(setsockopt(stream->sock, SOL_SOCKET,
+				SO_KEEPALIVE, &flag, sizeof(int)) != 0)
 			{
 				fprintf(stderr, "%s: setsockopt failed\n", __func__);
 				goto fail;
@@ -611,14 +656,35 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 		if(stream->fd > 0)
 		{
+			const int flag = 1;
+			const int sendbuff = LV2_OSC_STREAM_SNDBUF;
+			const int recvbuff = LV2_OSC_STREAM_RCVBUF;
+
 			if(fcntl(stream->fd, F_SETFL, O_NONBLOCK) == -1)
 			{
 				fprintf(stderr, "%s: fcntl failed\n", __func__);
 			}
 
-			const int flag = 1;
 			if(setsockopt(stream->fd, stream->protocol,
 				TCP_NODELAY, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+			}
+
+			if(setsockopt(stream->sock, SOL_SOCKET,
+				SO_KEEPALIVE, &flag, sizeof(int)) != 0)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+			}
+
+			if(setsockopt(stream->fd, SOL_SOCKET,
+				SO_SNDBUF, &sendbuff, sizeof(int))== -1)
+			{
+				fprintf(stderr, "%s: setsockopt failed\n", __func__);
+			}
+
+			if(setsockopt(stream->fd, SOL_SOCKET,
+				SO_RCVBUF, &recvbuff, sizeof(int))== -1)
 			{
 				fprintf(stderr, "%s: setsockopt failed\n", __func__);
 			}
@@ -711,7 +777,26 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 
 				if(sent == -1)
 				{
-					fprintf(stderr, "%s: sendto: %s\n", __func__, strerror(errno));
+					if( (errno == EAGAIN) || (errno == EWOULDBLOCK) )
+					{
+						break;
+					}
+					else if(errno == ECONNRESET)
+					{
+						if(stream->server)
+						{
+							// peer has shut down
+							close(stream->fd);
+							stream->fd = 0;
+							break;
+						}
+						else
+						{
+							assert(false); //FIXME reconnect
+						}
+					}
+
+					fprintf(stderr, "%s: send: %s\n", __func__, strerror(errno));
 					break;
 				}
 				else if(sent != (ssize_t)tosend)
@@ -732,7 +817,8 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 		uint8_t *buf;
 		size_t max_len;
 
-		while( (buf = stream->driv->write_req(stream->data, 1024, &max_len)) )
+		while( (buf = stream->driv->write_req(stream->data,
+			LV2_OSC_STREAM_REQBUF, &max_len)) )
 		{
 			struct sockaddr in;
 			socklen_t in_len = sizeof(in);
@@ -786,11 +872,25 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 							// empty queue
 							break;
 						}
+						else if(errno == ECONNRESET)
+						{
+							if(stream->server)
+							{
+								// peer has shut down
+								close(stream->fd);
+								stream->fd = 0;
+								break;
+							}
+							else
+							{
+								assert(false); //FIXME reconnect
+							}
+						}
 
 						fprintf(stderr, "%s: recv: %s\n", __func__, strerror(errno));
 						break;
 					}
-					else if(recvd == 0)
+					else if( (recvd == 0) && stream->server)
 					{
 						// peer has shut down
 						close(stream->fd);
@@ -851,7 +951,8 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 			{
 				uint8_t *buf;
 				
-				while( (buf = stream->driv->write_req(stream->data, 1024, NULL)) )
+				while( (buf = stream->driv->write_req(stream->data,
+					LV2_OSC_STREAM_REQBUF, NULL)) )
 				{
 					uint32_t prefix;
 
@@ -869,11 +970,25 @@ lv2_osc_stream_run(LV2_OSC_Stream *stream)
 							// empty queue
 							break;
 						}
+						else if(errno == ECONNRESET)
+						{
+							if(stream->server)
+							{
+								// peer has shut down
+								close(stream->fd);
+								stream->fd = 0;
+								break;
+							}
+							else
+							{
+								assert(false); //FIXME reconnect
+							}
+						}
 
 						fprintf(stderr, "%s: recv: %s\n", __func__, strerror(errno));
 						break;
 					}
-					else if(recvd == 0)
+					else if( (recvd == 0) && stream->server)
 					{
 						// peer has shut down
 						close(stream->fd);
