@@ -328,16 +328,18 @@ test_3_a(LV2_OSC_Writer *writer)
 static void
 test_4_a(LV2_OSC_Writer *writer)
 {
-	uint8_t m [] = {0x00, 0x90, 24, 0x7f};
-	assert(lv2_osc_writer_message_vararg(writer, "/midi", "m", 4, m));
+	const uint8_t m [] = {0x00, 0x90, 24, 0x7f};
+	const int32_t len = sizeof(m);
+	assert(lv2_osc_writer_message_vararg(writer, "/midi", "m", len, m));
 	_test_a(writer, raw_4, sizeof(raw_4));
 }
 
 static void
 test_5_a(LV2_OSC_Writer *writer)
 {
-	uint8_t b [] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6};
-	assert(lv2_osc_writer_message_vararg(writer, "/blob", "b", 6, b));
+	const uint8_t b [] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6};
+	const int32_t len = sizeof(b);
+	assert(lv2_osc_writer_message_vararg(writer, "/blob", "b", len, b));
 	_test_a(writer, raw_5, sizeof(raw_5));
 }
 

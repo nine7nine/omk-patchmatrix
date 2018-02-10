@@ -332,9 +332,11 @@ lv2_osc_writer_arg_varlist(LV2_OSC_Writer *writer, const char *fmt, va_list args
 					return false;
 				break;
 			case LV2_OSC_BLOB:
-				if(!lv2_osc_writer_add_blob(writer, va_arg(args, int32_t), va_arg(args, const uint8_t *)))
+			{
+				const int32_t len = va_arg(args, int32_t);
+				if(!lv2_osc_writer_add_blob(writer, len, va_arg(args, const uint8_t *)))
 					return false;
-				break;
+			}	break;
 
 			case LV2_OSC_TRUE:
 			case LV2_OSC_FALSE:
@@ -356,9 +358,11 @@ lv2_osc_writer_arg_varlist(LV2_OSC_Writer *writer, const char *fmt, va_list args
 				break;
 
 			case LV2_OSC_MIDI:
-				if(!lv2_osc_writer_add_midi(writer, va_arg(args, int32_t), va_arg(args, const uint8_t *)))
+			{
+				const int32_t len = va_arg(args, int32_t);
+				if(!lv2_osc_writer_add_midi(writer, len, va_arg(args, const uint8_t *)))
 					return false;
-				break;
+			}	break;
 			case LV2_OSC_SYMBOL:
 				if(!lv2_osc_writer_add_symbol(writer, va_arg(args, const char *)))
 					return false;
