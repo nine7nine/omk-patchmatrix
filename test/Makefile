@@ -1,7 +1,5 @@
 CC ?= gcc
-#C_FLAGS ?= -I../ -Wall -Wextra -Wpedantic $(shell pkg-config --cflags lv2) \
-#					 -fprofile-arcs -ftest-coverage
-C_FLAGS ?= -I../ $(shell pkg-config --cflags lv2) \
+C_FLAGS ?= -I../ -Wall -Wextra -Wpedantic $(shell pkg-config --cflags lv2) \
 					 -fprofile-arcs -ftest-coverage
 
 all: osc_test

@@ -174,8 +174,6 @@ lv2_osc_stream_init(LV2_OSC_Stream *stream, const char *url,
 	const char *iface = NULL;
 	const char *service = NULL;
 
-	char *colon = strrchr(ptr, ':');
-
 	// optional IPv6
 	if(ptr[0] == '[')
 	{
