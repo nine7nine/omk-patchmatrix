@@ -10,8 +10,6 @@
 #include <osc.lv2/forge.h>
 #include <osc.lv2/stream.h>
 
-#include <varchunk.h>
-
 #define BUF_SIZE 0x100000
 #define MAX_URIDS 512
 
@@ -468,34 +466,88 @@ _run_tests()
 	return 0;
 }
 
+typedef struct _item_t item_t;
 typedef struct _stash_t stash_t;
 
+struct _item_t {
+	size_t size;
+	uint8_t buf [];
+};
+
 struct _stash_t {
-	varchunk_t *rb;
+	size_t size;
+	item_t **items;
+	item_t *rsvd;
 };
 
 static uint8_t *
 _stash_write_req(stash_t *stash, size_t minimum, size_t *maximum)
 {
-	return varchunk_write_request_max(stash->rb, minimum, maximum);
+	if(!stash->rsvd || (stash->rsvd->size < minimum))
+	{
+		const size_t sz = sizeof(item_t) + minimum;
+		stash->rsvd = realloc(stash->rsvd, sz);
+		assert(stash->rsvd);
+		stash->rsvd->size = minimum;
+	}
+
+	if(maximum)
+	{
+		*maximum = stash->rsvd->size;
+	}
+
+	return stash->rsvd->buf;
 }
 
 static void
 _stash_write_adv(stash_t *stash, size_t written)
 {
-	varchunk_write_advance(stash->rb, written);
+	assert(stash->rsvd);
+	assert(stash->rsvd->size >= written);
+	stash->rsvd->size = written;
+	stash->size += 1;
+	stash->items = realloc(stash->items, sizeof(item_t *) * stash->size);
+	stash->items[stash->size - 1] = stash->rsvd;
+	stash->rsvd = NULL;
 }
 
 static const uint8_t *
 _stash_read_req(stash_t *stash, size_t *size)
 {
-	return varchunk_read_request(stash->rb, size);
+	if(stash->size == 0)
+	{
+		if(size)
+		{
+			*size = 0;
+		}
+
+		return NULL;
+	}
+
+	item_t *item = stash->items[0];
+
+	if(size)
+	{
+		*size = item->size;
+	}
+
+	return item->buf;
 }
 
 static void
 _stash_read_adv(stash_t *stash)
 {
-	varchunk_read_advance(stash->rb);
+	assert(stash->size);
+
+	free(stash->items[0]);
+	stash->size -= 1;
+
+	for(unsigned i = 0; i < stash->size; i++)
+	{
+		stash->items[i] = stash->items[i+1];
+	}
+
+	stash->items = realloc(stash->items, sizeof(item_t *) * stash->size);
 }
 
 static void *
@@ -560,9 +612,6 @@ _thread_1(void *data)
 	memset(&stream, 0x0, sizeof(stream));
 	memset(stash, 0x0, sizeof(stash));
 	memset(check, 0x0, sizeof(check));
-
-	assert(stash[0].rb = varchunk_new(BUF_SIZE, false));
-	assert(stash[1].rb = varchunk_new(BUF_SIZE, false));
 
 	assert(lv2_osc_stream_init(&stream, uri, &driv, stash) == 0);
 
@@ -636,8 +685,19 @@ _thread_1(void *data)
 
 	assert(lv2_osc_stream_deinit(&stream) == 0);
 
-	free(stash[0].rb);
-	free(stash[1].rb);
+	free(stash[0].rsvd);
+	while(stash[0].size)
+	{
+		_stash_read_adv(&stash[0]);
+	}
+	free(stash[0].items);
+
+	free(stash[1].rsvd);
+	while(stash[1].size)
+	{
+		_stash_read_adv(&stash[1]);
+	}
+	free(stash[1].items);
 
 	return NULL;
 }
@@ -655,9 +715,6 @@ _thread_2(void *data)
 	memset(&stream, 0x0, sizeof(stream));
 	memset(stash, 0x0, sizeof(stash));
 	memset(check, 0x0, sizeof(check));
-
-	assert(stash[0].rb = varchunk_new(BUF_SIZE, false));
-	assert(stash[1].rb = varchunk_new(BUF_SIZE, false));
 
 	assert(lv2_osc_stream_init(&stream, uri, &driv, stash) == 0);
 
@@ -765,8 +822,19 @@ _thread_2(void *data)
 
 	assert(lv2_osc_stream_deinit(&stream) == 0);
 
-	free(stash[0].rb);
-	free(stash[1].rb);
+	free(stash[0].rsvd);
+	while(stash[0].size)
+	{
+		_stash_read_adv(&stash[0]);
+	}
+	free(stash[0].items);
+
+	free(stash[1].rsvd);
+	while(stash[1].size)
+	{
+		_stash_read_adv(&stash[1]);
+	}
+	free(stash[1].items);
 
 	return NULL;
 }
