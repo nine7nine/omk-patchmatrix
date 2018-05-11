@@ -6,7 +6,7 @@ stages:
   variables:
     BASE_NAME: "patchmatrix"
     PKG_CONFIG_PATH: "/opt/lv2/lib/pkgconfig:/opt/${CI_BUILD_NAME}/lib/pkgconfig:/usr/lib/${CI_BUILD_NAME}/pkgconfig"
-    TOOLCHAIN_FILE: "${CI_PROJECT_DIR}/cmake/${CI_BUILD_NAME}.cmake"
+    TOOLCHAIN_FILE: "${CI_PROJECT_DIR}/meson/${CI_BUILD_NAME}"
 
 .common_template: &common_definition
   <<: *variables_definition
@@ -19,15 +19,9 @@ stages:
 .build_template: &build_definition
   <<: *common_definition
   script:
-    - mkdir build
-    - pushd build
-    - cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX="/opt/${BASE_NAME}" -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} ..
-    - cmake .. # needed for darwin
-    - make
-    - make install
-    - popd
-    - mkdir -p "${BASE_NAME}-$(cat VERSION)/${CI_BUILD_NAME}/opt"
-    - cp -r "/opt/${BASE_NAME}" "${BASE_NAME}-$(cat VERSION)/${CI_BUILD_NAME}/opt/${BASE_NAME}"
+    - meson --prefix=/ --cross-file "${TOOLCHAIN_FILE}" -Dstatic-build=false build
+    - ninja -C build
+    - DESTDIR="${CI_PROJECT_DIR}/${BASE_NAME}-$(cat VERSION)/${CI_BUILD_NAME}" ninja -C build install
 
 .universal_linux_template: &universal_linux_definition
   image: ventosus/universal-linux-gnu
@@ -48,28 +42,21 @@ stages:
 # building in docker
 x86_64-linux-gnu:
   before_script:
-    - apt-get update
-    - apt-get install -y -q libjack-dev libsqlite3-dev
+    - apt-get install -y libjack-dev
   <<: *universal_linux_definition
 
 i686-linux-gnu:
-  before_script:
-    - apt-get update
-    - apt-get install -y -q libjack-dev:i386 libsqlite3-dev:i386
   <<: *universal_linux_definition
 
 arm-linux-gnueabihf:
-  before_script:
-    - apt-get update
-    - apt-get install -y -q libjack-dev:armhf libsqlite3-dev:armhf
   <<: *arm_linux_definition
 
 #x86_64-w64-mingw32:
 #  <<: *universal_w64_definition
-
+#
 #i686-w64-mingw32:
 #  <<: *universal_w64_definition
-
+#
 #universal-apple-darwin:
 #  <<: *universal_apple_definition
 

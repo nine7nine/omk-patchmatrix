@@ -1,8 +1,8 @@
 [Desktop Entry]
 Name=PatchMatrix
 Comment=Connect JACK clients together
-Exec=@CMAKE_INSTALL_PREFIX@/@PATCHMATRIX_BIN_DIR@/patchmatrix
+Exec=@prefix@/@bindir@/patchmatrix
 Terminal=false
-Icon=@CMAKE_INSTALL_PREFIX@/@PATCHMATRIX_ICON_DIR@/patchmatrix.png
+Icon=@prefix@/@datadir@/icons/hicolor/256x256/apps/patchmatrix.png
 Type=Application
 Categories=AudioVideo;Audio;

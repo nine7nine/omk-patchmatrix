@@ -156,7 +156,6 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 			nodedit->linking.source_client = client;
 		}
 
-		const bool is_hovering_body = nk_input_is_mouse_hovering_rect(in, bounds);
 		const bool is_hovering_handle= nk_input_is_mouse_hovering_rect(in, outer);
 		nk_fill_arc(canvas, cx, cy, cw, 0.f, 2*NK_PI,
 			is_hilighted ? hilight_color : grab_handle_color);
@@ -967,9 +966,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 	app->scale = nk_pugl_get_scale(&app->win);
 	app->dy = 20.f * app->scale;
 
-	int n = 0;
 	const struct nk_input *in = &ctx->input;
-	client_t *updated = 0;
 	struct node_editor *nodedit = &app->nodedit;
 
 	const char *window_name = "base";

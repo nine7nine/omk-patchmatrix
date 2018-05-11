@@ -61,8 +61,11 @@
 #define XSD__integer                 XSD_PREFIX"integer"
 #define XSD__float                   XSD_PREFIX"float"
 
-#define PATCHMATRIX_MIXER            "/patchmatrix_mixer"
-#define PATCHMATRIX_MONITOR          "/patchmatrix_monitor"
+#define PATCHMATRIX_MIXER            "patchmatrix_mixer"
+#define PATCHMATRIX_MONITOR          "patchmatrix_monitor"
+
+#define PATCHMATRIX_MIXER_ID          "/"PATCHMATRIX_MIXER
+#define PATCHMATRIX_MONITOR_ID        "/"PATCHMATRIX_MONITOR
 
 #define PORT_MAX 16
 

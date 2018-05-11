@@ -319,7 +319,7 @@ main(int argc, char **argv)
 		opts |= JackSessionID;
 
 	jack_status_t status;
-	monitor.client = jack_client_open(PATCHMATRIX_MONITOR, opts, &status,
+	monitor.client = jack_client_open(PATCHMATRIX_MONITOR_ID, opts, &status,
 		server_name ? server_name : session_id,
 		server_name ? session_id : NULL);
 	if(!monitor.client)

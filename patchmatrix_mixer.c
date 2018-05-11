@@ -410,7 +410,7 @@ main(int argc, char **argv)
 		opts |= JackSessionID;
 
 	jack_status_t status;
-	mixer.client = jack_client_open(PATCHMATRIX_MIXER, opts, &status,
+	mixer.client = jack_client_open(PATCHMATRIX_MIXER_ID, opts, &status,
 		server_name ? server_name : session_id,
 		server_name ? session_id : NULL);
 	if(!mixer.client)

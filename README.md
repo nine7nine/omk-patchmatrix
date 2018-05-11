@@ -65,11 +65,10 @@ https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-uns
 
 	git clone https://gitlab.com/OpenMusicKontrollers/patchmatrix.git
 	cd patchmatrix 
-	mkdir build
+	meson build
 	cd build
-	cmake ..
-	make
-	sudo make install
+	ninja -j4
+	sudo ninja install
 
 ### License
 

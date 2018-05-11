@@ -182,9 +182,9 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 		}
 #endif
 
-		if(!strncmp(client_name, PATCHMATRIX_MONITOR, strlen(PATCHMATRIX_MONITOR)))
+		if(!strncmp(client_name, PATCHMATRIX_MONITOR_ID, strlen(PATCHMATRIX_MONITOR_ID)))
 			client->monitor_shm = _monitor_add(client_name);
-		else if(!strncmp(client_name, PATCHMATRIX_MIXER, strlen(PATCHMATRIX_MIXER)))
+		else if(!strncmp(client_name, PATCHMATRIX_MIXER_ID, strlen(PATCHMATRIX_MIXER_ID)))
 			client->mixer_shm = _mixer_add(client_name);
 
 		_hash_add(&app->clients, client);
@@ -779,7 +779,7 @@ _mixer_spawn(app_t *app, unsigned nsinks, unsigned nsources)
 		snprintf(source_nums, 32, "%u", nsources);
 
 		char *const argv [] = {
-			PATCHMATRIX_BIN_DIR PATCHMATRIX_MIXER,
+			PATCHMATRIX_MIXER,
 			"-t",
 			(char *)_port_type_to_string(app->type),
 			"-i",
@@ -836,7 +836,7 @@ _monitor_spawn(app_t *app, unsigned nsinks)
 		snprintf(sink_nums, 32, "%u", nsinks);
 
 		char *const argv [] = {
-			PATCHMATRIX_BIN_DIR PATCHMATRIX_MONITOR,
+			PATCHMATRIX_MONITOR,
 			"-t",
 			(char *)_port_type_to_string(app->type),
 			"-i",
