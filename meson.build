@@ -11,17 +11,17 @@ prefix = get_option('prefix')
 datadir = get_option('datadir')
 bindir = get_option('bindir')
 
-datadir = join_paths(prefix, datadir, 'patchmatrix', '')
 appdir = join_paths(prefix, datadir, 'applications')
+pdatadir = join_paths(prefix, datadir, 'patchmatrix', '')
 
 add_project_arguments('-DPATCHMATRIX_VERSION="'+version+'"', language : 'c')
-add_project_arguments('-DPATCHMATRIX_DATA_DIR="'+datadir+'"', language : 'c')
+add_project_arguments('-DPATCHMATRIX_DATA_DIR="'+pdatadir+'"', language : 'c')
 add_project_arguments('-D_GNU_SOURCE', language : 'c')
 add_project_arguments('-DPUGL_HAVE_GL', language : 'c')
 
 conf_data = configuration_data()
 conf_data.set('prefix', prefix)
-conf_data.set('bindir', datadir)
+conf_data.set('bindir', bindir)
 conf_data.set('datadir', datadir)
 
 cc = meson.get_compiler('c')
@@ -117,12 +117,12 @@ install_data(join_paths('pix', 'patchmatrix.png'),
 	install_dir : join_paths(prefix, datadir, 'icons', 'hicolor', '256x256', 'apps'))
 
 install_data(join_paths('pix', 'audio.png'),
-	install_dir : datadir)
+	install_dir : pdatadir)
 install_data(join_paths('pix', 'midi.png'),
-	install_dir : datadir)
+	install_dir : pdatadir)
 install_data(join_paths('pix', 'osc.png'),
-	install_dir : datadir)
+	install_dir : pdatadir)
 install_data(join_paths('pix', 'cv.png'),
-	install_dir : datadir)
+	install_dir : pdatadir)
 install_data(join_paths('nuklear', 'extra_font', 'Cousine-Regular.ttf'),
-	install_dir : datadir)
+	install_dir : pdatadir)
