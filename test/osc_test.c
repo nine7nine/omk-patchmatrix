@@ -8,7 +8,9 @@
 #include <osc.lv2/reader.h>
 #include <osc.lv2/writer.h>
 #include <osc.lv2/forge.h>
-#include <osc.lv2/stream.h>
+#if !defined(_WIN32)
+#	include <osc.lv2/stream.h>
+#endif
 
 #define BUF_SIZE 0x100000
 #define MAX_URIDS 512
@@ -466,6 +468,7 @@ _run_tests()
 	return 0;
 }
 
+#if !defined(_WIN32)
 typedef struct _item_t item_t;
 typedef struct _stash_t stash_t;
 
@@ -896,6 +899,7 @@ static const pair_t pairs [] = {
 		.lossy = false
 	}
 };
+#endif
 
 int
 main(int argc, char **argv)
@@ -906,6 +910,7 @@ main(int argc, char **argv)
 	fprintf(stdout, "running main tests:\n");
 	assert(_run_tests() == 0);
 
+#if !defined(_WIN32)
 	for(const pair_t *pair = pairs; pair->server; pair++)
 	{
 		pthread_t thread_1;
@@ -920,6 +925,7 @@ main(int argc, char **argv)
 		assert(pthread_join(thread_1, NULL) == 0);
 		assert(pthread_join(thread_2, NULL) == 0);
 	}
+#endif
 
 	for(unsigned i=0; i<__handle.urid; i++)
 	{

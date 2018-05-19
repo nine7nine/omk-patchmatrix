@@ -16,11 +16,13 @@ lv2_dep = dependency('lv2')
 thread_dep = dependency('threads')
 deps = [lv2_dep, thread_dep]
 
+c_args = []
+
 if host_machine.system() == 'windows'
 	deps += cc.find_library('ws2_32')
+	c_args += '-Wno-error=format'
+	c_args += '-Wno-error=format-extra-args'
 endif
-
-c_args = []
 
 osc_test = executable('osc_test',
 	join_paths('test', 'osc_test.c'),
