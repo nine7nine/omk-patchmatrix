@@ -125,11 +125,14 @@ lv2_osc_writer_add_float(LV2_OSC_Writer *writer, float f)
 static inline bool 
 lv2_osc_writer_add_string(LV2_OSC_Writer *writer, const char *s)
 {
-	const size_t padded = LV2_OSC_PADDED_SIZE(strlen(s) + 1);
+	const size_t rawlen = strlen(s) + 1;
+	const size_t padded = LV2_OSC_PADDED_SIZE(rawlen);
 	if(lv2_osc_writer_overflow(writer, padded))
 		return false;
 
-	strncpy((char *)writer->ptr, s, padded);
+	const uint32_t blank = 0;
+	memcpy(writer->ptr + padded - sizeof(uint32_t), &blank, sizeof(uint32_t));
+	memcpy(writer->ptr, s, rawlen);
 	writer->ptr += padded;
 
 	return true;
@@ -171,7 +174,7 @@ lv2_osc_writer_add_blob_inline(LV2_OSC_Writer *writer, int32_t len, uint8_t **bo
 		return false;
 
 	*body = writer->ptr;
-	memset(&writer->ptr[len], 0x0, len_padded - len);
+	//memset(&writer->ptr[len], 0x0, len_padded - len);
 	writer->ptr += len_padded;
 
 	return true;
@@ -196,7 +199,7 @@ lv2_osc_writer_add_midi_inline(LV2_OSC_Writer *writer, int32_t len, uint8_t **m)
 		return false;
 
 	*m = writer->ptr;
-	memset(&writer->ptr[len], 0x0, 4 - len);
+	//memset(&writer->ptr[len], 0x0, 4 - len);
 	writer->ptr += 4;
 
 	return true;
@@ -301,12 +304,15 @@ lv2_osc_writer_add_path(LV2_OSC_Writer *writer, const char *path)
 static inline bool 
 lv2_osc_writer_add_format(LV2_OSC_Writer *writer, const char *fmt)
 {
-	const size_t padded = LV2_OSC_PADDED_SIZE(strlen(fmt) + 2);
+	const size_t rawlen = strlen(fmt) + 1;
+	const size_t padded = LV2_OSC_PADDED_SIZE(rawlen + 1);
 	if(lv2_osc_writer_overflow(writer, padded))
 		return false;
 
+	const uint32_t blank = 0;
+	memcpy(writer->ptr + padded - sizeof(uint32_t), &blank, sizeof(uint32_t));
 	*writer->ptr++ = ',';
-	strncpy((char *)writer->ptr, fmt, padded - 1);
+	memcpy(writer->ptr, fmt, rawlen);
 	writer->ptr += padded - 1;
 
 	return true;
