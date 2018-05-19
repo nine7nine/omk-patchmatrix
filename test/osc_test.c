@@ -17,19 +17,19 @@
 
 typedef void (*test_t)(LV2_OSC_Writer *writer);
 typedef struct _urid_t urid_t;
-typedef struct _handle_t handle_t;
+typedef struct _app_t app_t;
 
 struct _urid_t {
 	LV2_URID urid;
 	char *uri;
 };
 
-struct _handle_t {
+struct _app_t {
 	urid_t urids [MAX_URIDS];
 	LV2_URID urid;
 };
 
-static handle_t __handle;
+static app_t __app;
 static uint8_t buf0 [BUF_SIZE];
 static uint8_t buf1 [BUF_SIZE];
 static uint8_t buf2 [BUF_SIZE];
@@ -136,19 +136,19 @@ const uint8_t raw_8 [] = {
 static LV2_URID
 _map(LV2_URID_Map_Handle instance, const char *uri)
 {
-	handle_t *handle = instance;
+	app_t *app = instance;
 
 	urid_t *itm;
-	for(itm=handle->urids; itm->urid; itm++)
+	for(itm=app->urids; itm->urid; itm++)
 	{
 		if(!strcmp(itm->uri, uri))
 			return itm->urid;
 	}
 
-	assert(handle->urid + 1 < MAX_URIDS);
+	assert(app->urid + 1 < MAX_URIDS);
 
 	// create new
-	itm->urid = ++handle->urid;
+	itm->urid = ++app->urid;
 	itm->uri = strdup(uri);
 
 	return itm->urid;
@@ -157,10 +157,10 @@ _map(LV2_URID_Map_Handle instance, const char *uri)
 static const char *
 _unmap(LV2_URID_Unmap_Handle instance, LV2_URID urid)
 {
-	handle_t *handle = instance;
+	app_t *app = instance;
 
 	urid_t *itm;
-	for(itm=handle->urids; itm->urid; itm++)
+	for(itm=app->urids; itm->urid; itm++)
 	{
 		if(itm->urid == urid)
 			return itm->uri;
@@ -171,12 +171,12 @@ _unmap(LV2_URID_Unmap_Handle instance, LV2_URID urid)
 }
 
 static LV2_URID_Map map = {
-	.handle = &__handle,
+	.handle = &__app,
 	.map = _map
 };
 
 static LV2_URID_Unmap unmap = {
-	.handle = &__handle,
+	.handle = &__app,
 	.unmap = _unmap
 };
 
@@ -927,9 +927,9 @@ main(int argc, char **argv)
 	}
 #endif
 
-	for(unsigned i=0; i<__handle.urid; i++)
+	for(unsigned i=0; i<__app.urid; i++)
 	{
-		urid_t *itm = &__handle.urids[i];
+		urid_t *itm = &__app.urids[i];
 
 		free(itm->uri);
 	}
