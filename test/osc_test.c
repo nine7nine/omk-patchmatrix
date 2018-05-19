@@ -341,7 +341,7 @@ static void
 test_2_a(LV2_OSC_Writer *writer)
 {
 	assert(lv2_osc_writer_message_vararg(writer, "/ping", "hdS",
-		12, 3.4, "http://example.com"));
+		(int64_t)12, (double)3.4, "http://example.com"));
 	_test_a(writer, raw_2, sizeof(raw_2));
 }
 
