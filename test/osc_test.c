@@ -199,7 +199,7 @@ _clone(LV2_OSC_Reader *reader, LV2_OSC_Writer *writer, size_t size)
 		LV2_OSC_Item *itm = OSC_READER_BUNDLE_BEGIN(reader, size);
 		assert(itm);
 
-		LV2_OSC_Writer_Frame frame_bndl;
+		LV2_OSC_Writer_Frame frame_bndl = { .ref = 0 };
 		assert(lv2_osc_writer_push_bundle(writer, &frame_bndl, itm->timetag));
 
 		OSC_READER_BUNDLE_ITERATE(reader, itm)
@@ -207,7 +207,7 @@ _clone(LV2_OSC_Reader *reader, LV2_OSC_Writer *writer, size_t size)
 			LV2_OSC_Reader reader2;
 			lv2_osc_reader_initialize(&reader2, itm->body, itm->size);
 
-			LV2_OSC_Writer_Frame frame_itm;
+			LV2_OSC_Writer_Frame frame_itm = { .ref = 0 };
 			assert(lv2_osc_writer_push_item(writer, &frame_itm));
 			_clone(&reader2, writer, itm->size);
 			assert(lv2_osc_writer_pop_item(writer, &frame_itm));
@@ -375,7 +375,8 @@ test_5_a(LV2_OSC_Writer *writer)
 static void
 test_6_a(LV2_OSC_Writer *writer)
 {
-	LV2_OSC_Writer_Frame frame_bndl, frame_itm;
+	LV2_OSC_Writer_Frame frame_bndl = { .ref = 0 };
+	LV2_OSC_Writer_Frame frame_itm = { .ref = 0 };
 
 	assert(lv2_osc_writer_push_bundle(writer, &frame_bndl, LV2_OSC_IMMEDIATE));
 	{
@@ -393,7 +394,8 @@ test_6_a(LV2_OSC_Writer *writer)
 static void
 test_7_a(LV2_OSC_Writer *writer)
 {
-	LV2_OSC_Writer_Frame frame_bndl[2], frame_itm[2];
+	LV2_OSC_Writer_Frame frame_bndl[2] = { { .ref = 0 }, { .ref = 0 } };
+	LV2_OSC_Writer_Frame frame_itm[2] = { { .ref = 0 }, { .ref = 0 } };;
 
 	assert(lv2_osc_writer_push_bundle(writer, &frame_bndl[0], LV2_OSC_IMMEDIATE));
 	{
