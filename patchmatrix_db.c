@@ -311,6 +311,47 @@ _client_refresh_type(client_t *client)
 }
 
 static int
+strcasenumcmp(const char *s1, const char *s2)
+{
+	static const char *digits = "1234567890";
+	const char *d1 = strpbrk(s1, digits);
+	const char *d2 = strpbrk(s2, digits);
+
+	// do both s1 and s2 contain digits?
+	if(d1 && d2)
+	{
+		const size_t l1 = d1 - s1;
+		const size_t l2 = d2 - s2;
+
+		// do both s1 and s2 match up to the first digit?
+		if( (l1 == l2) && (strncmp(s1, s2, l1) == 0) )
+		{
+			char *e1 = NULL;
+			char *e2 = NULL;
+
+			const int n1 = strtol(d1, &e1, 10);
+			const int n2 = strtol(d2, &e2, 10);
+
+			// do both d1 and d2 contain a valid number?
+			if(e1 && e2)
+			{
+				// are the numbers equal? do the same for the substring
+				if(n1 == n2)
+				{
+					return strcasenumcmp(e1, e2);
+				}
+
+				// the numbers differ, e.g. return their ordering
+				return (n1 < n2) ? -1 : 1;
+			}
+		}
+	}
+
+	// no digits in either s1 or s2, do normal comparison
+	return strcasecmp(s1, s2);
+}
+
+static int
 _client_port_sort(const void *a, const void *b)
 {
 	const port_t *port_a = *(const port_t **)a;
@@ -319,7 +360,7 @@ _client_port_sort(const void *a, const void *b)
 	if(port_a->order != port_b->order) // order according to metadata
 		return port_a->order - port_b->order;
 
-	return strcasecmp(port_a->name, port_b->name); // order according to name
+	return strcasenumcmp(port_a->name, port_b->name); // order according to name
 }
 
 void
