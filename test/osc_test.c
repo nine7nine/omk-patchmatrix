@@ -895,6 +895,14 @@ static const pair_t pairs [] = {
 		.lossy = false
 	},
 
+#if 0
+	{
+		.server = "osc.serial:///dev/pts/4", //FIXME baudrate
+		.client = "osc.serial:///dev/pts/5",
+		.lossy = false
+	},
+#endif
+
 	{
 		.server = NULL,
 		.client = NULL,
