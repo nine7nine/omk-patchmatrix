@@ -103,9 +103,11 @@ struct _LV2_OSC_Stream {
 };
 
 typedef enum _LV2_OSC_Enum {
-	LV2_OSC_NONE = (0 << 0),
-	LV2_OSC_SEND = (1 << 0),
-	LV2_OSC_RECV = (1 << 1)
+	LV2_OSC_NONE = 0x000000,
+
+	LV2_OSC_SEND = 0x800000,
+	LV2_OSC_RECV = 0x400000,
+	LV2_OSC_CONN = 0x200000
 } LV2_OSC_Enum;
 
 static const char *udp_prefix = "osc.udp://";
@@ -1095,6 +1097,11 @@ _lv2_osc_stream_run_tcp(LV2_OSC_Stream *stream)
 		}
 	}
 
+	if(stream->connected)
+	{
+		ev |= LV2_OSC_CONN;
+	}
+
 	return ev;
 }
 
@@ -1290,6 +1297,11 @@ _lv2_osc_stream_run_ser(LV2_OSC_Stream *stream)
 				}
 			}
 		}
+	}
+
+	if(stream->connected)
+	{
+		ev |= LV2_OSC_CONN;
 	}
 
 	return ev;

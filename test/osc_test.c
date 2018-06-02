@@ -684,7 +684,7 @@ _thread_1(void *data)
 	do
 	{
 		ev = lv2_osc_stream_run(&stream);
-	} while( (ev & LV2_OSC_SEND) || stream.connected );
+	} while( (ev & LV2_OSC_SEND) || (ev & LV2_OSC_CONN) );
 
 	assert(pair->lossy || (count == COUNT) );
 
