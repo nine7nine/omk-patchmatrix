@@ -65,6 +65,13 @@ in a stateful transactional manner.
 DATA-MSB finalizes one transaction and sets gain to new value for currently
 set sink/source port indexes.
 
+#### OSC
+
+PatchMatrix mixer clients (AUDIO + MIDI) additionaly support JACK OSC
+automation through which users can automate mixer matrix gains sample-accurately.
+
+    /patchmatrix/mixer iif (source index) (sink index) (gain in mBFS [-3600,3600])
+
 ### Binaries
 
 Extract matching platform subdirectory into _/opt_ and start with _/opt/patchmatrix/bin/patchmatrix_

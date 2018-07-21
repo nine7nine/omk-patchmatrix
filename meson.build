@@ -46,8 +46,9 @@ ui_deps = []
 pugl_inc = include_directories('pugl')
 varchunk_inc = include_directories('varchunk')
 jackey_inc = include_directories('jackey')
+osc_inc = include_directories('osc.lv2')
 
-incs = [pugl_inc, varchunk_inc, jackey_inc]
+incs = [pugl_inc, varchunk_inc, jackey_inc, osc_inc]
 
 c_args = ['-fvisibility=hidden',
 	'-ffast-math',

@@ -213,7 +213,13 @@ _jack_anim(app_t *app)
 									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
 									if(port)
 									{
-										port->type = strcasestr(value, port_labels[TYPE_OSC]) ? TYPE_OSC : TYPE_MIDI;
+										port->type = TYPE_NONE;
+										if(strcasestr(value, port_labels[TYPE_MIDI]))
+											port->type |= TYPE_MIDI;
+										if(strcasestr(value, port_labels[TYPE_OSC]))
+											port->type |= TYPE_OSC;
+										if(port->type == TYPE_NONE)
+											port->type |= TYPE_MIDI; // fallback, if none defined
 										_client_refresh_type(port->client);
 										HASH_FOREACH(&app->conns, client_conn_itr)
 										{

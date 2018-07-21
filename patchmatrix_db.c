@@ -574,7 +574,7 @@ _port_add(app_t *app, jack_port_t *jport)
 		: JackPortIsInput | JackPortIsOutput;
 	const port_type_t port_type = !strcmp(jack_port_type(jport), JACK_DEFAULT_AUDIO_TYPE)
 		? TYPE_AUDIO
-		: TYPE_MIDI;
+		: TYPE_NONE;
 
 	const char *port_name = jack_port_name(jport);
 	char *sep = strchr(port_name, ':');
@@ -624,8 +624,10 @@ _port_add(app_t *app, jack_port_t *jport)
 			jack_get_property(port->uuid, JACKEY_EVENT_TYPES, &value, &type);
 			if(value)
 			{
+				if(strcasestr(value, port_labels[TYPE_MIDI]))
+					port->type |= TYPE_MIDI;
 				if(strcasestr(value, port_labels[TYPE_OSC]))
-					port->type = TYPE_OSC; //FIXME |=
+					port->type |= TYPE_OSC;
 				jack_free(value);
 			}
 			if(type)
@@ -668,6 +670,9 @@ _port_add(app_t *app, jack_port_t *jport)
 				jack_free(type);
 		}
 #endif
+
+		if(port->type == TYPE_NONE)
+			port->type |= TYPE_MIDI; // fallback, if none defined
 
 		_hash_add(&client->ports, port);
 		if(is_input)

@@ -54,7 +54,7 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 	_close(shm);
 }
 
-static void
+static inline void
 _midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
 {
 	const uint8_t cmd = ev->buffer[0] & 0xf0;
@@ -101,6 +101,68 @@ _midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
 				atomic_store_explicit(&shm->jgains[nrpn_msb][nrpn_lsb], mBFS, memory_order_relaxed);
 			}
 		} break;
+	}
+}
+
+#include <osc.lv2/reader.h>
+
+static inline void
+_osc_message_handle(mixer_app_t *mixer, LV2_OSC_Reader *reader)
+{
+	const char *path = NULL;
+	const char *type= NULL;
+
+	lv2_osc_reader_get_string(reader, &path);
+	if(!path || strcmp(path, "/patchmatrix/mixer"))
+		return;
+
+	lv2_osc_reader_get_string(reader, &type);
+	if(!type || strcmp(type, ",iif"))
+		return;
+
+	int32_t nsink = 0;
+	int32_t nsource = 0;
+	float mBFS = 0.f;
+
+	lv2_osc_reader_get_int32(reader, &nsink);
+	lv2_osc_reader_get_int32(reader, &nsource);
+	lv2_osc_reader_get_float(reader, &mBFS);
+
+	mixer_shm_t *shm = mixer->shm;
+	atomic_store_explicit(&shm->jgains[nsource][nsink], mBFS, memory_order_relaxed);
+}
+
+static inline void
+_osc_packet_handle(mixer_app_t *mixer, const uint8_t *body, size_t size)
+{
+	LV2_OSC_Reader reader;
+	lv2_osc_reader_initialize(&reader, body, size);
+
+	if(lv2_osc_reader_is_bundle(&reader))
+	{
+		OSC_READER_BUNDLE_FOREACH(&reader, itm, size)
+		{
+			_osc_packet_handle(mixer, itm->body, itm->size);
+		}
+	}
+	else if(lv2_osc_reader_is_message(&reader))
+	{
+		_osc_message_handle(mixer, &reader);
+	}
+}
+
+static inline void
+_autom_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
+{
+	const uint8_t first = ev->buffer[0];
+
+	if(first & 0x80)
+	{
+		_midi_handle(mixer, ev);
+	}
+	else
+	{
+		_osc_packet_handle(mixer, ev->buffer, ev->size);
 	}
 }
 
@@ -188,7 +250,7 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 			jack_midi_event_get(&ev, pautom, p);
 
 			_audio_mixer_process_internal(mixer, psources, psinks, from, ev.time);
-			_midi_handle(mixer, &ev);
+			_autom_handle(mixer, &ev);
 
 			from = ev.time;
 	}
@@ -268,7 +330,7 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 
 		if(I == shm->nsinks) // automation port
 		{
-			_midi_handle(mixer, &ev);
+			_autom_handle(mixer, &ev);
 		}
 		else
 		{
@@ -524,6 +586,9 @@ main(int argc, char **argv)
 		snprintf(buf, 32, "%u", i);
 		jack_set_property(mixer.client, uuid, JACKEY_ORDER, buf, XSD__integer);
 
+		if(mixer.type == TYPE_MIDI)
+			jack_set_property(mixer.client, uuid, JACKEY_EVENT_TYPES, "MIDI", "text/plain");
+
 		snprintf(buf, 32, "Sink %u", i + 1);
 		jack_set_property(mixer.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
 #endif
@@ -545,8 +610,9 @@ main(int argc, char **argv)
 		snprintf(buf, 32, "%u", i);
 		jack_set_property(mixer.client, uuid, JACKEY_ORDER, buf, XSD__integer);
 
-		snprintf(buf, 32, "Automation");
-		jack_set_property(mixer.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
+		jack_set_property(mixer.client, uuid, JACKEY_EVENT_TYPES, "MIDI,OSC", "text/plain");
+
+		jack_set_property(mixer.client, uuid, JACK_METADATA_PRETTY_NAME, "Automation", "text/plain");
 #endif
 
 		mixer.jautom = jautom;
@@ -566,6 +632,9 @@ main(int argc, char **argv)
 
 		snprintf(buf, 32, "%u", j);
 		jack_set_property(mixer.client, uuid, JACKEY_ORDER, buf, XSD__integer);
+
+		if(mixer.type == TYPE_MIDI)
+			jack_set_property(mixer.client, uuid, JACKEY_EVENT_TYPES, "MIDI", "text/plain");
 
 		snprintf(buf, 32, "Source %u", j + 1);
 		jack_set_property(mixer.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
