@@ -15,17 +15,21 @@ JACK's metadata API, which JACK2 still lacks an implementation of.
 ### Mouse actions
 
 #### Canvas
+
 * Middle button + move: _move canvas_
 * Right button: _open context menu_
 
 #### Client
+
 * Left button + Ctrl + move: _move client_
 
 #### Grab handle
+
 * Left button: _connect clients w/o connecting ports within_
 * Left button + Ctrl: _connect clients and ports automagically_
 
 #### Mixer
+
 * Left button + move: _change gain coarse_
 * Wheel: _change gain coarse_
 * Left button + Shift + move: _change gain fine_
@@ -33,13 +37,33 @@ JACK's metadata API, which JACK2 still lacks an implementation of.
 * Right button: _remove_
 
 #### Monitor
+
 * Rigth button: _remove_
 
 #### Matrix
+
 * Left button: _toggle port connection_
 * Left button + Ctrl + move: _move matrix_
 * Wheel: _toggle port connection_
 * Right button: _remove and disconnect all ports_
+
+### Automation
+
+#### MIDI
+
+PatchMatrix mixer clients (AUDIO + MIDI) each have an additional JACK MIDI
+automation port through which users can automate mixer matrix gains sample-accurately.
+
+Currently, users have to send multiple MIDI messages for a single gain change
+in a stateful transactional manner.
+
+* NRPN-LSB: set index of sink port column (optional)
+* NRPN-MSB: set index of source port row (optional)
+* DATA-LSB: set lower 7 bits of gain (optional)
+* DATA-MSB: set higher 7 bits of gain (mandatory)
+
+DATA-MSB finalizes one transaction and sets gain to new value for currently
+set sink/source port indexes.
 
 ### Binaries
 
@@ -72,7 +96,7 @@ https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-uns
 
 ### License
 
-Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
+Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
 
 This is free software: you can redistribute it and/or modify
 it under the terms of the Artistic License 2.0 as published by

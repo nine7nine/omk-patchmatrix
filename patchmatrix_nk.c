@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
+ * Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
  * it under the terms of the Artistic License 2.0 as published by
@@ -263,11 +263,8 @@ _client_connectors(struct nk_context *ctx, app_t *app, client_t *client,
 static void
 node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 {
-	if(  !(client->source_type & app->type)
-		&& !(client->sink_type & app->type) )
-	{
-		return;
-	}
+	const bool editable = (client->source_type == app->type)
+		|| (client->sink_type == app->type);
 
 	struct node_editor *nodedit = &app->nodedit;
 	struct nk_input *in = &ctx->input;
@@ -307,14 +304,29 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 	{
 		struct nk_style_button *style = &ctx->style.button;
 
-		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
+		struct nk_color fill_col = style->hover.data.color;
+		struct nk_color stroke_col = style->border_color;
+		struct nk_color hilight_col = is_hilighted ? hilight_color : style->border_color;
+		struct nk_color wire_col = wire_color;
+		struct nk_color toggle_col = toggle_color;
+
+		if(!editable)
+		{
+			fill_col.a /= 3;
+			stroke_col.a /= 3;
+			hilight_col.a /= 3;
+			wire_col.a /= 3;
+			toggle_col.a /= 3;
+		}
+
+		nk_fill_rect(canvas, body, style->rounding, fill_col);
 
 		for(float x = ps; x < body.w; x += ps)
 		{
 			nk_stroke_line(canvas,
 				body.x + x, body.y,
 				body.x + x, body.y + body.h,
-				style->border, style->border_color);
+				style->border, stroke_col);
 		}
 
 		for(float y = ps; y < body.h; y += ps)
@@ -322,7 +334,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 			nk_stroke_line(canvas,
 				body.x, body.y + y,
 				body.x + body.w, body.y + y,
-				style->border, style->border_color);
+				style->border, stroke_col);
 		}
 
 		float x = body.x + ps/2;
@@ -341,37 +353,41 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 					NK_BUTTON_LEFT, tile, nk_true);
 
 				int32_t dd = 0;
-				if(left_mouse_down && left_mouse_click_in_tile && !client->moving)
-				{
-					const float dx = in->mouse.delta.x;
-					const float dy = in->mouse.delta.y;
-					dd = fabs(dx) > fabs(dy) ? dx : -dy;
-				}
-				else if(nk_input_is_mouse_hovering_rect(in, tile))
-				{
-					if(in->mouse.scroll_delta.y != 0.f) // has scrolling
-					{
-						dd = in->mouse.scroll_delta.y;
-						in->mouse.scroll_delta.y = 0.f;
-					}
-				}
 
-				if(dd != 0)
+				if(editable)
 				{
+					if(left_mouse_down && left_mouse_click_in_tile && !client->moving)
+					{
+						const float dx = in->mouse.delta.x;
+						const float dy = in->mouse.delta.y;
+						dd = fabs(dx) > fabs(dy) ? dx : -dy;
+					}
+					else if(nk_input_is_mouse_hovering_rect(in, tile))
+					{
+						if(in->mouse.scroll_delta.y != 0.f) // has scrolling
+						{
+							dd = in->mouse.scroll_delta.y;
+							in->mouse.scroll_delta.y = 0.f;
+						}
+					}
+
+					if(dd != 0)
+					{
 #if 0
-					if( (dd > 0) && (mBFS == -3600) ) // disabled
-					{
-						mBFS = 0; // jump to 0 dBFS
-					}
-					else
+						if( (dd > 0) && (mBFS == -3600) ) // disabled
+						{
+							mBFS = 0; // jump to 0 dBFS
+						}
+						else
 #endif
-					{
-						const bool has_shift = nk_input_is_key_down(in, NK_KEY_SHIFT);
-						const float mul = has_shift ? 10.f : 100.f;
-						mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
-					}
+						{
+							const bool has_shift = nk_input_is_key_down(in, NK_KEY_SHIFT);
+							const float mul = has_shift ? 10.f : 100.f;
+							mBFS = NK_CLAMP(-3600, mBFS + dd*mul, 3600);
+						}
 
-					atomic_store_explicit(&shm->jgains[j][i], mBFS, memory_order_release);
+						atomic_store_explicit(&shm->jgains[j][i], mBFS, memory_order_release);
+					}
 				}
 
 				const float dBFS = mBFS / 100.f;
@@ -392,12 +408,12 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 						x, y, 10.f * app->scale,
 						beta + 0.2f*NK_PI, beta + 1.8f*NK_PI,
 						1.f,
-						wire_color);
+						wire_col);
 					nk_stroke_arc(canvas,
 						x, y, 7.f * app->scale,
 						beta + 0.2f*NK_PI, beta + (0.2f + alpha*1.6f)*NK_PI,
 						2.f,
-						toggle_color);
+						toggle_col);
 				}
 
 				y += ps;
@@ -406,11 +422,11 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 			x += ps;
 		}
 
-		nk_stroke_rect(canvas, body, style->rounding, style->border,
-			is_hilighted ? hilight_color : style->border_color);
+		nk_stroke_rect(canvas, body, style->rounding, style->border, hilight_col);
 	}
 
 	_client_connectors(ctx, app, client, nk_vec2(bounds.w, bounds.h), is_hilighted);
+	app->animating = true;
 }
 
 static void
@@ -641,11 +657,8 @@ _client_num_sinks(client_t *client, port_type_t type)
 static void
 node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 {
-	if(  !(client->source_type & app->type)
-		&& !(client->sink_type & app->type) )
-	{
-		return;
-	}
+	const bool editable = (client->source_type & app->type)
+		|| (client->sink_type & app->type);
 
 	struct node_editor *nodedit = &app->nodedit;
 	const struct nk_input *in = &ctx->input;
@@ -678,9 +691,17 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		struct nk_style_button *style = &ctx->style.button;
 		const struct nk_user_font *font = ctx->style.font;
 
-		nk_fill_rect(canvas, body, style->rounding, style->hover.data.color);
-		nk_stroke_rect(canvas, body, style->rounding, style->border,
-			is_hilighted ? hilight_color : style->border_color);
+		struct nk_color fill_col = style->hover.data.color;
+		struct nk_color stroke_col = is_hilighted ? hilight_color : style->border_color;
+
+		if(!editable)
+		{
+			fill_col.a /= 3;
+			stroke_col.a /= 3;
+		}
+
+		nk_fill_rect(canvas, body, style->rounding, fill_col);
+		nk_stroke_rect(canvas, body, style->rounding, style->border, stroke_col);
 
 		const float fh = font->height;
 		const float fy = body.y + (body.h - fh)/2;
@@ -912,7 +933,18 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 				port_conn_t *port_conn = _port_conn_find(client_conn, source_port, sink_port);
 
 				if(port_conn)
-					nk_fill_arc(canvas, x, y, cs, 0.f, 2*NK_PI, toggle_color);
+				{
+					const bool is_automation = !strcmp(sink_port->short_name, "automation");
+
+					if(is_automation)
+					{
+						nk_stroke_arc(canvas, x, y, cs, 0.f, 2*NK_PI, 1.f, toggle_color);
+					}
+					else // !is_automation
+					{
+						nk_fill_arc(canvas, x, y, cs, 0.f, 2*NK_PI, toggle_color);
+					}
+				}
 
 				const struct nk_rect tile = nk_rect(x - ps/2, y - ps/2, ps, ps);
 

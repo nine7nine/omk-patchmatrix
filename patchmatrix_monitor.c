@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
+ * Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
  * it under the terms of the Artistic License 2.0 as published by
@@ -222,7 +222,7 @@ main(int argc, char **argv)
 
 	fprintf(stderr,
 		"%s "PATCHMATRIX_VERSION"\n"
-		"Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
+		"Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
@@ -364,6 +364,8 @@ main(int argc, char **argv)
 				MAP_SHARED, fd, 0)) != MAP_FAILED)
 			{
 				monitor.shm->nsinks = nsinks;
+
+				atomic_init(&monitor.shm->closing, false);
 
 				for(unsigned i = 0; i < nsinks; i++)
 					atomic_init(&monitor.shm->jgains[i], 0);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
+ * Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
  * it under the terms of the Artistic License 2.0 as published by
@@ -67,7 +67,7 @@
 #define PATCHMATRIX_MIXER_ID          "/"PATCHMATRIX_MIXER
 #define PATCHMATRIX_MONITOR_ID        "/"PATCHMATRIX_MONITOR
 
-#define PORT_MAX 16
+#define PORT_MAX 128
 
 typedef enum _event_type_t event_type_t;
 typedef enum _port_type_t port_type_t;

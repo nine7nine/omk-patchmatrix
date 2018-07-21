@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)
+ * Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
  *
  * This is free software: you can redistribute it and/or modify
  * it under the terms of the Artistic License 2.0 as published by
@@ -25,9 +25,13 @@ typedef struct _mixer_app_t mixer_app_t;
 
 struct _mixer_app_t {
 	jack_client_t *client;
+	jack_port_t *jautom;
 	jack_port_t *jsinks [PORT_MAX];
 	jack_port_t *jsources[PORT_MAX];
 	port_type_t type;
+
+	int16_t nrpn [0x10];
+	int16_t data [0x10];
 
 	mixer_shm_t *shm;	
 };
@@ -50,6 +54,96 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 	_close(shm);
 }
 
+static void
+_midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
+{
+	const uint8_t cmd = ev->buffer[0] & 0xf0;
+
+	if(cmd != 0xb0)
+	{
+		return;
+	}
+
+	const uint8_t chn = ev->buffer[0] & 0x0f;
+	const uint8_t ctr = ev->buffer[1];
+	const uint8_t val = ev->buffer[2];
+
+	switch(ctr)
+	{
+		case 0x62: // NRPN_LSB
+		{
+			mixer->nrpn[chn] &= 0x3f80;
+			mixer->nrpn[chn] |= val;
+		} break;
+		case 0x63: // NRPN_MSB
+		{
+			mixer->nrpn[chn] &= 0x7f;
+			mixer->nrpn[chn] |= (val << 7);
+		} break;
+		case 0x26: // DATA_LSB
+		{
+			mixer->data[chn] &= 0x3f80;
+			mixer->data[chn] |= val;
+		} break;
+		case 0x06: // DATA_MSB
+		{
+			mixer->data[chn] &= 0x7f;
+			mixer->data[chn] |= (val << 7);
+
+			const uint8_t nrpn_msb = mixer->nrpn[chn] >> 7;
+			const uint8_t nrpn_lsb = mixer->nrpn[chn] & 0x7f;
+			mixer_shm_t *shm = mixer->shm;
+
+			if( (nrpn_msb < shm->nsources) && (nrpn_lsb < shm->nsinks) )
+			{
+				const int32_t mBFS = (float)(mixer->data[chn] - 0x1fff)/0x2000 * 3600.f;
+
+				atomic_store_explicit(&shm->jgains[nrpn_msb][nrpn_lsb], mBFS, memory_order_relaxed);
+			}
+		} break;
+	}
+}
+
+static inline void
+_audio_mixer_process_internal(mixer_app_t *mixer,
+	float *psources [PORT_MAX], const float *psinks [PORT_MAX],
+	jack_nframes_t from, jack_nframes_t to)
+{
+	mixer_shm_t *shm = mixer->shm;
+
+	if(from == to)
+	{
+		return; // shortcut
+	}
+
+	for(unsigned j = 0; j < shm->nsources; j++)
+	{
+		for(unsigned i = 0; i < shm->nsinks; i++)
+		{
+			const int32_t mBFS = atomic_load_explicit(&shm->jgains[j][i], memory_order_relaxed);
+			const float dBFS = mBFS / 100.f;
+
+			if(dBFS == 0.f) // just add
+			{
+				for(unsigned k = from; k < to; k++)
+				{
+					psources[j][k] += psinks[i][k];
+				}
+			}
+			else if(dBFS > -36.f) // multiply-add
+			{
+				const float gain = exp10f(dBFS / 20.f); // jgain = 20.f*log10f(gain);
+
+				for(unsigned k = from; k < to; k++)
+				{
+					psources[j][k] += gain * psinks[i][k];
+				}
+			}
+			// else connection not to be mixed
+		}
+	}
+}
+
 static int
 _audio_mixer_process(jack_nframes_t nframes, void *arg)
 {
@@ -64,17 +158,15 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 
 	float *psources [PORT_MAX];
 	const float *psinks [PORT_MAX];
+	void *pautom;
 
-	const unsigned nsinks = shm->nsinks;
-	const unsigned nsources = shm->nsources;
-
-	for(unsigned i = 0; i < nsinks; i++)
+	for(unsigned i = 0; i < shm->nsinks; i++)
 	{
 		jack_port_t *jsink = mixer->jsinks[i];
 		psinks[i] = jack_port_get_buffer(jsink, nframes);
 	}
 
-	for(unsigned j = 0; j < nsources; j++)
+	for(unsigned j = 0; j < shm->nsources; j++)
 	{
 		jack_port_t *jsource = mixer->jsources[j];
 		psources[j] = jack_port_get_buffer(jsource, nframes);
@@ -86,32 +178,22 @@ _audio_mixer_process(jack_nframes_t nframes, void *arg)
 		}
 	}
 
-	for(unsigned j = 0; j < nsources; j++)
+	pautom = jack_port_get_buffer(mixer->jautom, nframes);
+	const unsigned count = jack_midi_get_event_count(pautom);
+	jack_nframes_t from = 0;
+
+	for(unsigned p = 0; p < count; p++)
 	{
-		for(unsigned i = 0; i < nsinks; i++)
-		{
-			const int32_t mBFS = atomic_load_explicit(&shm->jgains[j][i], memory_order_relaxed);
-			const float dBFS = mBFS / 100.f;
+			jack_midi_event_t ev;
+			jack_midi_event_get(&ev, pautom, p);
 
-			if(dBFS == 0.f) // just add
-			{
-				for(unsigned k = 0; k < nframes; k++)
-				{
-					psources[j][k] += psinks[i][k];
-				}
-			}
-			else if(dBFS > -36.f) // multiply-add
-			{
-				const float gain = exp10f(dBFS / 20.f); // jgain = 20.f*log10f(gain);
+			_audio_mixer_process_internal(mixer, psources, psinks, from, ev.time);
+			_midi_handle(mixer, &ev);
 
-				for(unsigned k = 0; k < nframes; k++)
-				{
-					psources[j][k] += gain * psinks[i][k];
-				}
-			}
-			// else connection not to be mixed
-		}
+			from = ev.time;
 	}
+
+	_audio_mixer_process_internal(mixer, psources, psinks, from, nframes);
 
 	return 0;
 }
@@ -129,15 +211,12 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 	}
 
 	void *psources [PORT_MAX];
-	void *psinks [PORT_MAX];
+	void *psinks [PORT_MAX + 1];
 
-	const unsigned nsinks = shm->nsinks;
-	const unsigned nsources = shm->nsources;
+	unsigned count [PORT_MAX + 1];
+	unsigned pos [PORT_MAX + 1];
 
-	int count [PORT_MAX];
-	int pos [PORT_MAX];
-
-	for(unsigned i = 0; i < nsinks; i++)
+	for(unsigned i = 0; i < shm->nsinks; i++)
 	{
 		jack_port_t *jsink = mixer->jsinks[i];
 		psinks[i] = jack_port_get_buffer(jsink, nframes);
@@ -146,7 +225,13 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 		pos[i] = 0;
 	}
 
-	for(unsigned j = 0; j < nsources; j++)
+	{
+		psinks[shm->nsinks] = jack_port_get_buffer(mixer->jautom, nframes);
+		count[shm->nsinks] = jack_midi_get_event_count(psinks[shm->nsinks]);
+		pos[shm->nsinks] = 0;
+	}
+
+	for(unsigned j = 0; j < shm->nsources; j++)
 	{
 		jack_port_t *jsource = mixer->jsources[j];
 		psources[j] = jack_port_get_buffer(jsource, nframes);
@@ -160,7 +245,7 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 		uint32_t T = UINT32_MAX;
 		int I = -1;
 
-		for(unsigned i = 0; i < nsinks; i++)
+		for(unsigned i = 0; i < shm->nsinks + 1; i++)
 		{
 			if(pos[i] >= count[i]) // no more events to process on this sink
 				continue;
@@ -181,32 +266,39 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 		jack_midi_event_t ev;
 		jack_midi_event_get(&ev, psinks[I], pos[I]);
 
-		for(unsigned j = 0; j < nsources; j++)
+		if(I == shm->nsinks) // automation port
 		{
-			const int32_t mBFS = atomic_load_explicit(&shm->jgains[j][I], memory_order_relaxed);
-			const float dBFS = mBFS / 100.f;
-
-			if(dBFS > -36.f) // connection to be mixed
+			_midi_handle(mixer, &ev);
+		}
+		else
+		{
+			for(unsigned j = 0; j < shm->nsources; j++)
 			{
-				uint8_t *msg = jack_midi_event_reserve(psources[j], ev.time, ev.size);
-				if(!msg)
-					continue;
+				const int32_t mBFS = atomic_load_explicit(&shm->jgains[j][I], memory_order_relaxed);
+				const float dBFS = mBFS / 100.f;
 
-				memcpy(msg, ev.buffer, ev.size);
-
-				if( (dBFS != 0.f) && (ev.size == 3) ) // multiply-add
+				if(dBFS > -36.f) // connection to be mixed
 				{
-					const uint8_t cmd = msg[0] & 0xf0;
-					if( (cmd == 0x90) || (cmd == 0x80) ) // noteOn or noteOff
-					{
-						const float gain = exp10f(dBFS / 20.f); // jgain = 20*log10(gain/1);
+					uint8_t *msg = jack_midi_event_reserve(psources[j], ev.time, ev.size);
+					if(!msg)
+						continue;
 
-						const float vel = msg[2] * gain; // velocity
-						msg[2] = vel < 0 ? 0 : (vel > 0x7f ? 0x7f : vel);
+					memcpy(msg, ev.buffer, ev.size);
+
+					if( (dBFS != 0.f) && (ev.size == 3) ) // multiply-add
+					{
+						const uint8_t cmd = msg[0] & 0xf0;
+						if( (cmd == 0x90) || (cmd == 0x80) ) // noteOn or noteOff
+						{
+							const float gain = exp10f(dBFS / 20.f); // jgain = 20*log10(gain/1);
+
+							const float vel = msg[2] * gain; // velocity
+							msg[2] = vel < 0 ? 0 : (vel > 0x7f ? 0x7f : vel);
+						}
 					}
 				}
+				// else connection not to be mixed
 			}
-			// else connection not to be mixed
 		}
 
 		pos[I] += 1; // advance event pointer from this sink
@@ -301,7 +393,7 @@ main(int argc, char **argv)
 
 	fprintf(stderr,
 		"%s "PATCHMATRIX_VERSION"\n"
-		"Copyright (c) 2016-2017 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
+		"Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)\n"
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
@@ -416,7 +508,8 @@ main(int argc, char **argv)
 	if(!mixer.client)
 		return -1;
 
-	for(unsigned i = 0; i < nsinks; i++)
+	unsigned i;
+	for(i = 0; i < nsinks; i++)
 	{
 		char buf [32];
 		snprintf(buf, 32, "sink_%02u", i + 1);
@@ -436,6 +529,27 @@ main(int argc, char **argv)
 #endif
 
 		mixer.jsinks[i] = jsink;
+	}
+
+	{
+		char buf [32];
+		snprintf(buf, 32, "automation");
+
+		jack_port_t *jautom = jack_port_register(mixer.client, buf,
+			JACK_DEFAULT_MIDI_TYPE,
+			JackPortIsInput, 0);
+
+#ifdef JACK_HAS_METADATA_API
+		jack_uuid_t uuid = jack_port_uuid(jautom);
+
+		snprintf(buf, 32, "%u", i);
+		jack_set_property(mixer.client, uuid, JACKEY_ORDER, buf, XSD__integer);
+
+		snprintf(buf, 32, "Automation");
+		jack_set_property(mixer.client, uuid, JACK_METADATA_PRETTY_NAME, buf, "text/plain");
+#endif
+
+		mixer.jautom = jautom;
 	}
 
 	for(unsigned j = 0; j < nsources; j++)
@@ -471,6 +585,8 @@ main(int argc, char **argv)
 			{
 				mixer.shm->nsinks = nsinks;
 				mixer.shm->nsources = nsources;
+
+				atomic_init(&mixer.shm->closing, false);
 
 				for(unsigned j = 0; j < nsources; j++)
 				{
@@ -529,6 +645,14 @@ main(int argc, char **argv)
 		jack_remove_properties(mixer.client, uuid);
 #endif
 		jack_port_unregister(mixer.client, mixer.jsinks[i]);
+	}
+
+	{
+#ifdef JACK_HAS_METADATA_API
+		jack_uuid_t uuid = jack_port_uuid(mixer.jautom);
+		jack_remove_properties(mixer.client, uuid);
+#endif
+		jack_port_unregister(mixer.client, mixer.jautom);
 	}
 
 	for(unsigned j = 0; j < nsources; j++)
