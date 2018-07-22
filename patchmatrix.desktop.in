@@ -3,6 +3,6 @@ Name=PatchMatrix
 Comment=Connect JACK clients together
 Exec=@prefix@/@bindir@/patchmatrix
 Terminal=false
-Icon=@prefix@/@datadir@/icons/hicolor/256x256/apps/patchmatrix.png
+Icon=patchmatrix
 Type=Application
 Categories=AudioVideo;Audio;
