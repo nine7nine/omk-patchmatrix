@@ -42,6 +42,7 @@ threads_dep = dependency('threads')
 
 dsp_deps = [m_dep, rt_dep, lv2_dep, jack_dep, threads_dep]
 ui_deps = []
+ui_links = []
 
 pugl_inc = include_directories('pugl')
 varchunk_inc = include_directories('varchunk')
@@ -70,11 +71,10 @@ if host_machine.system() == 'windows'
 	ui_deps += cc.find_library('user32')
 	ui_srcs += 'pugl/pugl/pugl_win.cpp'
 elif host_machine.system() == 'darwin'
-	#add_languages('objc')
-	#ui_deps += cc.find_library('Cocoa')
-	#ui_deps += cc.find_library('gl')
-	#ui_deps += dependency('appleframeworks', modules : 'cocoa')
-	#ui_srcs += 'pugl/pugl/pugl_osx.m'
+	add_languages('objc')
+	ui_links += ['-framework', 'OpenGL']
+	ui_links += ['-framework', 'Cocoa']
+	ui_srcs += 'pugl/pugl/pugl_osx.m'
 else
 	ui_deps += dependency('gl')
 	ui_deps += dependency('x11', version : '>=1.6.0')
@@ -87,6 +87,7 @@ cjson_lib = static_library('cJSON', join_paths('cJSON', 'cJSON.c'))
 executable('patchmatrix', [dsp_srcs, ui_srcs],
 	c_args : c_args,
 	dependencies : [dsp_deps, ui_deps],
+	link_args : ui_links,
 	include_directories : incs,
 	link_with : cjson_lib,
 	install : true)
