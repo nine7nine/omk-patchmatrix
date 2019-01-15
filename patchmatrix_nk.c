@@ -351,6 +351,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 				const bool left_mouse_down = btn->down;
 				const bool left_mouse_click_in_tile = nk_input_has_mouse_click_down_in_rect(in,
 					NK_BUTTON_LEFT, tile, nk_true);
+				const bool mouse_hovering_over_tile = nk_input_is_mouse_hovering_rect(in, tile);
 
 				int32_t dd = 0;
 
@@ -362,7 +363,7 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 						const float dy = in->mouse.delta.y;
 						dd = fabs(dx) > fabs(dy) ? dx : -dy;
 					}
-					else if(nk_input_is_mouse_hovering_rect(in, tile))
+					else if(mouse_hovering_over_tile)
 					{
 						if(in->mouse.scroll_delta.y != 0.f) // has scrolling
 						{
@@ -392,11 +393,41 @@ node_editor_mixer(struct nk_context *ctx, app_t *app, client_t *client)
 
 				const float dBFS = mBFS / 100.f;
 
-				if( (left_mouse_down && left_mouse_click_in_tile && !client->moving) || (dd != 0) )
+				if(mouse_hovering_over_tile && !client->moving)
 				{
-					char tooltip [32];
-					snprintf(tooltip, 32, "%+2.2f dBFS", dBFS);
-					nk_tooltip(ctx, tooltip);
+					char tmp [32];
+
+					const struct nk_user_font *font = ctx->style.font;
+
+					const float fh = font->height;
+
+					{
+						const size_t tmp_len = snprintf(tmp, 32, "[%u-%u]", i+1, j+1); //FIXME use port names
+						const float fw = font->width(font->userdata, font->height, tmp, tmp_len);
+						const float fy = body.y + body.h + fh/2;
+						const struct nk_rect body2 = {
+							.x = body.x + (body.w - fw)/2,
+							.y = fy,
+							.w = fw,
+							.h = fh
+						};
+						nk_draw_text(canvas, body2, tmp, tmp_len, font,
+							style->normal.data.color, style->text_normal);
+					}
+
+					{
+						const size_t tmp_len = snprintf(tmp, 32, "%+2.2f dBFS", dBFS);
+						const float fw = font->width(font->userdata, font->height, tmp, tmp_len);
+						const float fy = body.y + body.h + fh + fh/2;
+						const struct nk_rect body2 = {
+							.x = body.x + (body.w - fw)/2,
+							.y = fy,
+							.w = fw,
+							.h = fh
+						};
+						nk_draw_text(canvas, body2, tmp, tmp_len, font,
+							style->normal.data.color, style->text_normal);
+					}
 				}
 
 				if(mBFS > -3600)
@@ -961,8 +992,22 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 						: sink_port->short_name;
 
 					char tmp [128];
-					snprintf(tmp, 128, "%s || %s", source_name, sink_name);
-					nk_tooltip(ctx, tmp);
+					const size_t tmp_len = snprintf(tmp, 128,
+						"%s || %s", source_name, sink_name);
+
+					const struct nk_user_font *font = ctx->style.font;
+
+					const float fh = font->height;
+					const float fy = body.y + body.h + fh/2;
+					const float fw = font->width(font->userdata, font->height, tmp, tmp_len);
+					const struct nk_rect body2 = {
+						.x = body.x + (body.w - fw)/2,
+						.y = fy,
+						.w = fw,
+						.h = fh
+					};
+					nk_draw_text(canvas, body2, tmp, tmp_len, font,
+						style->normal.data.color, style->text_normal);
 
 					float dd = 0.f;
 					if(in->mouse.scroll_delta.y != 0.f) // has scrolling
