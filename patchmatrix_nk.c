@@ -815,6 +815,11 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 	const unsigned nx = _client_num_sources(client_conn->source_client, port_type);
 	const unsigned ny = _client_num_sinks(client_conn->sink_client, port_type);
 
+	if( (nx == 0) || (ny == 0) )
+	{
+		return;
+	}
+
 	const float ps = 16.f * app->scale;
 	const float pw = nx * ps;
 	const float ph = ny * ps;
