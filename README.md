@@ -17,7 +17,7 @@ folder out of the platform folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.16.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip.sig))
+* [patchmatrix-0.12.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.12.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.12.0.zip.sig))
 
 #### Unstable (nightly) release
 
@@ -27,7 +27,7 @@ folder out of the platform folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.16.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.16.0.tar.xz)
+* [patchmatrix-0.12.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.12.0.tar.xz)
 
 #### Git repository
 
