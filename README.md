@@ -4,43 +4,43 @@
 
 #### Build status
 
-[![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix.lad/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix.lad/commits/master)
+[![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix/commits/master)
 
 ### Binaries
 
 For GNU/Linux (64-bit, 32-bit, armv7), Windows (64-bit, 32-bit) and MacOS
 (64/32-bit univeral).
 
-To install the plugin bundle on your system, simply copy the __patchmatrix.lad__
+To install the plugin bundle on your system, simply copy the __patchmatrix__
 folder out of the platform folder of the downloaded package into your
 [LV2 path](http://ladplug.in/pages/filesystem-hierarchy-standard.html).
 
 #### Stable release
 
-* [patchmatrix.lad-0.16.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix.lad/stable/patchmatrix.lad-0.16.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix.lad/stable/patchmatrix.lad-0.16.0.zip.sig))
+* [patchmatrix-0.16.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip.sig))
 
 #### Unstable (nightly) release
 
-* [patchmatrix.lad-latest-unstable.zip](https://dl.open-music-kontrollers.ch/patchmatrix.lad/unstable/patchmatrix.lad-latest-unstable.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix.lad/unstable/patchmatrix.lad-latest-unstable.zip.sig))
+* [patchmatrix-latest-unstable.zip](https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-unstable.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/unstable/patchmatrix-latest-unstable.zip.sig))
 
 ### Sources
 
 #### Stable release
 
-* [patchmatrix.lad-0.16.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix.lad/snapshot/patchmatrix.lad-0.16.0.tar.xz)
+* [patchmatrix-0.16.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.16.0.tar.xz)
 
 #### Git repository
 
-* <https://git.open-music-kontrollers.ch/lad/patchmatrix.lad>
+* <https://git.open-music-kontrollers.ch/lad/patchmatrix>
 
 ### Packages
 
-* [ArchLinux](https://www.archlinux.org/packages/community/x86_64/patchmatrix.lad/)
+* [ArchLinux](https://www.archlinux.org/packages/community/x86_64/patchmatrix/)
 
 ### Bugs and feature requests
 
-* [Gitlab](https://gitlab.com/OpenMusicKontrollers/patchmatrix.lad)
-* [Github](https://github.com/OpenMusicKontrollers/patchmatrix.lad)
+* [Gitlab](https://gitlab.com/OpenMusicKontrollers/patchmatrix)
+* [Github](https://github.com/OpenMusicKontrollers/patchmatrix)
 
 #### Mouse actions
 
