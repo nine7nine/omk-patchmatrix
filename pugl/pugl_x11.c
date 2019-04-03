@@ -476,6 +476,7 @@ translateEvent(PuglView* view, XEvent xevent)
 		if (!strcmp(type, "WM_PROTOCOLS")) {
 			event.type = PUGL_CLOSE;
 		}
+		XFree(type);
 		break;
 	}
 	case ConfigureNotify:
@@ -521,7 +522,7 @@ translateEvent(PuglView* view, XEvent xevent)
 			case 7: event.scroll.dx =  1.0f; break;
 			}
 		}
-		// nobreak
+		/* fall through */
 	case ButtonRelease:
 		if (xevent.xbutton.button < 4 || xevent.xbutton.button > 7) {
 			event.button.type   = ((xevent.type == ButtonPress)
@@ -798,7 +799,7 @@ puglGetNativeWindow(PuglView* view)
 }
 
 void*
-puglGetContext(PuglView* view)
+puglGetContext(PuglView* view __attribute__((unused)))
 {
 #ifdef PUGL_HAVE_CAIRO
 	if (view->ctx_type & PUGL_CAIRO) {
