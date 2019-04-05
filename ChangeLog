@@ -1,7 +1,4 @@
 # Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [0.14.0] - 15 Apr 2019
 
@@ -11,27 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 * support for BSDs
 * audio/MIDI mixer gain automation via JACK MIDI
 * audio/MIDI mixer gain automation via JACK OSC
-
-### Changed
-
-* build system from CMake to meson
-
-### Fixed
-
-* exit after failed execvp
-* wrongly ordered numbers in port names
-* hardcoded launcher icon file path
-* crashing gui on showing tooltips
-* hiding connector nodes for zero port source/sink connections
-
-## [0.12.0] - 15 Apr 2019
-
-### Added
-
-* missing call to XinitThreads for asynchronous refresh
-* initial support for BSDs
-* initial automation via JACK MIDI
-* initial automation via JACK OSC
 
 ### Changed
 
