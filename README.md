@@ -2,6 +2,14 @@
 
 ### a JACK patchbay in flow matrix style
 
+A simple graphical JACK patchbay that tries to unite the best of both worlds:
+
+* Fast patching and uncluttered port representation of a **matrix patchbay**
+* Excellent representation of signal flow of a **flow canvas patchbay**
+
+It additionally features tightly embedded graphical mixer clients automatable
+with JACK MIDI/OSC.
+
 #### Build status
 
 [![build status](https://gitlab.com/OpenMusicKontrollers/patchmatrix/badges/master/build.svg)](https://gitlab.com/OpenMusicKontrollers/patchmatrix/commits/master)
