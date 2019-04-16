@@ -50,6 +50,8 @@ folder out of the platform folder of the downloaded package into your
 * [Gitlab](https://gitlab.com/OpenMusicKontrollers/patchmatrix)
 * [Github](https://github.com/OpenMusicKontrollers/patchmatrix)
 
+![Screenshot](https://git.open-music-kontrollers.ch/lad/patchmatrix/plain/screenshots/screenshot_1.png)
+
 #### Mouse actions
 
 ##### Canvas
