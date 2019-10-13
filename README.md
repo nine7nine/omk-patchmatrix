@@ -16,7 +16,7 @@ with JACK MIDI/OSC.
 
 ### Binaries
 
-For GNU/Linux (64-bit, 32-bit, armv7), Windows (64-bit, 32-bit) and MacOS
+For GNU/Linux (64-bit, 32-bit, armv7, arm64), Windows (64-bit, 32-bit) and MacOS
 (64/32-bit univeral).
 
 To install the plugin bundle on your system, simply copy the __patchmatrix__
@@ -25,7 +25,7 @@ folder out of the platform folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.14.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.14.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.14.0.zip.sig))
+* [patchmatrix-0.16.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.16.0.zip.sig))
 
 #### Unstable (nightly) release
 
@@ -35,7 +35,7 @@ folder out of the platform folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.14.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.14.0.tar.xz)
+* [patchmatrix-0.16.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.16.0.tar.xz)
 
 #### Git repository
 

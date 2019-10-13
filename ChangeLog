@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.0] - 13 Oct 2019
+
+### Fixed
+
+* use vfork instead of fork to run embeddable matrix mixers
+
 ## [0.14.0] - 15 Apr 2019
 
 ### Added
