@@ -51,9 +51,10 @@ ui_deps = [nk_pugl_dep]
 varchunk_inc = include_directories('varchunk')
 jackey_inc = include_directories('jackey')
 osc_inc = include_directories('osc.lv2')
+pugl_inc = include_directories(join_paths('subprojects', 'nk_pugl', 'pugl'))
 nk_pugl_inc = include_directories(join_paths('subprojects', 'nk_pugl'))
 
-incs = [varchunk_inc, jackey_inc, osc_inc, nk_pugl_inc]
+incs = [varchunk_inc, jackey_inc, osc_inc, pugl_inc, nk_pugl_inc]
 
 c_args = ['-fvisibility=hidden',
 	'-ffast-math',
@@ -77,14 +78,14 @@ executable('patchmatrix', [dsp_srcs],
 
 executable('patchmatrix_mixer', 'patchmatrix_mixer.c',
 	c_args : c_args,
-	dependencies : [dsp_deps, ui_deps],
+	dependencies : [dsp_deps],
 	include_directories : incs,
 	link_with : cjson_lib,
 	install : true)
 
 executable('patchmatrix_monitor', 'patchmatrix_monitor.c',
 	c_args : c_args,
-	dependencies : [dsp_deps, ui_deps],
+	dependencies : [dsp_deps],
 	include_directories : incs,
 	link_with : cjson_lib,
 	install : true)
