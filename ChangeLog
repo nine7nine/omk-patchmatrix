@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.18.0] - 13 Apr 2020
+
+### Changed
+
+* to build with pugl master
+
 ## [0.16.0] - 13 Oct 2019
 
 ### Fixed
