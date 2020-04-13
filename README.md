@@ -133,7 +133,7 @@ automation through which users can automate mixer matrix gains sample-accurately
 
 #### License
 
-Copyright (c) 2016-2018 Hanspeter Portner (dev@open-music-kontrollers.ch)
+Copyright (c) 2016-2020 Hanspeter Portner (dev@open-music-kontrollers.ch)
 
 This is free software: you can redistribute it and/or modify
 it under the terms of the Artistic License 2.0 as published by
