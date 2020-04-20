@@ -96,6 +96,7 @@ struct _nk_pugl_config_t {
 	} font;
 
 	intptr_t parent;
+	bool threads;
 
 	LV2UI_Resize *host_resize;
 
@@ -1050,7 +1051,9 @@ nk_pugl_init(nk_pugl_window_t *win)
 	cfg->min_height *= win->scale;
 
 	// init pugl
-	win->world = puglNewWorld(cfg->parent ? PUGL_MODULE : PUGL_PROGRAM, 0);
+	win->world = puglNewWorld(cfg->parent ? PUGL_MODULE : PUGL_PROGRAM,
+		cfg->threads ? PUGL_WORLD_THREADS : 0);
+	fprintf(stderr, "threads: %i\n", cfg->threads);
 
 #if defined(__APPLE__) || defined(_WIN32)
 	uint8_t bytes [0x10];
