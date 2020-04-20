@@ -1274,6 +1274,7 @@ _ui_init(app_t *app)
 	cfg->class = "PatchMatrix";
 	cfg->title = "PatchMatrix";
 	cfg->parent = 0;
+	cfg->threads = true;
 	cfg->data = app;
 	cfg->expose = _expose;
 	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
