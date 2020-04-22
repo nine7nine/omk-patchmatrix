@@ -1053,7 +1053,6 @@ nk_pugl_init(nk_pugl_window_t *win)
 	// init pugl
 	win->world = puglNewWorld(cfg->parent ? PUGL_MODULE : PUGL_PROGRAM,
 		cfg->threads ? PUGL_WORLD_THREADS : 0);
-	fprintf(stderr, "threads: %i\n", cfg->threads);
 
 #if defined(__APPLE__) || defined(_WIN32)
 	uint8_t bytes [0x10];
@@ -1129,7 +1128,7 @@ nk_pugl_init(nk_pugl_window_t *win)
 			cfg->width, cfg->height);
 	}
 	puglSetViewHint(win->view, PUGL_RESIZABLE, cfg->resizable);
-	puglSetViewHint(win->view, PUGL_DOUBLE_BUFFER, false);
+	puglSetViewHint(win->view, PUGL_DOUBLE_BUFFER, true);
 	puglSetViewHint(win->view, PUGL_SWAP_INTERVAL, 1);
 	puglSetHandle(win->view, win);
 	puglSetEventFunc(win->view, _nk_pugl_event_func);
