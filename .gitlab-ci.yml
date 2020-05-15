@@ -57,61 +57,73 @@ stages:
 # building in docker
 x86_64-linux-gnu-stretch:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev
   <<: *universal_linux_definition_stretch
 
 x86_64-linux-gnu-buster:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev
   <<: *universal_linux_definition_buster
 
 x86_64-linux-gnu-bullseye:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev
   <<: *universal_linux_definition_bullseye
 
 i686-linux-gnu-stretch:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:i386
   <<: *universal_linux_definition_stretch
 
 i686-linux-gnu-buster:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:i386
   <<: *universal_linux_definition_buster
 
 i686-linux-gnu-bullseye:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:i386
   <<: *universal_linux_definition_bullseye
 
 arm-linux-gnueabihf-stretch:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:armhf
   <<: *arm_linux_definition_stretch
 
 arm-linux-gnueabihf-buster:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:armhf
   <<: *arm_linux_definition_buster
 
 arm-linux-gnueabihf-bullseye:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:armhf
   <<: *arm_linux_definition_bullseye
 
 aarch64-linux-gnu-stretch:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:arm64
   <<: *arm_linux_definition_stretch
 
 aarch64-linux-gnu-buster:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:arm64
   <<: *arm_linux_definition_buster
 
 aarch64-linux-gnu-bullseye:
   before_script:
+    - apt-get update
     - apt-get install -y libjack-dev:arm64
   <<: *arm_linux_definition_bullseye
 
