@@ -35,7 +35,7 @@ folder out of the platform folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.18.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.18.0.tar.xz)
+* [patchmatrix-0.18.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.18.0.tar.xz) ([sig](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.18.0.tar.xz.asc))
 
 #### Git repository
 

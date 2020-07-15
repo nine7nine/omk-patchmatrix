@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0] - 15 Jul 2020
+
+### Added
+
+* support for GL double buffering
+
+### Removed
+
+* support dynamic scaling
+
+### Fixed
+
+* crashes due to disabled X11 threads
+
 ## [0.18.0] - 13 Apr 2020
 
 ### Changed
