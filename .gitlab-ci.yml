@@ -106,7 +106,7 @@ arm-linux-gnueabihf-buster:
 arm-linux-gnueabihf-bullseye:
   before_script:
     - apt-get update
-    - apt-get install -y libjack-dev:armhf
+    - apt-get install -y libjack-dev:armhf libjack0:armhf
   <<: *arm_linux_definition_bullseye
 
 aarch64-linux-gnu-stretch:
@@ -124,7 +124,7 @@ aarch64-linux-gnu-buster:
 aarch64-linux-gnu-bullseye:
   before_script:
     - apt-get update
-    - apt-get install -y libjack-dev:arm64
+    - apt-get install -y libjack-dev:arm64 libjack0:arm64
   <<: *arm_linux_definition_bullseye
 
 #x86_64-w64-mingw32:
