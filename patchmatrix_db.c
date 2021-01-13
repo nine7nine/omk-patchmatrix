@@ -648,7 +648,7 @@ _port_add(app_t *app, jack_port_t *jport)
 		{
 			char *value = NULL;
 			char *type = NULL;
-			jack_get_property(port->uuid, JACKEY_DESIGNATION, &value, &type);
+			jack_get_property(port->uuid, JACK_METADATA_PORT_GROUP, &value, &type);
 			if(value)
 			{
 				port->designation = _designation_get(value);

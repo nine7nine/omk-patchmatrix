@@ -253,7 +253,7 @@ _jack_anim(app_t *app)
 										_client_sort(port->client);
 									}
 								}
-								else if(!strcmp(ev->property_change.key, JACKEY_DESIGNATION))
+								else if(!strcmp(ev->property_change.key, JACK_METADATA_PORT_GROUP))
 								{
 									port_t *port = _port_find_by_uuid(app, ev->property_change.uuid);
 									if(port)
@@ -340,7 +340,7 @@ _jack_anim(app_t *app)
 									needs_position_update = true;
 								}
 								else if(ev->property_change.key
-									&& !strcmp(ev->property_change.key, JACKEY_DESIGNATION))
+									&& !strcmp(ev->property_change.key, JACK_METADATA_PORT_GROUP))
 								{
 									needs_designation_update = true;
 								}
