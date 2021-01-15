@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.22.0] - 15 Jan 2021
+
+### Added
+
+* French comment to the menu item file
+
+### Changed
+
+* use jack port group metadata instead of jackey designation
+
 ## [0.20.0] - 15 Jul 2020
 
 ### Added
