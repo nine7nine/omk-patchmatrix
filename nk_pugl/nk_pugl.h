@@ -134,7 +134,6 @@ struct _nk_pugl_window_t {
 	PuglMod state;
 #if !defined(__APPLE__) && !defined(_WIN32)
 	atomic_flag async;
-	Display *disp;
 #endif
 };
 
@@ -972,39 +971,45 @@ nk_pugl_init(nk_pugl_window_t *win)
 	const char *NK_SCALE = getenv("NK_SCALE");
 	const float scale = NK_SCALE ? atof(NK_SCALE) : 1.f;
 	const float dpi0 = 96.f; // reference DPI we're designing for
+	float dpi1 = dpi0;
 
 #if defined(__APPLE__)
-	const float dpi1 = dpi0; //TODO implement this
+	// FIXME
 #elif defined(_WIN32)
 	// GetDpiForSystem/Monitor/Window is Win10 only
 	HDC screen = GetDC(NULL);
-	const float dpi1 = GetDeviceCaps(screen, LOGPIXELSX);
+	dpi1 = GetDeviceCaps(screen, LOGPIXELSX);
 	ReleaseDC(NULL, screen);
 #else
 	win->async = (atomic_flag)ATOMIC_FLAG_INIT;
-	win->disp = XOpenDisplay(0);
-	// modern X actually lies here, but proprietary nvidia
-	float dpi1 = XDisplayWidth(win->disp, 0) * 25.4f / XDisplayWidthMM(win->disp, 0);
-
-	// read DPI from users's ~/.Xresources
-	char *resource_string = XResourceManagerString(win->disp);
-	XrmInitialize();
-	if(resource_string)
+	Display *disp = XOpenDisplay(0);
+	if(disp)
 	{
-		XrmDatabase db = XrmGetStringDatabase(resource_string);
-		if(db)
+		// modern X actually lies here, but proprietary nvidia
+		dpi1 = XDisplayWidth(disp, 0) * 25.4f / XDisplayWidthMM(disp, 0);
+
+		// read DPI from users's ~/.Xresources
+		char *resource_string = XResourceManagerString(disp);
+		XrmInitialize();
+		if(resource_string)
 		{
-			char *type = NULL;
-			XrmValue value;
-
-			XrmGetResource(db, "Xft.dpi", "String", &type, &value);
-			if(value.addr)
+			XrmDatabase db = XrmGetStringDatabase(resource_string);
+			if(db)
 			{
-				dpi1 = atof(value.addr);
-			}
+				char *type = NULL;
+				XrmValue value;
 
-			XrmDestroyDatabase(db);
+				XrmGetResource(db, "Xft.dpi", "String", &type, &value);
+				if(value.addr)
+				{
+					dpi1 = atof(value.addr);
+				}
+
+				XrmDestroyDatabase(db);
+			}
 		}
+
+		XCloseDisplay(disp);
 	}
 #endif
 
@@ -1166,13 +1171,6 @@ nk_pugl_shutdown(nk_pugl_window_t *win)
 
 		puglFreeWorld(win->world);
 	}
-
-#if !defined(__APPLE__) && !defined(_WIN32)
-	if(win->disp)
-	{
-		XCloseDisplay(win->disp);
-	}
-#endif
 }
 
 NK_PUGL_API void
@@ -1242,10 +1240,11 @@ nk_pugl_async_redisplay(nk_pugl_window_t *win)
 	const int status = SendNotifyMessage(widget, WM_PAINT, 0, 0);
 	(void)status;
 #else
+	Display *disp = puglGetNativeWorld(win->world);
 	const Window widget = (Window)win->widget;
 	XExposeEvent xevent = {
 		.type = Expose,
-		.display = win->disp,
+		.display = disp,
 		.window = widget
 	};
 
@@ -1254,10 +1253,10 @@ nk_pugl_async_redisplay(nk_pugl_window_t *win)
 		// spin
 	}
 
-	const Status status = XSendEvent(win->disp, widget, false, ExposureMask,
+	const Status status = XSendEvent(disp, widget, false, ExposureMask,
 		(XEvent *)&xevent);
 	(void)status;
-	XFlush(win->disp);
+	XFlush(disp);
 
 	atomic_flag_clear_explicit(&win->async, memory_order_release);
 #endif
