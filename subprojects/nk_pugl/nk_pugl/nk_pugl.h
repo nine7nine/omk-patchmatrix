@@ -107,7 +107,6 @@ struct _nk_pugl_config_t {
 struct _nk_pugl_window_t {
 	nk_pugl_config_t cfg;
 	char urn [46];
-	float scale;
 
 	PuglWorld *world;
 	PuglView *view;
@@ -183,7 +182,7 @@ NK_PUGL_API const char *
 nk_pugl_paste_from_clipboard(nk_pugl_window_t *win, size_t *len);
 
 NK_PUGL_API float
-nk_pugl_get_scale(nk_pugl_window_t *win);
+nk_pugl_get_scale();
 
 #ifdef __cplusplus
 }
@@ -450,7 +449,7 @@ _nk_pugl_font_init(nk_pugl_window_t *win)
 {
 	nk_pugl_config_t *cfg = &win->cfg;
 
-	const int font_size = cfg->font.size * win->scale;
+	const int font_size = cfg->font.size;
 
 	// init nuklear font
 	struct nk_font *ttf = NULL;
@@ -968,62 +967,7 @@ nk_pugl_init(nk_pugl_window_t *win)
 	nk_pugl_config_t *cfg = &win->cfg;
 	struct nk_convert_config *conv = &win->conv;
 
-	const char *NK_SCALE = getenv("NK_SCALE");
-	const float scale = NK_SCALE ? atof(NK_SCALE) : 1.f;
-	const float dpi0 = 96.f; // reference DPI we're designing for
-	float dpi1 = dpi0;
-
-#if defined(__APPLE__)
-	// FIXME
-#elif defined(_WIN32)
-	// GetDpiForSystem/Monitor/Window is Win10 only
-	HDC screen = GetDC(NULL);
-	dpi1 = GetDeviceCaps(screen, LOGPIXELSX);
-	ReleaseDC(NULL, screen);
-#else
-	win->async = (atomic_flag)ATOMIC_FLAG_INIT;
-	Display *disp = XOpenDisplay(0);
-	if(disp)
-	{
-		// modern X actually lies here, but proprietary nvidia
-		dpi1 = XDisplayWidth(disp, 0) * 25.4f / XDisplayWidthMM(disp, 0);
-
-		// read DPI from users's ~/.Xresources
-		char *resource_string = XResourceManagerString(disp);
-		XrmInitialize();
-		if(resource_string)
-		{
-			XrmDatabase db = XrmGetStringDatabase(resource_string);
-			if(db)
-			{
-				char *type = NULL;
-				XrmValue value;
-
-				XrmGetResource(db, "Xft.dpi", "String", &type, &value);
-				if(value.addr)
-				{
-					dpi1 = atof(value.addr);
-				}
-
-				XrmDestroyDatabase(db);
-			}
-		}
-
-		XCloseDisplay(disp);
-	}
-#endif
-
-	win->scale = scale * dpi1 / dpi0;
-	if(win->scale < 0.5)
-	{
-		win->scale = 0.5;
-	}
 	win->has_left = true;
-
-	cfg->width *= win->scale;
-	cfg->height *= win->scale;
-	cfg->min_width *= win->scale;
-	cfg->min_height *= win->scale;
 
 	// init pugl
 	win->world = puglNewWorld(cfg->parent ? PUGL_MODULE : PUGL_PROGRAM,
@@ -1376,9 +1320,53 @@ nk_pugl_paste_from_clipboard(nk_pugl_window_t *win, size_t *len)
 }
 
 NK_PUGL_API float
-nk_pugl_get_scale(nk_pugl_window_t *win)
+nk_pugl_get_scale()
 {
-	return win->scale;
+	const char *NK_SCALE = getenv("NK_SCALE");
+	const float scale = NK_SCALE ? atof(NK_SCALE) : 1.f;
+	const float dpi0 = 96.f; // reference DPI we're designing for
+	float dpi1 = dpi0;
+
+#if defined(__APPLE__)
+	// FIXME
+#elif defined(_WIN32)
+	// GetDpiForSystem/Monitor/Window is Win10 only
+	HDC screen = GetDC(NULL);
+	dpi1 = GetDeviceCaps(screen, LOGPIXELSX);
+	ReleaseDC(NULL, screen);
+#else
+	Display *disp = XOpenDisplay(0);
+	if(disp)
+	{
+		// modern X actually lies here, but proprietary nvidia
+		dpi1 = XDisplayWidth(disp, 0) * 25.4f / XDisplayWidthMM(disp, 0);
+
+		// read DPI from users's ~/.Xresources
+		char *resource_string = XResourceManagerString(disp);
+		XrmInitialize();
+		if(resource_string)
+		{
+			XrmDatabase db = XrmGetStringDatabase(resource_string);
+			if(db)
+			{
+				char *type = NULL;
+				XrmValue value;
+
+				XrmGetResource(db, "Xft.dpi", "String", &type, &value);
+				if(value.addr)
+				{
+					dpi1 = atof(value.addr);
+				}
+
+				XrmDestroyDatabase(db);
+			}
+		}
+
+		XCloseDisplay(disp);
+	}
+#endif
+
+	return scale * dpi1 / dpi0;
 }
 
 #ifdef __cplusplus
