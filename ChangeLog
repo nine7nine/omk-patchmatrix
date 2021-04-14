@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.24.0] - 14 Apr 2021
+
+### Fixed
+
+* font scaling on high DPI screens
+
+### Updated
+
+* to latest pugl
+
 ## [0.22.0] - 15 Jan 2021
 
 ### Added
