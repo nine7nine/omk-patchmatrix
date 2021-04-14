@@ -1045,7 +1045,6 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 
 	app->animating = false;
 
-	app->scale = nk_pugl_get_scale(&app->win);
 	app->dy = 20.f * app->scale;
 
 	const struct nk_input *in = &ctx->input;
@@ -1265,10 +1264,12 @@ _icon_unload(app_t *app, struct nk_image img)
 int
 _ui_init(app_t *app)
 {
+	app->scale = nk_pugl_get_scale();
+
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
-	cfg->width = 1280;
-	cfg->height = 720;
+	cfg->width = 1280 * app->scale;
+	cfg->height = 720 * app->scale;
 	cfg->resizable = true;
 	cfg->ignore = false;
 	cfg->class = "PatchMatrix";
@@ -1278,7 +1279,7 @@ _ui_init(app_t *app)
 	cfg->data = app;
 	cfg->expose = _expose;
 	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
-	cfg->font.size = 13;
+	cfg->font.size = 13 * app->scale;
 
 	app->type = TYPE_AUDIO;
 	app->designation = DESIGNATION_NONE;
