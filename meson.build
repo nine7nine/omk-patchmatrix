@@ -51,9 +51,8 @@ ui_deps = [nk_pugl_dep]
 varchunk_inc = include_directories('varchunk')
 jackey_inc = include_directories('jackey')
 osc_inc = include_directories('osc.lv2')
-nk_pugl_inc = include_directories(join_paths('subprojects', 'nk_pugl'))
 
-incs = [varchunk_inc, jackey_inc, osc_inc, nk_pugl_inc]
+incs = [varchunk_inc, jackey_inc, osc_inc]
 
 c_args = ['-fvisibility=hidden',
 	'-ffast-math',
