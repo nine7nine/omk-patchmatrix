@@ -106,14 +106,14 @@ install_man('patchmatrix.1')
 install_man('patchmatrix_mixer.1')
 install_man('patchmatrix_monitor.1')
 
-install_data(join_paths('pix', 'patchmatrix.png'),
+install_data(join_paths('share', 'patchmatrix', 'patchmatrix.png'),
 	install_dir : join_paths(prefix, datadir, 'icons', 'hicolor', '256x256', 'apps'))
 
-install_data(join_paths('pix', 'audio.png'),
+install_data(join_paths('share', 'patchmatrix', 'audio.png'),
 	install_dir : pdatadir)
-install_data(join_paths('pix', 'midi.png'),
+install_data(join_paths('share', 'patchmatrix', 'midi.png'),
 	install_dir : pdatadir)
-install_data(join_paths('pix', 'osc.png'),
+install_data(join_paths('share', 'patchmatrix', 'osc.png'),
 	install_dir : pdatadir)
-install_data(join_paths('pix', 'cv.png'),
+install_data(join_paths('share', 'patchmatrix', 'cv.png'),
 	install_dir : pdatadir)

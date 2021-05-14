@@ -15,6 +15,10 @@
  * http://www.perlfoundation.org/artistic_license_2_0.
  */
 
+#include <limits.h>
+#include <dirent.h>
+#include <libgen.h>
+
 #include <patchmatrix_jack.h>
 #include <patchmatrix_db.h>
 #include <patchmatrix_nk.h>
@@ -1261,10 +1265,53 @@ _icon_unload(app_t *app, struct nk_image img)
 	nk_pugl_icon_unload(&app->win, img);
 }
 
+static char *
+_get_path(const char *data_dir, const char *fn)
+{
+	static char path [PATH_MAX];
+
+	snprintf(path, sizeof(path), "%s%s", data_dir, fn);
+
+	return path;
+}
+
+static const char *
+_get_data_dir()
+{
+	// check whether build-time defined data dir exists
+	DIR *dir = opendir(PATCHMATRIX_DATA_DIR);
+	if(dir)
+	{
+		closedir(dir);
+
+		return PATCHMATRIX_DATA_DIR;
+	}
+
+	// derive directory of executable
+	char bin_path [PATH_MAX];
+	if(readlink("/proc/self/exe", bin_path, sizeof(bin_path)) == -1)
+	{
+		return NULL;
+	}
+	char *base_path = dirname(bin_path);
+
+	// derive data dir reative to executable
+	static char rel_path [PATH_MAX];
+	snprintf(rel_path, sizeof(rel_path), "%s/../share/patchmatrix/", base_path);
+
+	return rel_path;
+}
+
 int
 _ui_init(app_t *app)
 {
 	app->scale = nk_pugl_get_scale();
+
+	const char *data_dir = _get_data_dir();
+	if(!data_dir)
+	{
+		return 1;
+	}
 
 	// UI
 	nk_pugl_config_t *cfg = &app->win.cfg;
@@ -1278,7 +1325,7 @@ _ui_init(app_t *app)
 	cfg->threads = true;
 	cfg->data = app;
 	cfg->expose = _expose;
-	cfg->font.face = PATCHMATRIX_DATA_DIR"/Cousine-Regular.ttf";
+	cfg->font.face = _get_path(data_dir, "Cousine-Regular.ttf");
 	cfg->font.size = 13 * app->scale;
 
 	app->type = TYPE_AUDIO;
@@ -1293,11 +1340,11 @@ _ui_init(app_t *app)
 	struct nk_style *style = &app->win.ctx.style;
 	style->button.border_color = button_border_color;
 
-	app->icons.audio= _icon_load(app, PATCHMATRIX_DATA_DIR"audio.png");
-	app->icons.midi = _icon_load(app, PATCHMATRIX_DATA_DIR"midi.png");
+	app->icons.audio= _icon_load(app, _get_path(data_dir, "audio.png"));
+	app->icons.midi = _icon_load(app, _get_path(data_dir, "midi.png"));
 #ifdef JACK_HAS_METADATA_API
-	app->icons.cv = _icon_load(app, PATCHMATRIX_DATA_DIR"cv.png");
-	app->icons.osc = _icon_load(app, PATCHMATRIX_DATA_DIR"osc.png");
+	app->icons.cv = _icon_load(app, _get_path(data_dir, "cv.png"));
+	app->icons.osc = _icon_load(app, _get_path(data_dir, "osc.png"));
 #endif
 
 	return 0;
