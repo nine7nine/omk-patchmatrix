@@ -18,9 +18,9 @@ with JACK MIDI/OSC.
 
 For GNU/Linux (64-bit, 32-bit, armv7, arm64).
 
-To install the plugin bundle on your system, simply copy the __patchmatrix__
-folder out of the platform folder of the downloaded package into your
-[LV2 path](http://ladplug.in/pages/filesystem-hierarchy-standard.html).
+To install the program on your system, simply copy the platform folder
+out of the __patchmatrix__ top folder of the downloaded package into your
+/usr oder /usr/local path.
 
 #### Stable release
 
