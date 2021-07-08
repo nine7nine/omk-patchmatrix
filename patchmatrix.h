@@ -29,15 +29,12 @@
 #include <semaphore.h>
 
 #include <jack/jack.h>
-#include <jack/session.h>
 #include <jack/midiport.h>
 #ifdef JACK_HAS_METADATA_API
 #	include <jack/uuid.h>
 #	include <jack/metadata.h>
 #	include <jackey.h>
 #endif
-
-#include <cJSON/cJSON.h>
 
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
 #include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
@@ -89,7 +86,6 @@ enum _event_type_t {
 	EVENT_PORT_CONNECT,
 	EVENT_ON_INFO_SHUTDOWN,
 	EVENT_GRAPH_ORDER,
-	EVENT_SESSION,
 	EVENT_FREEWHEEL,
 	EVENT_BUFFER_SIZE,
 	EVENT_SAMPLE_RATE,
@@ -244,10 +240,6 @@ struct _event_t {
 		} on_info_shutdown;
 
 		struct {
-			jack_session_event_t *event;
-		} session;
-
-		struct {
 			int starting;
 		} freewheel;
 
@@ -286,7 +278,6 @@ struct _app_t {
 	varchunk_t *from_jack;
 
 	const char *server_name;
-	const char *session_id;
 
 	nk_pugl_window_t win;
 
@@ -313,8 +304,6 @@ struct _app_t {
 	atomic_bool done;
 	bool animating;
 	struct nk_rect contextbounds;
-
-	cJSON *root;
 };
 
 #define HASH_FOREACH(hash, itr) \
@@ -482,66 +471,6 @@ _mkdirp(const char* path, mode_t mode)
 	free(p);
 
 	return ret;
-}
-
-static cJSON *
-_load_session(const char *session_dir)
-{
-	cJSON *root = NULL;
-
-	// path may not exist yet
-	_mkdirp(session_dir, S_IRWXU | S_IRGRP |  S_IXGRP | S_IROTH | S_IXOTH);
-
-	char *session_file;
-	if(asprintf(&session_file, "%s%s", session_dir, "state.json") != -1)
-	{
-		FILE *file = fopen(session_file, "r");
-		if(file)
-		{
-			fseek(file, 0, SEEK_END);
-			const size_t sz = ftell(file);
-			fseek(file, 0, SEEK_SET);
-
-			char *buf = malloc(sz + 1);
-			if(buf)
-			{
-				if(fread(buf, sz, 1, file) == 1)
-				{
-					buf[sz] = '\0';
-					root = cJSON_Parse(buf);
-				}
-				free(buf);
-			}
-			fclose(file);
-		}
-		free(session_file);
-	}
-
-	return root;
-}
-
-static void
-_save_session(cJSON *root, const char *session_dir)
-{
-	// path may not exist yet
-	_mkdirp(session_dir, S_IRWXU | S_IRGRP |  S_IXGRP | S_IROTH | S_IXOTH);
-
-	char *buf = cJSON_Print(root);
-	if(buf)
-	{
-		char *session_file;
-		if(asprintf(&session_file, "%s%s", session_dir, "state.json") != -1)
-		{
-			FILE *file = fopen(session_file, "w");
-			if(file)
-			{
-				fwrite(buf, strlen(buf), 1, file);
-				fclose(file);
-			}
-			free(session_file);
-		}
-		free(buf);
-	}
 }
 
 static const char *port_labels [] = {

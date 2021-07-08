@@ -56,7 +56,6 @@ main(int argc, char **argv)
 	app.nxt_default = 30;
 
 	app.server_name = NULL;
-	app.session_id = NULL;
 
 	fprintf(stderr,
 		"%s "PATCHMATRIX_VERSION"\n"
@@ -64,7 +63,7 @@ main(int argc, char **argv)
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
-	while((c = getopt(argc, argv, "vhn:u:d:")) != -1)
+	while((c = getopt(argc, argv, "vhn:")) != -1)
 	{
 		switch(c)
 		{
@@ -93,19 +92,11 @@ main(int argc, char **argv)
 					"OPTIONS\n"
 					"   [-v]                 print version and full license information\n"
 					"   [-h]                 print usage information\n"
-					"   [-n] server-name     connect to named JACK daemon\n"
-					"   [-u] client-uuid     client UUID for JACK session management\n"
-					"   [-d] session-dir     directory for JACK session management\n\n"
+					"   [-n] server-name     connect to named JACK daemon\n\n"
 					, argv[0]);
 				return 0;
 			case 'n':
 				app.server_name = optarg;
-				break;
-			case 'u':
-				app.session_id = optarg;
-				break;
-			case 'd':
-				app.root = _load_session(optarg);
 				break;
 			case '?':
 				if( (optopt == 'n') || (optopt == 'u') || (optopt == 'd') )
@@ -161,9 +152,6 @@ cleanup:
 	}
 
 	_ui_deinit(&app);
-
-	if(app.root)
-		cJSON_Delete(app.root);
 
 	return 0;
 }

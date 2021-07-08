@@ -369,86 +369,13 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 	return 0;
 }
 
-static cJSON *
-_create_session(mixer_app_t *mixer)
-{
-	mixer_shm_t *shm = mixer->shm;
-
-	cJSON *root = cJSON_CreateObject();
-	if(root)
-	{
-		cJSON_AddStringToObject(root, "type", _port_type_to_string(mixer->type));
-		cJSON_AddNumberToObject(root, "nsinks", shm->nsinks);
-		cJSON_AddNumberToObject(root, "nsources", shm->nsources);
-		cJSON *arr1 = cJSON_CreateArray();
-		if(arr1)
-		{
-			for(unsigned j = 0; j < shm->nsources; j++)
-			{
-				cJSON *arr2 = cJSON_CreateArray();
-				if(arr2)
-				{
-					for(unsigned i = 0; i < shm->nsinks; i++)
-					{
-						const int32_t gain = atomic_load_explicit(&shm->jgains[j][i], memory_order_relaxed);
-						cJSON_AddItemToArray(arr2, cJSON_CreateNumber(gain));
-					}
-					cJSON_AddItemToArray(arr1, arr2);
-				}
-			}
-			cJSON_AddItemToObject(root, "gains", arr1);
-		}
-
-		return root;
-	}
-
-	return NULL;
-}
-
-static void
-_jack_session_cb(jack_session_event_t *jev, void *arg)
-{
-	mixer_app_t *mixer= arg;
-	mixer_shm_t *shm = mixer->shm;
-
-	asprintf(&jev->command_line, "patchmatrix_mixer -u %s -d ${SESSION_DIR}",
-		jev->client_uuid);
-
-	switch(jev->type)
-	{
-		case JackSessionSave:
-		case JackSessionSaveAndQuit:
-		{
-			cJSON *root = _create_session(mixer);
-			if(root)
-			{
-				_save_session(root, jev->session_dir);
-				cJSON_Delete(root);
-			}
-
-			if(jev->type == JackSessionSaveAndQuit)
-				_close(shm);
-		}	break;
-		case JackSessionSaveTemplate:
-		{
-			// nothing
-		} break;
-	}
-
-	jack_session_reply(mixer->client, jev);
-	jack_session_event_free(jev);
-}
-
 int
 main(int argc, char **argv)
 {
 	static mixer_app_t mixer;
 	const size_t total_size = sizeof(mixer_shm_t);
 
-	cJSON *root = NULL;
-	cJSON *gains_node = NULL;
 	const char *server_name = NULL;
-	const char *session_id = NULL;
 	unsigned nsinks = 1;
 	unsigned nsources = 1;
 	mixer.type = TYPE_AUDIO;
@@ -459,7 +386,7 @@ main(int argc, char **argv)
 		"Released under Artistic License 2.0 by Open Music Kontrollers\n", argv[0]);
 
 	int c;
-	while((c = getopt(argc, argv, "vhn:u:t:i:o:d:")) != -1)
+	while((c = getopt(argc, argv, "vht:i:o:n:")) != -1)
 	{
 		switch(c)
 		{
@@ -491,19 +418,11 @@ main(int argc, char **argv)
 					"   [-t] port-type       port type (audio, midi)\n"
 					"   [-i] input-num       port input number (1-%i)\n"
 					"   [-o] output-num      port output number (1-%i)\n"
-					"   [-n] server-name     connect to named JACK daemon\n"
-					"   [-u] client-uuid     client UUID for JACK session management\n"
-					"   [-d] session-dir     directory for JACK session management\n\n"
+					"   [-n] server-name     connect to named JACK daemon\n\n"
 					, argv[0], PORT_MAX, PORT_MAX);
 				return 0;
 			case 'n':
 				server_name = optarg;
-				break;
-			case 'u':
-				session_id = optarg;
-				break;
-			case 'd':
-				root = _load_session(optarg);
 				break;
 			case 't':
 				mixer.type = _port_type_from_string(optarg);
@@ -532,41 +451,13 @@ main(int argc, char **argv)
 		}
 	}
 
-	if(root)
-	{
-		cJSON *type_node = cJSON_GetObjectItem(root, "type");
-		if(type_node && cJSON_IsString(type_node))
-		{
-			const char *port_type = type_node->valuestring;
-
-			mixer.type = _port_type_from_string(port_type);
-		}
-
-		cJSON *nsinks_node = cJSON_GetObjectItem(root, "nsinks");
-		if(nsinks_node && cJSON_IsNumber(nsinks_node))
-		{
-			nsinks = nsinks_node->valueint;
-		}
-
-		cJSON *nsources_node = cJSON_GetObjectItem(root, "nsources");
-		if(nsources_node && cJSON_IsNumber(nsources_node))
-		{
-			nsources = nsources_node->valueint;
-		}
-
-		gains_node = cJSON_GetObjectItem(root, "gains");
-	}
-
 	jack_options_t opts = JackNullOption | JackNoStartServer;
 	if(server_name)
 		opts |= JackServerName;
-	if(session_id)
-		opts |= JackSessionID;
 
 	jack_status_t status;
 	mixer.client = jack_client_open(PATCHMATRIX_MIXER_ID, opts, &status,
-		server_name ? server_name : session_id,
-		server_name ? session_id : NULL);
+		server_name ? server_name : NULL);
 	if(!mixer.client)
 		return -1;
 
@@ -665,17 +556,6 @@ main(int argc, char **argv)
 							atomic_init(&mixer.shm->jgains[j][i], 0);
 						else
 							atomic_init(&mixer.shm->jgains[j][i], -3600);
-
-						if(gains_node)
-						{
-							cJSON *row = cJSON_GetArrayItem(gains_node, j);
-							if(row)
-							{
-								cJSON *col = cJSON_GetArrayItem(row, i);
-								if(col && cJSON_IsNumber(col))
-									atomic_init(&mixer.shm->jgains[j][i], col->valueint);
-							}
-						}
 					}
 				}
 
@@ -686,7 +566,6 @@ main(int argc, char **argv)
 						mixer.type == TYPE_AUDIO ? _audio_mixer_process : _midi_mixer_process,
 						&mixer);
 					//TODO CV
-					jack_set_session_callback(mixer.client, _jack_session_cb, &mixer);
 
 					jack_activate(mixer.client);
 
@@ -734,9 +613,6 @@ main(int argc, char **argv)
 	}
 
 	jack_client_close(mixer.client);
-
-	if(root)
-		cJSON_Delete(root);
 
 	return 0;
 }

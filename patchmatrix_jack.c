@@ -19,72 +19,6 @@
 #include <patchmatrix_db.h>
 #include <patchmatrix_nk.h>
 
-static cJSON *
-_create_session(app_t *app)
-{
-	cJSON *root = cJSON_CreateObject();
-	if(root)
-	{
-		cJSON *clients_node = cJSON_CreateArray();
-		if(clients_node)
-		{
-			HASH_FOREACH(&app->clients, client_itr)
-			{
-				client_t *client = *client_itr;
-
-				cJSON *client_node = cJSON_CreateObject();
-				if(client_node)
-				{
-					char uuid_str [JACK_UUID_STRING_SIZE];
-					jack_uuid_unparse(client->uuid, uuid_str);
-
-					cJSON_AddStringToObject(client_node, "client_name", client->name);
-					cJSON_AddStringToObject(client_node, "client_uuid", uuid_str);
-					cJSON_AddNumberToObject(client_node, "xpos", client->pos.x);
-					cJSON_AddNumberToObject(client_node, "ypos", client->pos.y);
-					cJSON_AddBoolToObject(client_node, "sinks", client->flags & JackPortIsInput);
-					cJSON_AddBoolToObject(client_node, "sources", client->flags & JackPortIsOutput);
-
-					cJSON_AddItemToArray(clients_node, client_node);
-				}
-			}
-
-			cJSON_AddItemToObject(root, "clients", clients_node);
-		}
-
-		cJSON *conns_node = cJSON_CreateArray();
-		if(conns_node)
-		{
-			HASH_FOREACH(&app->conns, client_conn_itr)
-			{
-				client_conn_t *client_conn = *client_conn_itr;
-
-				cJSON *conn_node = cJSON_CreateObject();
-				if(conn_node)
-				{
-					char source_uuid_str [JACK_UUID_STRING_SIZE];
-					char sink_uuid_str [JACK_UUID_STRING_SIZE];
-					jack_uuid_unparse(client_conn->source_client->uuid, source_uuid_str);
-					jack_uuid_unparse(client_conn->sink_client->uuid, sink_uuid_str);
-
-					cJSON_AddStringToObject(conn_node, "source_name", client_conn->source_client->name);
-					cJSON_AddStringToObject(conn_node, "sink_name", client_conn->sink_client->name);
-					cJSON_AddStringToObject(conn_node, "source_uuid", source_uuid_str);
-					cJSON_AddStringToObject(conn_node, "sink_uuid", sink_uuid_str);
-					cJSON_AddNumberToObject(conn_node, "xpos", client_conn->pos.x);
-					cJSON_AddNumberToObject(conn_node, "ypos", client_conn->pos.y);
-
-					cJSON_AddItemToArray(conns_node, conn_node);
-				}
-			}
-
-			cJSON_AddItemToObject(root, "conns", conns_node);
-		}
-	}
-
-	return root;
-}
-
 bool
 _jack_anim(app_t *app)
 {
@@ -446,38 +380,6 @@ _jack_anim(app_t *app)
 				//FIXME
 			} break;
 
-			case EVENT_SESSION:
-			{
-				jack_session_event_t *jev = ev->session.event;
-
-				asprintf(&jev->command_line, "patchmatrix -u %s -d ${SESSION_DIR}",
-					jev->client_uuid);
-
-				switch(jev->type)
-				{
-					case JackSessionSave:
-					case JackSessionSaveAndQuit:
-					{
-						cJSON *root = _create_session(app);
-						if(root)
-						{
-							_save_session(root, jev->session_dir);
-							cJSON_Delete(root);
-						}
-
-						if(jev->type == JackSessionSaveAndQuit)
-							quit = true;
-					} break;
-					case JackSessionSaveTemplate:
-					{
-						// nothing
-					} break;
-				}
-
-				jack_session_reply(app->client, jev);
-				jack_session_event_free(jev);
-			} break;
-
 			case EVENT_FREEWHEEL:
 			{
 				app->freewheel = ev->freewheel.starting;
@@ -738,22 +640,6 @@ _jack_property_change_cb(jack_uuid_t uuid, const char *key, jack_property_change
 #endif
 
 static void
-_jack_session_cb(jack_session_event_t *jev, void *arg)
-{
-	app_t *app = arg;
-
-	event_t *ev;
-	if((ev = varchunk_write_request(app->from_jack, sizeof(event_t))))
-	{
-		ev->type = EVENT_SESSION;
-		ev->session.event = jev;
-
-		varchunk_write_advance(app->from_jack, sizeof(event_t));
-		_ui_signal(app);
-	}
-}
-
-static void
 _jack_populate(app_t *app)
 {
 	const char **port_names = jack_get_ports(app->client, NULL, NULL, 0);
@@ -823,13 +709,10 @@ _jack_init(app_t *app)
 	jack_options_t opts = JackNullOption | JackNoStartServer;
 	if(app->server_name)
 		opts |= JackServerName;
-	if(app->session_id)
-		opts |= JackSessionID;
 
 	jack_status_t status;
 	app->client = jack_client_open("patchmatrix", opts, &status,
-		app->server_name ? app->server_name : app->session_id,
-		app->server_name ? app->session_id : NULL);
+		app->server_name ? app->server_name : NULL);
 	if(!app->client)
 		return -1;
 
@@ -870,7 +753,6 @@ _jack_init(app_t *app)
 	jack_set_port_connect_callback(app->client, _jack_port_connect_cb, app);
 	jack_set_xrun_callback(app->client, _jack_xrun_cb, app);
 	jack_set_graph_order_callback(app->client, _jack_graph_order_cb, app);
-	jack_set_session_callback(app->client, _jack_session_cb, app);
 #ifdef JACK_HAS_PORT_RENAME_CALLBACK
 	jack_set_port_rename_callback(app->client, _jack_port_rename_cb, app);
 #endif

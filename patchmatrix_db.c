@@ -110,47 +110,6 @@ _client_add(app_t *app, const char *client_name, int client_flags)
 			jack_free(client_uuid_str);
 		}
 
-		if(app->root)
-		{
-			cJSON *clients_node = cJSON_GetObjectItem(app->root, "clients");
-			if(clients_node && cJSON_IsArray(clients_node))
-			{
-				cJSON *client_node;
-				cJSON_ArrayForEach(client_node, clients_node)
-				{
-					cJSON *uuid_node = cJSON_GetObjectItem(client_node, "client_uuid");
-					if(uuid_node && cJSON_IsString(uuid_node))
-					{
-						jack_uuid_t client_uuid;
-						jack_uuid_parse(uuid_node->valuestring, &client_uuid);
-
-						int flags = 0;
-
-						cJSON *sinks_node = cJSON_GetObjectItem(client_node, "sinks");
-						if(sinks_node && (sinks_node->type == cJSON_True) )
-							flags |= JackPortIsInput;
-
-						cJSON *sources_node = cJSON_GetObjectItem(client_node, "sources");
-						if(sources_node && (sources_node->type == cJSON_True) )
-							flags |= JackPortIsOutput;
-
-						if(!jack_uuid_compare(client_uuid, client->uuid) && (client->flags == flags) )
-						{
-							cJSON *xpos_node = cJSON_GetObjectItem(client_node, "xpos");
-							if(xpos_node && cJSON_IsNumber(xpos_node))
-								client->pos.x = xpos_node->valuedouble;
-
-							cJSON *ypos_node = cJSON_GetObjectItem(client_node, "ypos");
-							if(ypos_node && cJSON_IsNumber(ypos_node))
-								client->pos.y = ypos_node->valuedouble;
-
-							break; // exit loop
-						}
-					}
-				}
-			}
-		}
-
 #ifdef JACK_HAS_METADATA_API
 		{
 			char *value = NULL;
@@ -384,42 +343,6 @@ _client_conn_add(app_t *app, client_t *source_client, client_t *sink_client)
 			(source_client->pos.x + sink_client->pos.x)/2,
 			(source_client->pos.y + sink_client->pos.y)/2);
 		client_conn->type = TYPE_NONE;
-
-		if(app->root)
-		{
-			cJSON *conns_node = cJSON_GetObjectItem(app->root, "conns");
-			if(conns_node && cJSON_IsArray(conns_node))
-			{
-				cJSON *conn_node;
-				cJSON_ArrayForEach(conn_node, conns_node)
-				{
-					cJSON *source_uuid_node = cJSON_GetObjectItem(conn_node, "source_uuid");
-					cJSON *sink_uuid_node = cJSON_GetObjectItem(conn_node, "sink_uuid");
-					if(  source_uuid_node && cJSON_IsString(source_uuid_node)
-						&& sink_uuid_node && cJSON_IsString(sink_uuid_node) )
-					{
-						jack_uuid_t source_uuid;
-						jack_uuid_t sink_uuid;
-						jack_uuid_parse(source_uuid_node->valuestring, &source_uuid);
-						jack_uuid_parse(sink_uuid_node->valuestring, &sink_uuid);
-
-						if(  !jack_uuid_compare(source_uuid, client_conn->source_client->uuid)
-							&& !jack_uuid_compare(sink_uuid, client_conn->sink_client->uuid) )
-						{
-							cJSON *xpos_node = cJSON_GetObjectItem(conn_node, "xpos");
-							if(xpos_node && cJSON_IsNumber(xpos_node))
-								client_conn->pos.x = xpos_node->valuedouble;
-
-							cJSON *ypos_node = cJSON_GetObjectItem(conn_node, "ypos");
-							if(ypos_node && cJSON_IsNumber(ypos_node))
-								client_conn->pos.y = ypos_node->valuedouble;
-
-							break; // exit loop
-						}
-					}
-				}
-			}
-		}
 
 		_hash_add(&app->conns, client_conn);
 	}
