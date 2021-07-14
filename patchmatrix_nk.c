@@ -723,6 +723,7 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 	const enum nk_widget_layout_states states = nk_widget(&body, ctx);
 	if(states != NK_WIDGET_INVALID)
 	{
+		const struct nk_rect old_clip = canvas->clip;
 		struct nk_style_button *style = &ctx->style.button;
 		const struct nk_user_font *font = ctx->style.font;
 
@@ -740,18 +741,23 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 
 		const float fh = font->height;
 		const float fy = body.y + (body.h - fh)/2;
+		const float dx = 4.f;
+		const float dw = 1.5*fh;
+		const float ww = body.w - 2*(dx + dw);
 		{
 			const char *client_name = client->pretty_name ? client->pretty_name : client->name;
 			const size_t client_name_len = strlen(client_name);
-			const float fw = font->width(font->userdata, font->height, client_name, client_name_len);
+			const float fw = NK_MIN(font->width(font->userdata, font->height, client_name, client_name_len), ww);
 			const struct nk_rect body2 = {
 				.x = body.x + (body.w - fw)/2,
 				.y = fy,
 				.w = fw,
 				.h = fh
 			};
+			nk_push_scissor(canvas, body2);
 			nk_draw_text(canvas, body2, client_name, client_name_len, font,
 				style->normal.data.color, style->text_normal);
+			nk_push_scissor(canvas, old_clip);
 		}
 
 		const unsigned nsources = _client_num_sources(client, app->type);
@@ -760,35 +766,39 @@ node_editor_client(struct nk_context *ctx, app_t *app, client_t *client)
 		if(nsources)
 		{
 			char nums [32];
-			snprintf(nums, 32, "%u", nsources);
+			snprintf(nums, 32, "%02u", nsources);
 
 			const size_t nums_len = strlen(nums);
 			const float fw = font->width(font->userdata, font->height, nums, nums_len);
 			const struct nk_rect body2 = {
-				.x = body.x + body.w - fw - 4.f,
+				.x = body.x + body.w - fw - dx,
 				.y = fy,
 				.w = fw,
 				.h = fh
 			};
+			nk_push_scissor(canvas, body2);
 			nk_draw_text(canvas, body2, nums, nums_len, font,
 				style->normal.data.color, style->text_normal);
+			nk_push_scissor(canvas, old_clip);
 		}
 
 		if(nsinks)
 		{
 			char nums [32];
-			snprintf(nums, 32, "%u", nsinks);
+			snprintf(nums, 32, "%02u", nsinks);
 
 			const size_t nums_len = strlen(nums);
 			const float fw = font->width(font->userdata, font->height, nums, nums_len);
 			const struct nk_rect body2 = {
-				.x = body.x + 4.f,
+				.x = body.x + dx,
 				.y = fy,
 				.w = fw,
 				.h = fh
 			};
+			nk_push_scissor(canvas, body2);
 			nk_draw_text(canvas, body2, nums, nums_len, font,
 				style->normal.data.color, style->text_normal);
+			nk_push_scissor(canvas, old_clip);
 		}
 	}
 
