@@ -1116,13 +1116,11 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 		}
 		nk_menubar_end(ctx);
 
-		const struct nk_rect total_space = nk_window_get_content_region(ctx);
-		const float total_h = total_space.h
-			- app->dy
-			- 2*ctx->style.window.group_padding.y;
+		struct nk_rect total_space = nk_window_get_content_region(ctx);
+		total_space.h -= app->dy + 2*ctx->style.window.group_padding.y;
 
 		/* allocate complete window space */
-		nk_layout_space_begin(ctx, NK_STATIC, total_h,
+		nk_layout_space_begin(ctx, NK_STATIC, total_space.h,
 			_hash_size(&app->clients) + _hash_size(&app->conns));
 		{
 			const struct nk_rect old_clip = canvas->clip;
@@ -1197,7 +1195,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #ifdef JACK_HAS_METADATA_API
 				(app->type != TYPE_OSC) && (app->type != TYPE_CV) &&
 #endif
-				nk_contextual_begin(ctx, 0, nk_vec2(100, 360), nk_window_get_bounds(ctx)))
+				nk_contextual_begin(ctx, 0, nk_vec2(100, 360), total_space))
 			{
 				nk_layout_row_dynamic(ctx, app->dy, 1);
 				if(nk_contextual_item_label(ctx, "Mixer 1x1", NK_TEXT_LEFT))
