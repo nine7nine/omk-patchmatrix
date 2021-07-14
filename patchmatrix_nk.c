@@ -1195,7 +1195,7 @@ _expose(struct nk_context *ctx, struct nk_rect wbounds, void *data)
 #ifdef JACK_HAS_METADATA_API
 				(app->type != TYPE_OSC) && (app->type != TYPE_CV) &&
 #endif
-				nk_contextual_begin(ctx, 0, nk_vec2(100, 220), nk_window_get_bounds(ctx)))
+				nk_contextual_begin(ctx, 0, nk_vec2(100, 360), nk_window_get_bounds(ctx)))
 			{
 				nk_layout_row_dynamic(ctx, app->dy, 1);
 				if(nk_contextual_item_label(ctx, "Mixer 1x1", NK_TEXT_LEFT))
