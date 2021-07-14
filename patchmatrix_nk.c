@@ -112,7 +112,8 @@ _client_moveable(struct nk_context *ctx, app_t *app, client_t *client,
 	}
 
 	if  (is_hovering
-		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT)
+		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
 		// consume mouse event
 		in->mouse.buttons[NK_BUTTON_RIGHT].down = nk_false;
@@ -867,7 +868,8 @@ node_editor_client_conn(struct nk_context *ctx, app_t *app,
 		client_conn->moving = true;
 	}
 	else if(is_hovering
-		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT) )
+		&& nk_input_is_mouse_pressed(in, NK_BUTTON_RIGHT)
+		&& nk_input_is_key_down(in, NK_KEY_CTRL) )
 	{
 		// consume mouse event
 		in->mouse.buttons[NK_BUTTON_RIGHT].down = nk_false;

@@ -73,7 +73,7 @@ out of the __patchmatrix__ top folder of the downloaded package into your
 * Wheel: _change gain coarse_
 * Left button + Shift + move: _change gain fine_
 * Wheel + Shift: _change gain fine_
-* Right button: _remove_
+* Right button + Ctrl: _remove_
 
 ##### Monitor
 
