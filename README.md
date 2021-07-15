@@ -24,7 +24,7 @@ out of the __patchmatrix__ top folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.24.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.24.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.24.0.zip.sig))
+* [patchmatrix-0.26.0.zip](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.26.0.zip) ([sig](https://dl.open-music-kontrollers.ch/patchmatrix/stable/patchmatrix-0.26.0.zip.sig))
 
 #### Unstable (nightly) release
 
@@ -34,7 +34,7 @@ out of the __patchmatrix__ top folder of the downloaded package into your
 
 #### Stable release
 
-* [patchmatrix-0.24.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.24.0.tar.xz) ([sig](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.24.0.tar.xz.asc))
+* [patchmatrix-0.26.0.tar.xz](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.26.0.tar.xz) ([sig](https://git.open-music-kontrollers.ch/lad/patchmatrix/snapshot/patchmatrix-0.26.0.tar.xz.asc))
 
 #### Git repository
 

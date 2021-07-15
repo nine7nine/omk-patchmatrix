@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.26.0] - 15 Jul 2021
+
+### Fixed
+
+* meson subproject sandbox error
+* use _exit instead of exit inside forked process
+* oroperly clip client node names
+* increase height of context window
+* limit right click for context menu to canvas region
+
+### Changed
+
+* removing nodes needs right button + ctrl
+
+### Deprecate
+
+* JACK session management
+
 ## [0.24.0] - 14 Apr 2021
 
 ### Fixed
