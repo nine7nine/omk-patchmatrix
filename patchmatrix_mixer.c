@@ -55,6 +55,21 @@ _jack_on_info_shutdown_cb(jack_status_t code, const char *reason, void *arg)
 }
 
 static inline void
+_midi_handle_data(mixer_app_t *mixer, uint8_t chn)
+{
+	const uint8_t nrpn_msb = mixer->nrpn[chn] >> 7;
+	const uint8_t nrpn_lsb = mixer->nrpn[chn] & 0x7f;
+	mixer_shm_t *shm = mixer->shm;
+
+	if( (nrpn_msb < shm->nsources) && (nrpn_lsb < shm->nsinks) )
+	{
+		const int32_t mBFS = (float)(mixer->data[chn] - 0x1fff)/0x2000 * 3600.f;
+
+		atomic_store_explicit(&shm->jgains[nrpn_msb][nrpn_lsb], mBFS, memory_order_relaxed);
+	}
+}
+
+static inline void
 _midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
 {
 	const uint8_t cmd = ev->buffer[0] & 0xf0;
@@ -84,22 +99,15 @@ _midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
 		{
 			mixer->data[chn] &= 0x3f80;
 			mixer->data[chn] |= val;
+
+			_midi_handle_data(mixer, chn);
 		} break;
 		case 0x06: // DATA_MSB
 		{
 			mixer->data[chn] &= 0x7f;
 			mixer->data[chn] |= (val << 7);
 
-			const uint8_t nrpn_msb = mixer->nrpn[chn] >> 7;
-			const uint8_t nrpn_lsb = mixer->nrpn[chn] & 0x7f;
-			mixer_shm_t *shm = mixer->shm;
-
-			if( (nrpn_msb < shm->nsources) && (nrpn_lsb < shm->nsinks) )
-			{
-				const int32_t mBFS = (float)(mixer->data[chn] - 0x1fff)/0x2000 * 3600.f;
-
-				atomic_store_explicit(&shm->jgains[nrpn_msb][nrpn_lsb], mBFS, memory_order_relaxed);
-			}
+			_midi_handle_data(mixer, chn);
 		} break;
 	}
 }
