@@ -87,24 +87,24 @@ _midi_handle(mixer_app_t *mixer, jack_midi_event_t *ev)
 	{
 		case 0x62: // NRPN_LSB
 		{
-			mixer->nrpn[chn] &= 0x3f80;
+			mixer->nrpn[chn] &= ~0x3f80;
 			mixer->nrpn[chn] |= val;
 		} break;
 		case 0x63: // NRPN_MSB
 		{
-			mixer->nrpn[chn] &= 0x7f;
+			mixer->nrpn[chn] &= ~0x7f;
 			mixer->nrpn[chn] |= (val << 7);
 		} break;
 		case 0x26: // DATA_LSB
 		{
-			mixer->data[chn] &= 0x3f80;
+			mixer->data[chn] &= ~0x3f80;
 			mixer->data[chn] |= val;
 
 			_midi_handle_data(mixer, chn);
 		} break;
 		case 0x06: // DATA_MSB
 		{
-			mixer->data[chn] &= 0x7f;
+			mixer->data[chn] &= ~0x7f;
 			mixer->data[chn] |= (val << 7);
 
 			_midi_handle_data(mixer, chn);
