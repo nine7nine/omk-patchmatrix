@@ -86,7 +86,7 @@ automation through which users can automate mixer matrix gains sample-accurately
 
 #### Build / install
 
-	git clone https://git.open-music-kontrollers.ch.ch/~hp/patchmatrix
+	git clone https://git.open-music-kontrollers.ch/~hp/patchmatrix
 	cd patchmatrix 
 	meson build
 	cd build
