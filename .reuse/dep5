@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: eteroj.lv2
+Upstream-Contact: Hanspeter Portner <dev@open-music-kontrollers.ch>
+Source: https://git.open-music-kontrollers.ch/lad/eteroj.lv2/
+
+Files: osc.lv2/*
+Copyright: Hanspeter Portner <dev@open-music-kontrollers.ch>
+License: Artistic-2.0
+
+Files: jackey/*
+Copyright: David Robillard <http://drobilla.net>
+License: ISC

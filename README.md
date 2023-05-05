@@ -1,6 +1,12 @@
+<!--
+  -- SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+  -- SPDX-License-Identifier: CC0-1.0
+  -->
 ## PatchMatrix
 
 ### a JACK patchbay in flow matrix style
+
+[![builds.sr.ht status](https://builds.open-music-kontrollers.ch/~hp/patchmatrix.svg)](https://builds.open-music-kontrollers.ch/~hp/patchmatrix?)
 
 A simple graphical JACK patchbay that tries to unite the best of both worlds:
 

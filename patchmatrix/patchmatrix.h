@@ -1,18 +1,6 @@
 /*
- * Copyright (c) 2016-2021 Hanspeter Portner (dev@open-music-kontrollers.ch)
- *
- * This is free software: you can redistribute it and/or modify
- * it under the terms of the Artistic License 2.0 as published by
- * The Perl Foundation.
- *
- * This source is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the iapplied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * Artistic License 2.0 for more details.
- *
- * You should have received a copy of the Artistic License 2.0
- * along the source as a COPYING file. If not, obtain it from
- * http://www.perlfoundation.org/artistic_license_2_0.
+ * SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+ * SPDX-License-Identifier: Artistic-2.0
  */
 
 #ifndef _PATCHMATRIX_H
@@ -39,9 +27,8 @@
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
 #include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
 
-#include <varchunk.h>
+#include <varchunk/varchunk.h>
 
-#define NK_PUGL_API
 #include <nk_pugl/nk_pugl.h>
 
 #define PATCHMATRIX_URI              "http://open-music-kontrollers.ch/patchmatrix"
