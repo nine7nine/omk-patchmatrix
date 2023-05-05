@@ -7,9 +7,9 @@
 #include <dirent.h>
 #include <libgen.h>
 
-#include <patchmatrix_jack.h>
-#include <patchmatrix_db.h>
-#include <patchmatrix_nk.h>
+#include <patchmatrix/patchmatrix_jack.h>
+#include <patchmatrix/patchmatrix_db.h>
+#include <patchmatrix/patchmatrix_nk.h>
 
 const struct nk_color grid_line_color = {40, 40, 40, 255};
 const struct nk_color grid_background_color = {30, 30, 30, 255};

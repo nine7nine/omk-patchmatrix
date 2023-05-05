@@ -9,7 +9,6 @@
 #include <patchmatrix/patchmatrix_jack.h>
 #include <patchmatrix/patchmatrix_nk.h>
 
-#define NK_PUGL_API
 #define NK_PUGL_IMPLEMENTATION
 #include <nk_pugl/nk_pugl.h>
 

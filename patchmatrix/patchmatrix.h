@@ -29,6 +29,7 @@
 
 #include <varchunk/varchunk.h>
 
+#define NK_PUGL_API
 #include <nk_pugl/nk_pugl.h>
 
 #define PATCHMATRIX_URI              "http://open-music-kontrollers.ch/patchmatrix"

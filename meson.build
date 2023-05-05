@@ -84,7 +84,7 @@ mixer_srcs = [
 
 executable('patchmatrix_mixer', mixer_srcs,
 	c_args : c_args,
-	dependencies : dsp_deps,
+	dependencies : [dsp_deps, ui_deps],
 	include_directories : incs,
 	install : true)
 
@@ -94,7 +94,7 @@ monitor_srcs = [
 
 executable('patchmatrix_monitor', monitor_srcs,
 	c_args : c_args,
-	dependencies : dsp_deps,
+	dependencies : [dsp_deps, ui_deps],
 	include_directories : incs,
 	install : true)
 

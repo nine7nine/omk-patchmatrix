@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+# SPDX-License-Identifier: CC0-1.0
+
+---
+
+image: alpine/latest
+
+packages:
+  - reuse
+  - meson
+  - lv2-dev
+  - glew-dev
+  - glu-dev
+  - libx11-dev
+  - libxext-dev
+  - jack-dev
+
+environment:
+  project: patchmatrix
+
+tasks:
+  - setup: |
+      cd "${project}"
+      meson setup build \
+        -Dbuildtype=release \
+        -Dprefer_static=true \
+        -Dprefix="/tmp/${project}"
+  - build: |
+      cd "${project}"
+      ninja -C build install
+  - test: |
+      cd "${project}"
+      ninja -C build test
+  - pack: |
+      cd /tmp
+      tar -czf artifacts.tar.gz "${project}"
+
+artifacts:
+  - /tmp/artifacts.tar.gz
+
+triggers:
+  - action: email
+    condition: failure
+    to: "<dev@open-music-kontrollers.ch>"
+
+...
