@@ -21,11 +21,16 @@ lib_deps = [
   rt_dep
 ]
 
+lib_incs = [
+  include_directories('')
+]
+
 lib_srcs = [
   join_paths('src', 'varchunk.c')
 ]
 
 varchunk = declare_dependency(
+  include_directories : lib_incs,
   dependencies : lib_deps,
   sources : lib_srcs)
 
