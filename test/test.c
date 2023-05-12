@@ -47,7 +47,7 @@ producer_main(void *arg)
 		}
 #endif
 
-		written = PAD(rand() * 1024.f / RAND_MAX);
+		written = PAD(rand() * 1024 / RAND_MAX);
 
 		size_t maximum;
 		if( (ptr = varchunk_write_request_max(varchunk, written, &maximum)) )
@@ -109,7 +109,7 @@ consumer_main(void *arg)
 }
 
 static void
-test_threaded()
+test_threaded(void)
 {
 	pthread_t producer;
 	pthread_t consumer;
@@ -189,7 +189,7 @@ varchunk_shm_deinit(varchunk_shm_t *varchunk_shm)
 }
 
 static void
-test_shared()
+test_shared(void)
 {
 	const char *name = "/varchunk_shm_test";
 	pid_t pid = fork();

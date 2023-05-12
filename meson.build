@@ -8,50 +8,52 @@ project('varchunk', 'c', default_options : [
 	'b_lto=true',
 	'c_std=c11'])
 
+build_tests = get_option('build-tests')
+
 reuse = find_program('reuse', required : false)
 
 add_project_arguments('-D_GNU_SOURCE', language : 'c')
 
 cc = meson.get_compiler('c')
+rt_dep = cc.find_library('rt')
 
-thread_dep = dependency('threads')
+lib_deps = [
+  rt_dep
+]
 
-lib_deps = []
-
-lib_incs = []
-lib_incs += include_directories('')
-
-lib_srcs = []
-lib_srcs += join_paths('src', 'varchunk.c')
-
-if host_machine.system() == 'linux'
-	rt_dep = cc.find_library('rt')
-	lib_deps += rt_dep
-endif
+lib_srcs = [
+  join_paths('src', 'varchunk.c')
+]
 
 varchunk = declare_dependency(
-  include_directories : lib_incs,
   dependencies : lib_deps,
   sources : lib_srcs)
 
-test_deps = []
-test_deps += varchunk
-test_deps += thread_dep
+if build_tests
+  thread_dep = dependency('threads')
 
-test_srcs = []
-test_srcs += join_paths('test', 'test.c')
+  test_deps = [
+    varchunk,
+    thread_dep
+  ]
 
-test_varchunk = executable('Test', test_srcs,
-	dependencies : test_deps,
-	install : false)
+  test_srcs = [
+    join_paths('test', 'test.c')
+  ]
 
-test('Test', test_varchunk,
-	args : ['100000'],
-	timeout : 360) # seconds
+  test_varchunk = executable('Test', test_srcs,
+    dependencies : test_deps,
+    install : false)
 
-if reuse.found()
-  test('REUSE', reuse, args : [
-    '--root', meson.current_source_dir(),
-    'lint'
-  ])
+  test('Test', test_varchunk,
+    args : ['100000'],
+    timeout : 360, # seconds
+    suite: ['memcheck'])
+
+  if reuse.found()
+    test('REUSE', reuse, args : [
+      '--root', meson.current_source_dir(),
+      'lint'
+    ])
+  endif
 endif

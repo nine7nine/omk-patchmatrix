@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+# SPDX-License-Identifier: CC0-1.0
+
+---
+
+image: alpine/latest
+
+packages:
+  - clang15-analyzer
+  - llvm15
+  - reuse
+  - meson
+  - git-subtree
+  - hut
+  - jq
+  - valgrind
+
+environment:
+  project: varchunk
+
+secrets:
+  - 0545580c-42ac-4700-b322-4e9df924eb07
+  - 5fe806cd-3af4-4588-9898-8115d9262144
+
+sources:
+  - https://git.open-music-kontrollers.ch/~hp/ci
+
+tasks:
+  - gcc: |
+      . ~/ci/activate
+
+      ci-meson gcc setup
+      ci-meson gcc build
+      ci-meson gcc test
+      ci-meson gcc memcheck
+
+  - clang: |
+      . ~/ci/activate
+
+      ci-meson clang setup
+      ci-meson clang build
+      ci-meson clang test
+      ci-meson clang memcheck
+
+  - analyzer: |
+      . ~/ci/activate
+
+      ci-meson analyzer setup
+      ci-meson analyzer build
+      ci-meson analyzer test
+
+  - deploy: |
+      . ~/ci/activate
+
+      if ! ci-isrelease; then
+        complete-build
+      fi
+
+      ci-subtreemerge
+
+triggers:
+  - action: email
+    condition: failure
+    to: "<dev@open-music-kontrollers.ch>"
+...
