@@ -12305,7 +12305,7 @@ NK_INTERN void
 nk_tt__h_prefilter(unsigned char *pixels, int w, int h, int stride_in_bytes,
     int kernel_width)
 {
-    unsigned char buffer[NK_TT_MAX_OVERSAMPLE];
+    unsigned char buffer[NK_TT_MAX_OVERSAMPLE + 4];
     int safe_w = w - kernel_width;
     int j;
 
@@ -12369,7 +12369,7 @@ NK_INTERN void
 nk_tt__v_prefilter(unsigned char *pixels, int w, int h, int stride_in_bytes,
     int kernel_width)
 {
-    unsigned char buffer[NK_TT_MAX_OVERSAMPLE];
+    unsigned char buffer[NK_TT_MAX_OVERSAMPLE + 4];
     int safe_h = h - kernel_width;
     int j;
 

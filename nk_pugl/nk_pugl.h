@@ -1,18 +1,6 @@
 /*
- * Copyright (c) 2016-2020 Hanspeter Portner (dev@open-music-kontrollers.ch)
- *
- * This is free software: you can redistribute it and/or modify
- * it under the terms of the Artistic License 2.0 as published by
- * The Perl Foundation.
- *
- * This source is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * Artistic License 2.0 for more details.
- *
- * You should have received a copy of the Artistic License 2.0
- * along the source as a COPYING file. If not, obtain it from
- * http://www.perlfoundation.org/artistic_license_2_0.
+ * SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+ * SPDX-License-Identifier: Artistic-2.0
  */
 
 #ifndef _NK_PUGL_H
@@ -182,7 +170,7 @@ NK_PUGL_API const char *
 nk_pugl_paste_from_clipboard(nk_pugl_window_t *win, size_t *len);
 
 NK_PUGL_API float
-nk_pugl_get_scale();
+nk_pugl_get_scale(void);
 
 #ifdef __cplusplus
 }
@@ -211,6 +199,7 @@ extern C {
 #define NK_IMPLEMENTATION
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #include "nuklear/nuklear.h"
 #pragma GCC diagnostic pop
 
@@ -429,7 +418,7 @@ _nk_pugl_render_gl2(nk_pugl_window_t *win)
 }
 
 static void
-_nk_pugl_glew_init()
+_nk_pugl_glew_init(void)
 {
 #if defined(__APPLE__)
 //FIXME
@@ -1320,7 +1309,7 @@ nk_pugl_paste_from_clipboard(nk_pugl_window_t *win, size_t *len)
 }
 
 NK_PUGL_API float
-nk_pugl_get_scale()
+nk_pugl_get_scale(void)
 {
 	const char *NK_SCALE = getenv("NK_SCALE");
 	const float scale = NK_SCALE ? atof(NK_SCALE) : 1.f;

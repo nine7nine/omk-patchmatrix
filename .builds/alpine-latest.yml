@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+# SPDX-License-Identifier: CC0-1.0
+
+---
+
+image: alpine/latest
+
+packages:
+  - clang15-analyzer
+  - llvm15
+  - reuse
+  - meson
+  - git-subtree
+  - hut
+  - jq
+  - valgrind
+
+  - lv2-dev
+  - glew-dev
+  - glu-dev
+  - libx11-dev
+  - libxext-dev
+
+environment:
+  project: nk_pugl
+  CI_SCAN_BUILD_OPTS: -disable-checker security.insecureAPI.vfork -disable-checker unix.Vfork --exclude nanovg --exclude pugl --exclude nuklear
+
+secrets:
+  - 0545580c-42ac-4700-b322-4e9df924eb07 # runner-ssh
+  - 5fe806cd-3af4-4588-9898-8115d9262144 # hut-config
+  - d6d10b2a-542a-4b45-b1be-6ef30a8ab558 # git-config
+
+sources:
+  - https://git.open-music-kontrollers.ch/~hp/ci
+
+tasks:
+  - gcc: |
+      . ~/ci/activate
+
+      ci-meson gcc setup \
+        -Dbuild-examples=true
+      ci-meson gcc build
+      ci-meson gcc test
+      ci-meson gcc memcheck
+
+  - clang: |
+      . ~/ci/activate
+
+      ci-meson clang setup \
+        -Dbuild-examples=true
+      ci-meson clang build
+      ci-meson clang test
+      ci-meson clang memcheck
+
+  - analyzer: |
+      . ~/ci/activate
+
+      ci-meson analyzer setup \
+        -Dbuild-examples=true
+      ci-meson analyzer build
+      ci-meson analyzer test
+
+  - deploy: |
+      . ~/ci/activate
+
+      if ! ci-isrelease; then
+        complete-build
+      fi
+
+      ci-subtreemerge
+
+triggers:
+  - action: email
+    condition: failure
+    to: "<dev@open-music-kontrollers.ch>"
+...

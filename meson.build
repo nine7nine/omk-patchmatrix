@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Hanspeter Portner <dev@open-music-kontrollers.ch>
+# SPDX-License-Identifier: CC0-1.0
+
 project('nk_pugl', 'c', default_options : [
 	'buildtype=release',
 	'warning_level=3',
@@ -6,6 +9,7 @@ project('nk_pugl', 'c', default_options : [
 	'c_std=gnu11'])
 
 build_examples = get_option('build-examples')
+build_tests = get_option('build-tests')
 
 static_link = false #meson.is_cross_build()
 
@@ -20,6 +24,8 @@ glew_dep = dependency('glew',
 glu_dep = dependency('glu',
 	version : '>=9.0.0',
 	static : static_link)
+reuse = find_program('reuse',
+  required : false)
 
 deps = [m_dep, lv2_dep, glu_dep, glew_dep]
 links = []
@@ -38,8 +44,10 @@ lib_srcs = [
 	join_paths('pugl', 'src', 'implementation.c')
 ]
 
-c_args = ['-fvisibility=hidden',
-	'-ffast-math']
+c_args = [
+  '-Wno-unknown-warning-option',
+  '-Wno-null-pointer-subtraction'
+]
 
 if host_machine.system() == 'windows'
 	deps += cc.find_library('opengl32')
@@ -75,10 +83,18 @@ cousine_regular_ttf = configure_file(
 	install : false)
 
 if build_examples
-
 	executable('nk_pugl.gl', [bin_srcs],
-		c_args : c_args,
+    c_args : c_args,
 		include_directories : inc_dir,
 		dependencies: nk_pugl_gl,
 		install : false)
+endif
+
+if build_tests
+  if reuse.found()
+    test('REUSE', reuse, args : [
+      '--root', meson.current_source_dir(),
+      'lint'
+    ])
+  endif
 endif
