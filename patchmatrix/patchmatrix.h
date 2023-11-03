@@ -54,10 +54,6 @@
 
 #define PORT_MAX 128
 
-typedef enum _event_type_t event_type_t;
-typedef enum _port_type_t port_type_t;
-typedef enum _port_designation_t port_designation_t;
-
 typedef struct _hash_t hash_t;
 typedef struct _port_conn_t port_conn_t;
 typedef struct _client_conn_t client_conn_t;
@@ -68,7 +64,7 @@ typedef struct _client_t client_t;
 typedef struct _app_t app_t;
 typedef struct _event_t event_t;
 
-enum _event_type_t {
+typedef enum _event_type_t {
 	EVENT_CLIENT_REGISTER,
 	EVENT_PORT_REGISTER,
 	EVENT_PORT_CONNECT,
@@ -84,9 +80,9 @@ enum _event_type_t {
 #ifdef JACK_HAS_METADATA_API
 	EVENT_PROPERTY_CHANGE,
 #endif
-};
+} event_type_t;
 
-enum _port_type_t {
+typedef enum _port_type_t {
 	TYPE_NONE   = (0 << 0),
 	TYPE_AUDIO	= (1 << 0),
 	TYPE_MIDI		= (1 << 1),
@@ -94,9 +90,9 @@ enum _port_type_t {
 	TYPE_OSC		= (1 << 2),
 	TYPE_CV			= (1 << 3)
 #endif
-};
+} port_type_t;
 
-enum _port_designation_t {
+typedef enum _port_designation_t {
 	DESIGNATION_NONE	= 0,
 	DESIGNATION_LEFT,
 	DESIGNATION_RIGHT,
@@ -112,7 +108,7 @@ enum _port_designation_t {
 	DESIGNATION_LOW_FREQUENCY_EFFECTS,
 
 	DESIGNATION_MAX
-};
+} port_designation_t;
 
 struct _hash_t {
 	void **nodes;

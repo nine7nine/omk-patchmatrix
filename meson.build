@@ -62,8 +62,9 @@ incs = [jackey_inc, osc_inc]
 
 c_args = [
   '-fvisibility=hidden',
-	'-ffast-math'
-]
+	'-ffast-math',
+	'-Wno-unused-parameter',
+	'-Wno-unused-function']
 
 dsp_srcs = [
 	join_paths('src', 'patchmatrix.c'),

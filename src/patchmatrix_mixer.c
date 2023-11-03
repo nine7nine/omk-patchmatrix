@@ -318,13 +318,13 @@ _midi_mixer_process(jack_nframes_t nframes, void *arg)
 			}
 		}
 
-		if(I == -1) // no more events to process from all sinks
+		if(I < 0) // no more events to process from all sinks
 			break;
 
 		jack_midi_event_t ev;
 		jack_midi_event_get(&ev, psinks[I], pos[I]);
 
-		if(I == shm->nsinks) // automation port
+		if((unsigned)I == shm->nsinks) // automation port
 		{
 			_autom_handle(mixer, &ev);
 		}

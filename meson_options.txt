@@ -5,4 +5,4 @@ option('build-tests',
 	type : 'boolean',
 	value : true)
 
-option('version', type : 'string', value : '0.27.23')
+option('version', type : 'string', value : '0.27.35')
