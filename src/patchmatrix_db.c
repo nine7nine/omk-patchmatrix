@@ -726,7 +726,7 @@ _port_find_by_body(app_t *app, jack_port_t *body)
 void
 _mixer_spawn(app_t *app, unsigned nsinks, unsigned nsources)
 {
-	pthread_t pid = vfork();
+	pid_t pid = vfork();
 	if(pid == 0) // child
 	{
 		char sink_nums[32];
@@ -786,7 +786,7 @@ _mixer_free(mixer_shm_t *mixer_shm)
 void
 _monitor_spawn(app_t *app, unsigned nsinks)
 {
-	pthread_t pid = vfork();
+	pid_t pid = vfork();
 	if(pid == 0) // child
 	{
 		char sink_nums [32];

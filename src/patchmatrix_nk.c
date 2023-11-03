@@ -1274,7 +1274,7 @@ _get_path(const char *data_dir, const char *fn)
 }
 
 static const char *
-_get_data_dir()
+_get_data_dir(void)
 {
 	// check whether build-time defined data dir exists
 	DIR *dir = opendir(PATCHMATRIX_DATA_DIR);

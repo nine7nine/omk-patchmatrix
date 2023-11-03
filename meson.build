@@ -64,7 +64,9 @@ c_args = [
   '-fvisibility=hidden',
 	'-ffast-math',
 	'-Wno-unused-parameter',
-	'-Wno-unused-function']
+	'-Wno-unused-function',
+	'-Wno-unknown-warning-option',
+	'-Wno-null-pointer-subtraction']
 
 dsp_srcs = [
 	join_paths('src', 'patchmatrix.c'),
