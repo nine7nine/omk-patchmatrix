@@ -6,11 +6,16 @@
 image: alpine/latest
 
 packages:
+  - clang16-analyzer
+  - llvm16
   - reuse
   - meson
+  - hut
+  - jq
+  - valgrind
   - lv2-dev
-  - glew-dev
   - glu-dev
+  - glew-dev
   - libx11-dev
   - libxext-dev
   - jack-dev
@@ -18,25 +23,48 @@ packages:
 environment:
   project: patchmatrix
 
-tasks:
-  - setup: |
-      cd "${project}"
-      meson setup build \
-        -Dbuildtype=release \
-        -Dprefer_static=true \
-        -Dprefix="/tmp/${project}"
-  - build: |
-      cd "${project}"
-      ninja -C build install
-  - test: |
-      cd "${project}"
-      ninja -C build test
-  - pack: |
-      cd /tmp
-      tar -czf artifacts.tar.gz "${project}"
+secrets:
+  - 0545580c-42ac-4700-b322-4e9df924eb07 # runner-ssh
+  - 5fe806cd-3af4-4588-9898-8115d9262144 # hut-config
+  - d6d10b2a-542a-4b45-b1be-6ef30a8ab558 # git-config
+  - 3de1773e-3503-46f5-8ab4-5212026517f4 # pgp-key
 
-artifacts:
-  - /tmp/artifacts.tar.gz
+sources:
+  - https://git.open-music-kontrollers.ch/~hp/ci
+
+tasks:
+  - gcc: |
+      . ~/ci/activate
+
+      ci-meson gcc setup
+      ci-meson gcc build
+      ci-meson gcc test
+      ci-meson gcc memcheck
+
+  - clang: |
+      . ~/ci/activate
+
+      ci-meson clang setup
+      ci-meson clang build
+      ci-meson clang test
+      ci-meson clang memcheck
+
+      #  - analyzer: |
+      #      . ~/ci/activate
+      #
+      #      ci-meson analyzer setup
+      #      ci-meson analyzer build
+      #      ci-meson analyzer test
+
+  - sign: |
+      . ~/ci/activate
+
+      if ! ci-istag; then
+        complete-build
+      fi
+
+      ci-archivesign
+
 
 triggers:
   - action: email
